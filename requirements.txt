@@ -1,13 +1,15 @@
 asgiref==3.11.1
 diff-match-patch==20241021
 dj-database-url==3.1.0
-Django==6.0.2
+Django==5.0.8
 django-import-export==4.4.0
 djangorestframework==3.16.1
 et_xmlfile==2.0.0
+gunicorn
 numpy==2.4.2
 openpyxl==3.1.5
 pandas==3.0.0
+psycopg2-binary
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 six==1.17.0
@@ -15,3 +17,4 @@ sqlparse==0.5.5
 tablib==3.9.0
 tzdata==2025.3
 whitenoise==6.11.0
+
