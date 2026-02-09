@@ -1,11 +1,9 @@
 from django.contrib import admin
-from django.urls import path
-from django.http import HttpResponse
-
-def home(request):
-    return HttpResponse("ImpetusControl funcionando ✅")
+from django.urls import path, include
 
 urlpatterns = [
-    path("", home),
     path("admin/", admin.site.urls),
+
+    # 👇 ESTA LÍNEA ES LA CLAVE
+    path("compras_oil/", include("compras_oil.urls")),
 ]

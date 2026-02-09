@@ -2,6 +2,10 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.db import models
 
+admin.site.site_header = "IMPETUS CONTROL"
+admin.site.site_title = "Sistema BOM"
+admin.site.index_title = "Control Impetus"
+
 from .models import BomTemplate, BomTemplateItem, Bom, BomItem
 from compras_oil.models import PurchaseRequest, PurchaseLine
 
