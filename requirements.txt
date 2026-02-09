@@ -18,5 +18,3 @@ sqlparse==0.5.5
 tablib==3.9.0
 tzdata==2025.3
 whitenoise==6.11.0
-reportlab
-
