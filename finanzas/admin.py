@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 from django.utils import timezone
-from django.utils.html import format_html  # ✅ NUEVO
+from django.utils.safestring import mark_safe  # ✅ FIX para Django 6
 
 from .models import FinanceApproval
 
@@ -25,23 +25,6 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
 
     actions = ["aprobar", "rechazar"]
 
-    # ✅ NUEVO: mostrar en la ficha el bloque con líneas contado
-    readonly_fields_finanzas = [
-        "purchase_request",
-        "lineas_contado_html",  # ✅
-        "aprobado_por",
-        "aprobado_en",
-        "creado_en",
-        "actualizado_en",
-    ]
-
-    fieldsets = (  # ✅ NUEVO (opcional pero recomendado para orden)
-        ("Solicitud", {"fields": ("purchase_request",)}),
-        ("Líneas a CONTADO (items que Finanzas debe revisar)", {"fields": ("lineas_contado_html",)}),  # ✅
-        ("Decisión Finanzas", {"fields": ("estado",)}),
-        ("Auditoría", {"fields": ("aprobado_por", "aprobado_en", "creado_en", "actualizado_en")}),
-    )
-
     # ---------- Columnas PAW ----------
     @admin.display(description="PAW #")
     def paw_numero(self, obj):
@@ -51,8 +34,34 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def paw_nombre(self, obj):
         return getattr(obj.purchase_request, "paw_nombre", "") or "-"
 
-    # ✅ NUEVO: tabla HTML con solo líneas CONTADO
-    @admin.display(description="Líneas CONTADO")
+    # ---------- Permisos ----------
+    def _is_finanzas(self, request):
+        return request.user.is_superuser or request.user.groups.filter(name="Finanzas").exists()
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._is_finanzas(request):
+            # Finanzas solo decide aprobar/rechazar
+            return [
+                "purchase_request",
+                "lineas_contado_html",  # ✅ visible pero no editable
+                "aprobado_por",
+                "aprobado_en",
+                "creado_en",
+                "actualizado_en",
+            ]
+        return [f.name for f in self.model._meta.fields]
+
+    def has_module_permission(self, request):
+        return self._is_finanzas(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._is_finanzas(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._is_finanzas(request)
+
+    # ---------- Visualización líneas CONTADO ----------
+    @admin.display(description="Líneas CONTADO (items que Finanzas debe revisar)")
     def lineas_contado_html(self, obj):
         pr = obj.purchase_request
         qs = pr.lineas.filter(tipo_pago="CONTADO").order_by("id")
@@ -84,7 +93,7 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
                     <td style="padding:6px;border-top:1px solid #ddd;text-align:right;">{l.cantidad_a_comprar or 0}</td>
                     <td style="padding:6px;border-top:1px solid #ddd;">{l.proveedor.nombre if l.proveedor else ""}</td>
                     <td style="padding:6px;border-top:1px solid #ddd;text-align:right;">{l.precio_unitario if l.precio_unitario is not None else ""}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;">{(l.observaciones_compras or "")}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;">{l.observaciones_compras or ""}</td>
                 </tr>
             """)
 
@@ -98,26 +107,8 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
                 </table>
             </div>
         """
-        return format_html(table)
 
-    # ---------- Permisos ----------
-    def _is_finanzas(self, request):
-        return request.user.is_superuser or request.user.groups.filter(name="Finanzas").exists()
-
-    def get_readonly_fields(self, request, obj=None):
-        if self._is_finanzas(request):
-            # Finanzas solo decide aprobar/rechazar
-            return self.readonly_fields_finanzas  # ✅ usa la lista nueva
-        return [f.name for f in self.model._meta.fields]
-
-    def has_module_permission(self, request):
-        return self._is_finanzas(request)
-
-    def has_view_permission(self, request, obj=None):
-        return self._is_finanzas(request)
-
-    def has_change_permission(self, request, obj=None):
-        return self._is_finanzas(request)
+        return mark_safe(table)
 
     # ---------- Acciones ----------
     @admin.action(description="Aprobar (Finanzas)")
