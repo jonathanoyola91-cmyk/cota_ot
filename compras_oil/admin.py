@@ -1,6 +1,16 @@
+# Compras_oil/admin.py
+from io import BytesIO
+
 from django.contrib import admin, messages
 from django.db import models
+from django.http import HttpResponse
 from django.utils import timezone
+
+import openpyxl
+from openpyxl.utils import get_column_letter
+
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 from .models import Supplier, PurchaseRequest, PurchaseLine
 from inventario.models import InventoryReception, InventoryReceptionLine
@@ -80,8 +90,6 @@ class PurchaseLineInline(admin.TabularInline):
             )
         return super().formfield_for_dbfield(db_field, **kwargs)
 
-    # Importante: si el usuario NO tiene change perm del modelo, Django lo deja read-only.
-    # Aquí no forzamos visibilidad del módulo, solo controlamos qué queda readonly.
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return self.readonly_fields
@@ -108,11 +116,13 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "bom",
         "estado",
         "tipo_pago",
+        "estado_finanzas",
+        "total_paw",
         "creado_por",
         "actualizado_en",
     )
 
-    list_filter = ("estado", "tipo_pago")
+    list_filter = ("estado", "tipo_pago", "finance_approval__estado")
 
     search_fields = (
         "bom__workorder__numero",
@@ -128,6 +138,8 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "cerrar_solicitud",
         "enviar_a_finanzas",
         "enviar_a_inventario",
+        "descargar_pdf",
+        "descargar_excel",
     ]
 
     readonly_fields = (
@@ -146,12 +158,25 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     def paw_nombre(self, obj):
         return obj.paw_nombre or "-"
 
+    @admin.display(description="Estado Finanzas")
+    def estado_finanzas(self, obj):
+        fa = getattr(obj, "finance_approval", None)
+        return fa.estado if fa else "—"
+
+    @admin.display(description="Total PAW")
+    def total_paw(self, obj):
+        total = 0
+        for ln in obj.lineas.all():
+            qty = ln.cantidad_a_comprar or 0
+            price = ln.precio_unitario or 0
+            total += qty * price
+        return total
+
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return list(self.readonly_fields)
 
         if request.user.groups.filter(name="COMPRAS_OIL").exists():
-            # ✅ Compras puede editar siempre (excepto readonly_fields base)
             return list(self.readonly_fields)
 
         return [f.name for f in self.model._meta.fields]
@@ -244,3 +269,184 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
             enviados += 1
 
         messages.success(request, f"Enviadas {enviados} solicitud(es) a Inventario.")
+
+    # ---------------- EXPORTS (PDF / EXCEL) ----------------
+
+    @admin.action(description="Descargar PAW en Excel")
+    def descargar_excel(self, request, queryset):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "PAW"
+
+        headers = [
+            "Paw #", "PAW Nombre", "OT", "Estado Compra", "Tipo Pago Encabezado",
+            "Código", "Descripción", "Unidad",
+            "Cant. requerida", "Cant. disponible", "Cant. a comprar",
+            "Tipo pago ítem", "Proveedor",
+            "Precio unitario", "Valor ítem",
+            "Obs BOM", "Obs Compras",
+        ]
+        ws.append(headers)
+
+        qs = queryset.select_related("bom__workorder").prefetch_related("lineas__proveedor")
+
+        grand_total = 0
+        paw_nums = []
+
+        for pr in qs:
+            paw_nums.append(pr.paw_numero or str(pr.id))
+
+            try:
+                ot_num = pr.bom.workorder.numero
+            except Exception:
+                ot_num = "-"
+
+            total_pr = 0
+
+            for ln in pr.lineas.all():
+                qty = ln.cantidad_a_comprar or 0
+                price = ln.precio_unitario or 0
+                item_value = qty * price
+                total_pr += item_value
+
+                ws.append([
+                    pr.paw_numero or "",
+                    pr.paw_nombre or "",
+                    ot_num,
+                    pr.estado,
+                    pr.tipo_pago or "",
+                    ln.codigo or "",
+                    ln.descripcion or "",
+                    ln.unidad or "",
+                    float(ln.cantidad_requerida or 0),
+                    float(ln.cantidad_disponible or 0),
+                    float(qty),
+                    ln.tipo_pago or "",
+                    (ln.proveedor.nombre if ln.proveedor else ""),
+                    float(price or 0),
+                    float(item_value or 0),
+                    (ln.observaciones_bom or ""),
+                    (ln.observaciones_compras or ""),
+                ])
+
+            ws.append([""] * len(headers))
+            ws.append([""] * 13 + ["TOTAL PAW:", float(total_pr)] + ["", ""])
+            ws.append([""] * len(headers))
+
+            grand_total += total_pr
+
+        ws.append([""] * 13 + ["TOTAL GENERAL:", float(grand_total)] + ["", ""])
+
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 18
+
+        out = BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        if len(paw_nums) == 1:
+            filename = f'Paw #{paw_nums[0]} - export.xlsx'
+        else:
+            filename = f'Paw # MULTI ({len(paw_nums)}) - export.xlsx'
+
+        resp = HttpResponse(
+            out.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
+
+    @admin.action(description="Descargar PAW en PDF")
+    def descargar_pdf(self, request, queryset):
+        buffer = BytesIO()
+        p = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+
+        y = height - 40
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(40, y, "Export PAW - Purchase Requests")
+        y -= 25
+
+        qs = queryset.select_related("bom__workorder").prefetch_related("lineas__proveedor")
+
+        paw_nums = []
+        grand_total = 0
+
+        for pr in qs:
+            paw_nums.append(pr.paw_numero or str(pr.id))
+
+            if y < 140:
+                p.showPage()
+                y = height - 40
+
+            try:
+                ot_num = pr.bom.workorder.numero
+            except Exception:
+                ot_num = "-"
+
+            p.setFont("Helvetica-Bold", 10)
+            p.drawString(40, y, f"Paw #: {pr.paw_numero or '-'} | {pr.paw_nombre or ''} | OT: {ot_num}")
+            y -= 14
+            p.setFont("Helvetica", 9)
+            p.drawString(40, y, f"Estado Compra: {pr.estado} | Tipo Pago Encabezado: {pr.tipo_pago or '-'}")
+            y -= 16
+
+            p.setFont("Helvetica-Bold", 9)
+            p.drawString(40, y, "COD")
+            p.drawString(95, y, "DESCRIPCIÓN")
+            p.drawRightString(370, y, "CANT")
+            p.drawRightString(445, y, "P.UNIT")
+            p.drawRightString(520, y, "VALOR")
+            y -= 12
+            p.setFont("Helvetica", 9)
+
+            total_pr = 0
+
+            for ln in pr.lineas.all():
+                if y < 90:
+                    p.showPage()
+                    y = height - 40
+                    p.setFont("Helvetica", 9)
+
+                qty = ln.cantidad_a_comprar or 0
+                price = ln.precio_unitario or 0
+                item_value = qty * price
+                total_pr += item_value
+
+                desc = (ln.descripcion or "")[:45]
+
+                p.drawString(40, y, (ln.codigo or "")[:10])
+                p.drawString(95, y, desc)
+                p.drawRightString(370, y, f"{qty}")
+                p.drawRightString(445, y, f"{price}")
+                p.drawRightString(520, y, f"{item_value}")
+                y -= 12
+
+            y -= 6
+            p.setFont("Helvetica-Bold", 10)
+            p.drawRightString(520, y, f"TOTAL PAW: {total_pr}")
+            p.setFont("Helvetica", 9)
+            y -= 18
+
+            grand_total += total_pr
+
+        if len(paw_nums) > 1:
+            if y < 90:
+                p.showPage()
+                y = height - 40
+            p.setFont("Helvetica-Bold", 11)
+            p.drawRightString(520, y, f"TOTAL GENERAL: {grand_total}")
+            y -= 20
+
+        p.showPage()
+        p.save()
+        buffer.seek(0)
+
+        if len(paw_nums) == 1:
+            filename = f'Paw #{paw_nums[0]} - export.pdf'
+        else:
+            filename = f'Paw # MULTI ({len(paw_nums)}) - export.pdf'
+
+        resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp

@@ -1,49 +1,61 @@
+# paw_app/admin.py
 from django.contrib import admin
-from django import forms
-from django.forms.models import BaseInlineFormSet
+from django.http import JsonResponse
+from django.urls import path
 
 from .models import Paw
+from quotes.models import Quotation
 from workorders.models import WorkOrder
 
 
+# ---------------------------------------------------------
+# Inline para crear/editar WorkOrders (OT) debajo del PAW
+# ---------------------------------------------------------
 class WorkOrderInline(admin.TabularInline):
     model = WorkOrder
     extra = 0
-
-    fields = (
-        "numero",
-        "titulo",
-        "estado",
-        "etapa_taller",
-        "asignado_grupo",
-        "asignado_a",
-        "iniciado_en",
-        "terminado_en",
-    )
-    readonly_fields = ("numero",)
     show_change_link = True
 
-    def get_formset(self, request, obj=None, **kwargs):
-        """
-        Inyectamos el request al formset para poder setear creado_por
-        cuando se crean OTs desde el inline.
-        """
-        FormSet = super().get_formset(request, obj, **kwargs)
+    # Campos que se ven dentro del PAW
+    fields = (
+        "titulo",
+        "estado",
+        "prioridad",
+        "cliente",
+        "equipo",
+        "serial",
+        "ubicacion",
+        "asignado_a",
+        "asignado_grupo",
+        "visibilidad",
+        "etapa_taller",
+        "comentario_taller",
+    )
 
-        class RequestFormSet(FormSet):
-            def save_new(self, form, commit=True):
-                instance = super().save_new(form, commit=False)
+    # Para que sea más usable (no obligar numero/creado_por en inline)
+    readonly_fields = ("cliente",)
 
-                # ✅ Aquí se corrige el NOT NULL: creado_por siempre se llena
-                if not getattr(instance, "creado_por_id", None):
-                    instance.creado_por = request.user
+    def get_readonly_fields(self, request, obj=None):
+        # Superuser: todo editable
+        if request.user.is_superuser:
+            return []
 
-                if commit:
-                    instance.save()
-                    form.save_m2m()
-                return instance
-
-        return RequestFormSet
+        # Grupo Taller: solo edita etapa y comentario de taller (y estado si quieres)
+        if request.user.groups.filter(name="Taller").exists():
+            return [
+                "titulo",
+                "descripcion",
+                "cliente",
+                "equipo",
+                "serial",
+                "ubicacion",
+                "prioridad",
+                "creado_por",
+                "asignado_a",
+                "asignado_grupo",
+                "visibilidad",
+            ]
+        return []
 
 
 @admin.register(Paw)
@@ -54,11 +66,9 @@ class PawAdmin(admin.ModelAdmin):
         "cotizacion",
         "cliente",
         "campo",
-        "estado_paw",
-        "ots_abiertas",
-        "etapa_actual",
-        "fecha_salida",
         "fecha_entrega",
+        "fecha_salida",
+        "creado_por",
         "actualizado_en",
     )
 
@@ -71,62 +81,50 @@ class PawAdmin(admin.ModelAdmin):
         "cotizacion__nombre_cotizacion",
     )
 
-    list_filter = (
-        "fecha_salida",
-        "fecha_entrega",
-    )
-
+    # ✅ Aquí vuelve la magia: OT debajo del PAW
     inlines = [WorkOrderInline]
 
-    @admin.display(description="OT abiertas")
-    def ots_abiertas(self, obj):
-        return obj.ots.exclude(estado="CERRADA").count()
+    # ✅ JS para auto-llenar cliente/campo al seleccionar cotización
+    class Media:
+        js = ("paw_app/paw_autofill.js",)
 
-    @admin.display(description="Etapa actual")
-    def etapa_actual(self, obj):
-        qs = (
-            obj.ots.exclude(estado="CERRADA")
-            .exclude(etapa_taller__isnull=True)
-            .exclude(etapa_taller__exact="")
-        )
-        if not qs.exists():
-            return "-"
-        from django.db.models import Count
-        top = qs.values("etapa_taller").annotate(c=Count("*")).order_by("-c").first()
-        return top["etapa_taller"]
+    # ---------------------------------------------------------
+    # Endpoint para traer cliente/campo de la cotización (AJAX)
+    # ---------------------------------------------------------
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "quotation-info/<int:quotation_id>/",
+                self.admin_site.admin_view(self.quotation_info),
+                name="paw_app_paw_quotation_info",
+            ),
+        ]
+        return custom + urls
 
-    @admin.display(description="Estado PAW")
-    def estado_paw(self, obj):
-        qs = obj.ots.all()
-        if not qs.exists():
-            return "SIN OT"
-        if qs.exclude(estado="CERRADA").count() == 0:
-            return "TERMINADO"
-        if qs.filter(etapa_taller="PRUEBA").exclude(estado="CERRADA").exists():
-            return "EN PRUEBA"
-        return "EN PROCESO"
+    def quotation_info(self, request, quotation_id: int):
+        q = Quotation.objects.get(pk=quotation_id)
+        return JsonResponse({
+            "cliente": q.cliente or "",
+            "campo": q.campo or "",
+        })
 
-    def get_readonly_fields(self, request, obj=None):
-        if request.user.is_superuser:
-            return []
-        if request.user.groups.filter(name="Comercial").exists():
-            return ["creado_por", "creado_en", "actualizado_en"]
-        return [f.name for f in self.model._meta.fields]
+    # ---------------------------------------------------------
+    # CLAVE: cuando se crean OT en inline, setear creado_por
+    # ---------------------------------------------------------
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+
+        for obj in instances:
+            # Si es una OT (WorkOrder) y no tiene creado_por, lo seteamos
+            if isinstance(obj, WorkOrder) and not obj.creado_por_id:
+                obj.creado_por = request.user
+
+            obj.save()
+
+        formset.save_m2m()
 
     def save_model(self, request, obj, form, change):
-        if not obj.pk:
+        if not obj.creado_por_id:
             obj.creado_por = request.user
         super().save_model(request, obj, form, change)
-
-    def has_add_permission(self, request):
-        if request.user.is_superuser:
-            return True
-        return request.user.groups.filter(name="Comercial").exists()
-
-    def has_change_permission(self, request, obj=None):
-        if request.user.is_superuser:
-            return True
-        return request.user.groups.filter(name="Comercial").exists()
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser

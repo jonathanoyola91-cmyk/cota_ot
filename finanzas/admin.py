@@ -1,129 +1,195 @@
+# finanzas/admin.py
 from django.contrib import admin, messages
 from django.utils import timezone
-from django.utils.safestring import mark_safe  # ✅ FIX para Django 6
 
-from .models import FinanceApproval
+from .models import FinanceApproval, FinanceApprovalLine
 
+
+# ======================================================
+# UTILIDAD: sincronizar líneas CONTADO desde Compras
+# ======================================================
+
+def sync_finance_lines(approval: FinanceApproval):
+    pr = approval.purchase_request
+    contado_qs = pr.lineas.filter(tipo_pago="CONTADO")
+
+    for pl in contado_qs:
+        FinanceApprovalLine.objects.get_or_create(
+            approval=approval,
+            purchase_line=pl,
+        )
+
+
+# ======================================================
+# INLINE: Líneas financieras
+# ======================================================
+
+class FinanceApprovalLineInline(admin.TabularInline):
+    model = FinanceApprovalLine
+    extra = 0
+    can_delete = False
+
+    fields = (
+        "purchase_line",
+        "decision",
+        "scheduled_date",
+        "nota_admin",
+        "decidido_por",
+        "decidido_en",
+        "pagado",
+        "pagado_en",
+        "pagado_por",
+    )
+
+    readonly_fields = (
+        "purchase_line",
+        "decidido_por",
+        "decidido_en",
+        "pagado_en",
+        "pagado_por",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name="FINANZAS").exists():
+            return True
+        return super().has_change_permission(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        base = list(self.readonly_fields)
+
+        if request.user.is_superuser:
+            return base
+
+        # FINANZAS puede marcar pagado, pero NO decide
+        if request.user.groups.filter(name="FINANZAS").exists():
+            return base + ["decision", "scheduled_date", "nota_admin"]
+
+        return [f.name for f in self.model._meta.fields]
+
+
+# ======================================================
+# ADMIN: ENCABEZADO FINANZAS
+# ======================================================
 
 @admin.register(FinanceApproval)
 class FinanceApprovalAdmin(admin.ModelAdmin):
     list_display = (
         "paw_numero",
-        "paw_nombre",
-        "purchase_request",
         "estado",
-        "aprobado_por",
-        "aprobado_en",
+        "enviado_por",
+        "enviado_en",
+        "ultima_decision_por",
+        "ultima_decision_en",
         "actualizado_en",
     )
+
     list_filter = ("estado",)
     search_fields = (
         "purchase_request__paw_numero",
         "purchase_request__paw_nombre",
-        "purchase_request__bom__workorder__numero",
     )
 
-    actions = ["aprobar", "rechazar"]
+    readonly_fields = (
+        "enviado_por",
+        "enviado_en",
+        "creado_en",
+        "actualizado_en",
+    )
 
-    # ---------- Columnas PAW ----------
-    @admin.display(description="PAW #")
+    inlines = [FinanceApprovalLineInline]
+
+    actions = [
+        "marcar_pendiente",
+        "marcar_aprobado",
+        "marcar_rechazado",
+    ]
+
+    # --------------------------------------------------
+    # Sync líneas al abrir
+    # --------------------------------------------------
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        obj = self.get_object(request, object_id)
+        if obj:
+            sync_finance_lines(obj)
+        return super().change_view(request, object_id, form_url, extra_context)
+
+    # --------------------------------------------------
+    # COLUMNAS
+    # --------------------------------------------------
+
+    @admin.display(description="PAW")
     def paw_numero(self, obj):
-        return getattr(obj.purchase_request, "paw_numero", "") or "-"
+        return obj.purchase_request.paw_numero or "-"
 
-    @admin.display(description="PAW Nombre")
-    def paw_nombre(self, obj):
-        return getattr(obj.purchase_request, "paw_nombre", "") or "-"
+    @admin.display(description="Última decisión por")
+    def ultima_decision_por(self, obj):
+        last = obj.lineas.exclude(decidido_en__isnull=True).order_by("-decidido_en").first()
+        return last.decidido_por if last else "-"
 
-    # ---------- Permisos ----------
-    def _is_finanzas(self, request):
-        return request.user.is_superuser or request.user.groups.filter(name="Finanzas").exists()
+    @admin.display(description="Última decisión en")
+    def ultima_decision_en(self, obj):
+        last = obj.lineas.exclude(decidido_en__isnull=True).order_by("-decidido_en").first()
+        return last.decidido_en if last else "-"
 
-    def get_readonly_fields(self, request, obj=None):
-        if self._is_finanzas(request):
-            # Finanzas solo decide aprobar/rechazar
-            return [
-                "purchase_request",
-                "lineas_contado_html",  # ✅ visible pero no editable
-                "aprobado_por",
-                "aprobado_en",
-                "creado_en",
-                "actualizado_en",
-            ]
-        return [f.name for f in self.model._meta.fields]
+    # ==================================================
+    # ACCIONES DE ESTADO (ENCABEZADO)
+    # ==================================================
 
-    def has_module_permission(self, request):
-        return self._is_finanzas(request)
+    def _check_finance_permission(self, request):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name="FINANZAS").exists():
+            return True
+        messages.error(request, "No tienes permisos para cambiar el estado financiero.")
+        return False
 
-    def has_view_permission(self, request, obj=None):
-        return self._is_finanzas(request)
+    @admin.action(description="Marcar como PENDIENTE")
+    def marcar_pendiente(self, request, queryset):
+        if not self._check_finance_permission(request):
+            return
 
-    def has_change_permission(self, request, obj=None):
-        return self._is_finanzas(request)
+        updated = queryset.update(estado=FinanceApproval.Estado.PENDIENTE)
+        messages.success(request, f"{updated} PAW(s) marcados como PENDIENTE.")
 
-    # ---------- Visualización líneas CONTADO ----------
-    @admin.display(description="Líneas CONTADO (items que Finanzas debe revisar)")
-    def lineas_contado_html(self, obj):
-        pr = obj.purchase_request
-        qs = pr.lineas.filter(tipo_pago="CONTADO").order_by("id")
+    @admin.action(description="Marcar como APROBADO")
+    def marcar_aprobado(self, request, queryset):
+        if not self._check_finance_permission(request):
+            return
 
-        if not qs.exists():
-            return "No hay líneas a CONTADO para esta solicitud."
+        updated = queryset.update(estado=FinanceApproval.Estado.APROBADO)
+        messages.success(request, f"{updated} PAW(s) marcados como APROBADO.")
 
-        header = """
-            <thead>
-                <tr>
-                    <th style="text-align:left;padding:6px;">Código</th>
-                    <th style="text-align:left;padding:6px;">Descripción</th>
-                    <th style="text-align:center;padding:6px;">Und</th>
-                    <th style="text-align:right;padding:6px;">A comprar</th>
-                    <th style="text-align:left;padding:6px;">Proveedor</th>
-                    <th style="text-align:right;padding:6px;">Precio</th>
-                    <th style="text-align:left;padding:6px;">Obs Compras</th>
-                </tr>
-            </thead>
-        """
+    @admin.action(description="Marcar como RECHAZADO")
+    def marcar_rechazado(self, request, queryset):
+        if not self._check_finance_permission(request):
+            return
 
-        rows = []
-        for l in qs:
-            rows.append(f"""
-                <tr>
-                    <td style="padding:6px;border-top:1px solid #ddd;">{l.codigo or ""}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;">{l.descripcion or ""}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;text-align:center;">{l.unidad or ""}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;text-align:right;">{l.cantidad_a_comprar or 0}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;">{l.proveedor.nombre if l.proveedor else ""}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;text-align:right;">{l.precio_unitario if l.precio_unitario is not None else ""}</td>
-                    <td style="padding:6px;border-top:1px solid #ddd;">{l.observaciones_compras or ""}</td>
-                </tr>
-            """)
+        updated = queryset.update(estado=FinanceApproval.Estado.RECHAZADO)
+        messages.success(request, f"{updated} PAW(s) marcados como RECHAZADO.")
 
-        table = f"""
-            <div style="overflow:auto; max-width:100%;">
-                <table style="border-collapse:collapse; width:100%; font-size:12px;">
-                    {header}
-                    <tbody>
-                        {''.join(rows)}
-                    </tbody>
-                </table>
-            </div>
-        """
+    # --------------------------------------------------
+    # Guardado inline (pagado)
+    # --------------------------------------------------
 
-        return mark_safe(table)
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
 
-    # ---------- Acciones ----------
-    @admin.action(description="Aprobar (Finanzas)")
-    def aprobar(self, request, queryset):
-        updated = 0
-        for fa in queryset:
-            if fa.estado != "APROBADO":
-                fa.estado = "APROBADO"
-                fa.aprobado_por = request.user
-                fa.aprobado_en = timezone.now()
-                fa.save(update_fields=["estado", "aprobado_por", "aprobado_en", "actualizado_en"])
-                updated += 1
-        messages.success(request, f"Aprobadas {updated} solicitud(es).")
+        for obj in instances:
+            if isinstance(obj, FinanceApprovalLine):
+                if obj.pagado and not obj.pagado_en:
+                    obj.pagado_en = timezone.now()
+                    obj.pagado_por = request.user
 
-    @admin.action(description="Rechazar (Finanzas)")
-    def rechazar(self, request, queryset):
-        updated = queryset.update(estado="RECHAZADO")
-        messages.success(request, f"Rechazadas {updated} solicitud(es).")
+                if not obj.pagado:
+                    obj.pagado_en = None
+                    obj.pagado_por = None
+
+            obj.save()
+
+        formset.save_m2m()
+
+    def has_add_permission(self, request):
+        return False
