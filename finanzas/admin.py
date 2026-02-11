@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.utils import timezone
+from django.utils.html import format_html  # ✅ NUEVO
 
 from .models import FinanceApproval
 
@@ -24,6 +25,23 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
 
     actions = ["aprobar", "rechazar"]
 
+    # ✅ NUEVO: mostrar en la ficha el bloque con líneas contado
+    readonly_fields_finanzas = [
+        "purchase_request",
+        "lineas_contado_html",  # ✅
+        "aprobado_por",
+        "aprobado_en",
+        "creado_en",
+        "actualizado_en",
+    ]
+
+    fieldsets = (  # ✅ NUEVO (opcional pero recomendado para orden)
+        ("Solicitud", {"fields": ("purchase_request",)}),
+        ("Líneas a CONTADO (items que Finanzas debe revisar)", {"fields": ("lineas_contado_html",)}),  # ✅
+        ("Decisión Finanzas", {"fields": ("estado",)}),
+        ("Auditoría", {"fields": ("aprobado_por", "aprobado_en", "creado_en", "actualizado_en")}),
+    )
+
     # ---------- Columnas PAW ----------
     @admin.display(description="PAW #")
     def paw_numero(self, obj):
@@ -33,20 +51,63 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def paw_nombre(self, obj):
         return getattr(obj.purchase_request, "paw_nombre", "") or "-"
 
+    # ✅ NUEVO: tabla HTML con solo líneas CONTADO
+    @admin.display(description="Líneas CONTADO")
+    def lineas_contado_html(self, obj):
+        pr = obj.purchase_request
+        qs = pr.lineas.filter(tipo_pago="CONTADO").order_by("id")
+
+        if not qs.exists():
+            return "No hay líneas a CONTADO para esta solicitud."
+
+        header = """
+            <thead>
+                <tr>
+                    <th style="text-align:left;padding:6px;">Código</th>
+                    <th style="text-align:left;padding:6px;">Descripción</th>
+                    <th style="text-align:center;padding:6px;">Und</th>
+                    <th style="text-align:right;padding:6px;">A comprar</th>
+                    <th style="text-align:left;padding:6px;">Proveedor</th>
+                    <th style="text-align:right;padding:6px;">Precio</th>
+                    <th style="text-align:left;padding:6px;">Obs Compras</th>
+                </tr>
+            </thead>
+        """
+
+        rows = []
+        for l in qs:
+            rows.append(f"""
+                <tr>
+                    <td style="padding:6px;border-top:1px solid #ddd;">{l.codigo or ""}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;">{l.descripcion or ""}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;text-align:center;">{l.unidad or ""}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;text-align:right;">{l.cantidad_a_comprar or 0}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;">{l.proveedor.nombre if l.proveedor else ""}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;text-align:right;">{l.precio_unitario if l.precio_unitario is not None else ""}</td>
+                    <td style="padding:6px;border-top:1px solid #ddd;">{(l.observaciones_compras or "")}</td>
+                </tr>
+            """)
+
+        table = f"""
+            <div style="overflow:auto; max-width:100%;">
+                <table style="border-collapse:collapse; width:100%; font-size:12px;">
+                    {header}
+                    <tbody>
+                        {''.join(rows)}
+                    </tbody>
+                </table>
+            </div>
+        """
+        return format_html(table)
+
     # ---------- Permisos ----------
     def _is_finanzas(self, request):
         return request.user.is_superuser or request.user.groups.filter(name="Finanzas").exists()
 
     def get_readonly_fields(self, request, obj=None):
         if self._is_finanzas(request):
-            # Finanzas solo decide aprobar/rechazar (no cambia request)
-            return [
-                "purchase_request",
-                "aprobado_por",
-                "aprobado_en",
-                "creado_en",
-                "actualizado_en",
-            ]
+            # Finanzas solo decide aprobar/rechazar
+            return self.readonly_fields_finanzas  # ✅ usa la lista nueva
         return [f.name for f in self.model._meta.fields]
 
     def has_module_permission(self, request):

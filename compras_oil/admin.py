@@ -47,6 +47,7 @@ class PurchaseLineInline(admin.TabularInline):
         "cantidad_requerida",
         "cantidad_disponible",
         "cantidad_a_comprar",
+        "tipo_pago",            # ✅ NUEVO: Crédito/Contado por ítem
         "proveedor",
         "precio_unitario",
         "observaciones_bom",
@@ -60,6 +61,7 @@ class PurchaseLineInline(admin.TabularInline):
         "cantidad_requerida",
         "cantidad_a_comprar",
         "observaciones_bom",
+        # ✅ NO pongas tipo_pago aquí
     )
 
     formfield_overrides = {
@@ -91,6 +93,7 @@ class PurchaseLineInline(admin.TabularInline):
             kwargs["widget"] = admin.widgets.AdminTextInputWidget(
                 attrs={"style": "width:90px; text-align:right;"}
             )
+        # ✅ No se necesita widget para tipo_pago: Django lo renderiza como <select> automáticamente
 
         return super().formfield_for_dbfield(db_field, **kwargs)
 
@@ -194,10 +197,10 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
             ["PAW #", pr.paw_numero or "-", "Nombre", pr.paw_nombre or "-"],
             ["OT #", getattr(wo, "numero", "-") if wo else "-", "OT", getattr(wo, "titulo", "-") if wo else "-"],
             ["BOM", str(bom) if bom else "-", "Plantilla", getattr(template, "nombre", "-") if template else "-"],
-            ["Estado PR", pr.estado, "Tipo Pago", pr.tipo_pago or "-"],
+            ["Estado PR", pr.estado, "Tipo Pago (Encabezado)", pr.tipo_pago or "-"],
         ]
 
-        header_table = Table(header_data, colWidths=[70, 180, 80, 220])
+        header_table = Table(header_data, colWidths=[90, 160, 140, 160])
         header_table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -209,6 +212,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         data = [[
             "Código", "Descripción", "Und",
             "Req", "Disp", "Comprar",
+            "Tipo Pago",
             "Proveedor", "Precio",
             "Obs BOM", "Obs Compras"
         ]]
@@ -221,6 +225,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 str(line.cantidad_requerida or 0),
                 str(line.cantidad_disponible or 0),
                 str(line.cantidad_a_comprar or 0),
+                line.get_tipo_pago_display() if getattr(line, "tipo_pago", None) else "",
                 line.proveedor.nombre if line.proveedor else "",
                 str(line.precio_unitario) if line.precio_unitario is not None else "",
                 (line.observaciones_bom or "")[:60],
@@ -263,13 +268,14 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         ws.append(["BOM", str(bom) if bom else ""])
         ws.append(["Plantilla", getattr(template, "nombre", "") if template else ""])
         ws.append(["Estado PR", pr.estado])
-        ws.append(["Tipo Pago", pr.tipo_pago or ""])
+        ws.append(["Tipo Pago (Encabezado)", pr.tipo_pago or ""])
         ws.append(["Actualizado", timezone.localtime(pr.actualizado_en).strftime("%Y-%m-%d %H:%M")])
         ws.append([])
 
         headers = [
             "Código", "Descripción", "Unidad",
             "Cantidad Requerida", "Disponible", "A Comprar",
+            "Tipo Pago",
             "Proveedor", "Precio Unitario",
             "Obs BOM", "Obs Compras"
         ]
@@ -283,13 +289,14 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 float(line.cantidad_requerida or 0),
                 float(line.cantidad_disponible or 0),
                 float(line.cantidad_a_comprar or 0),
+                line.get_tipo_pago_display() if getattr(line, "tipo_pago", None) else "",
                 line.proveedor.nombre if line.proveedor else "",
                 float(line.precio_unitario) if line.precio_unitario is not None else "",
                 line.observaciones_bom or "",
                 line.observaciones_compras or "",
             ])
 
-        widths = [14, 45, 10, 18, 12, 12, 22, 14, 25, 25]
+        widths = [14, 45, 10, 18, 12, 12, 12, 22, 14, 25, 25]
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[get_column_letter(i)].width = w
 

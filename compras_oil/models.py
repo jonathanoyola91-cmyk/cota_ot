@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import models
 
 
+# ---------------- PROVEEDORES ----------------
+
 class Supplier(models.Model):
     class TipoCuenta(models.TextChoices):
         AHORROS = "AHORROS", "Ahorros"
@@ -20,6 +22,8 @@ class Supplier(models.Model):
     def __str__(self):
         return self.nombre
 
+
+# ---------------- SOLICITUD DE COMPRA ----------------
 
 class PurchaseRequest(models.Model):
     class Estado(models.TextChoices):
@@ -43,10 +47,14 @@ class PurchaseRequest(models.Model):
         default=Estado.BORRADOR
     )
 
-    # ✅ NUEVO: modo de pago (Compras selecciona)
-    tipo_pago = models.CharField(max_length=20, choices=TipoPago.choices, blank=True)
+    # Tipo de pago a nivel encabezado (opcional / referencia)
+    tipo_pago = models.CharField(
+        max_length=20,
+        choices=TipoPago.choices,
+        blank=True
+    )
 
-    # ✅ Encabezado PAW (se llena al enviar desde BOM)
+    # Encabezado PAW
     paw_numero = models.CharField(max_length=50, blank=True)
     paw_nombre = models.CharField(max_length=120, blank=True)
 
@@ -67,34 +75,62 @@ class PurchaseRequest(models.Model):
             return "Solicitud Compra"
 
 
+# ---------------- LINEAS DE COMPRA ----------------
+
 class PurchaseLine(models.Model):
-    request = models.ForeignKey(PurchaseRequest, on_delete=models.CASCADE, related_name="lineas")
+    request = models.ForeignKey(
+        PurchaseRequest,
+        on_delete=models.CASCADE,
+        related_name="lineas"
+    )
 
     plano = models.CharField(max_length=120, blank=True)
     codigo = models.CharField(max_length=80, blank=True)
     descripcion = models.CharField(max_length=200)
     unidad = models.CharField(max_length=20, blank=True)
 
-    # ✅ viene del BOM (no lo toca Compras)
+    # Viene del BOM (solo lectura para compras)
     observaciones_bom = models.TextField(blank=True)
 
     cantidad_requerida = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     cantidad_disponible = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
-    # ✅ calculado automáticamente
+    # Calculado automáticamente
     cantidad_a_comprar = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
-    proveedor = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True)
-    precio_unitario = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    proveedor = models.ForeignKey(
+        Supplier,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
+    precio_unitario = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
 
-    # ✅ notas de Compras (editable por Compras)
+    # Notas de compras
     observaciones_compras = models.TextField(blank=True)
 
+    # ✅ NUEVO: tipo de pago por ítem
+    tipo_pago = models.CharField(
+        max_length=20,
+        choices=PurchaseRequest.TipoPago.choices,
+        default=PurchaseRequest.TipoPago.CREDITO,
+    )
+
     def save(self, *args, **kwargs):
+        # Si la línea es nueva y el encabezado tiene tipo_pago, heredarlo
+        if not self.pk and self.request and self.request.tipo_pago:
+            self.tipo_pago = self.request.tipo_pago
+
         req = self.cantidad_requerida or 0
         disp = self.cantidad_disponible or 0
         x = req - disp
         self.cantidad_a_comprar = x if x > 0 else 0
+
         super().save(*args, **kwargs)
 
     def __str__(self):
