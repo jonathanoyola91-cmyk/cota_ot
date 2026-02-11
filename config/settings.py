@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     "paw_app",
     "quotes",
     "compras_oil",
+    "finanzas",
+    "inventario",
 ]
 
 
