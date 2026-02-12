@@ -1,3 +1,4 @@
+# compras_oil/models.py
 from django.conf import settings
 from django.db import models
 
@@ -54,7 +55,7 @@ class PurchaseRequest(models.Model):
         blank=True
     )
 
-    # Encabezado PAW
+    # Encabezado PAW (IDENTIFICADOR)
     paw_numero = models.CharField(max_length=50, blank=True)
     paw_nombre = models.CharField(max_length=120, blank=True)
 
@@ -69,10 +70,15 @@ class PurchaseRequest(models.Model):
     actualizado_en = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        try:
-            return f"Solicitud Compra - OT #{self.bom.workorder.numero}"
-        except Exception:
-            return "Solicitud Compra"
+        """
+        IMPORTANTE:
+        Esto es lo que se ve en el selector/autocomplete del admin.
+        Debe mostrar PAW (no OT) porque PAW es el identificador del proceso.
+        """
+        paw = self.paw_numero or "-"
+        nombre = (self.paw_nombre or "").strip()
+        nombre = nombre[:80]
+        return f"PAW #{paw} - {nombre}"
 
 
 # ---------------- LINEAS DE COMPRA ----------------
@@ -114,7 +120,7 @@ class PurchaseLine(models.Model):
     # Notas de compras
     observaciones_compras = models.TextField(blank=True)
 
-    # ✅ NUEVO: tipo de pago por ítem
+    # tipo de pago por ítem
     tipo_pago = models.CharField(
         max_length=20,
         choices=PurchaseRequest.TipoPago.choices,
