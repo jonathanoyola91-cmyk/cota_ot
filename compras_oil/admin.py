@@ -38,7 +38,7 @@ class SupplierAdmin(admin.ModelAdmin):
 class PurchaseLineInline(admin.TabularInline):
     model = PurchaseLine
     extra = 0
-    can_delete = False
+    can_delete = True
 
     fields = (
         "codigo",
@@ -103,6 +103,16 @@ class PurchaseLineInline(admin.TabularInline):
         return False
 
     def has_delete_permission(self, request, obj=None):
+        # obj aquí es el PurchaseRequest (padre)
+        if request.user.is_superuser:
+            return True
+
+        if request.user.groups.filter(name="COMPRAS_OIL").exists():
+            # ✅ regla mínima: permitir borrar mientras NO esté cerrada
+            if obj is None:
+                return True  # por seguridad en vistas donde obj aún no existe
+            return obj.estado != "CERRADA"
+
         return False
 
 

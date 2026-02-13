@@ -1,17 +1,40 @@
+# =====================
 # Python
+# =====================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
+# =====================
 # Virtualenv
+# =====================
 venv/
 .venv/
 
+# =====================
 # Django
+# =====================
 db.sqlite3
 *.log
 
-# Environment
+# Archivos estáticos generados
+static/
+
+# =====================
+# Environment variables
+# =====================
 .env
 .env.*
+
+# =====================
+# IDEs / Editores
+# =====================
+.vscode/
+.idea/
+
+# =====================
+# Sistema Operativo
+# =====================
+Thumbs.db
+.DS_Store

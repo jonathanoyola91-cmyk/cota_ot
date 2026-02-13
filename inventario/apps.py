@@ -1,5 +1,8 @@
 from django.apps import AppConfig
 
-
 class InventarioConfig(AppConfig):
-    name = 'inventario'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "inventario"
+
+    def ready(self):
+        from . import perms_setup
