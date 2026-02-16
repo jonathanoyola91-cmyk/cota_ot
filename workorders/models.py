@@ -86,7 +86,7 @@ class WorkOrder(models.Model):
         DESARME = "DESARME", "Desarme"
         ALISTAMIENTO = "ALISTAMIENTO", "Alistamiento"
         ENSAMBLANDO = "ENSAMBLANDO", "Ensamblando"
-        PRUEBA = "PRUEBA", "Prueba"
+        TERMINADO = "TERMINADO", "Terminado"
 
     etapa_taller = models.CharField(
         max_length=20,
