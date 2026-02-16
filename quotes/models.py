@@ -41,7 +41,7 @@ class Quotation(models.Model):
     # ✅ NUEVO: Valor de la cotización
     valor = models.DecimalField(
         max_digits=14,
-        decimal_places=2,
+        decimal_places=0,
         default=0
     )
 

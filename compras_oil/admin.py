@@ -5,6 +5,7 @@ from django.contrib import admin, messages
 from django.db import models
 from django.http import HttpResponse
 from django.utils import timezone
+from django import forms  # ✅ agregado
 
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -35,8 +36,23 @@ class SupplierAdmin(admin.ModelAdmin):
 
 # ---------------- LINEAS DE COMPRA (INLINE) ----------------
 
+class PurchaseLineInlineForm(forms.ModelForm):
+    class Meta:
+        model = PurchaseLine
+        fields = "__all__"
+
+    def clean_precio_unitario(self):
+        v = self.cleaned_data.get("precio_unitario")
+        # Si llega con formato "$ 1.234.567", lo limpiamos
+        if isinstance(v, str):
+            v = v.replace("$", "").replace(".", "").replace(" ", "").strip()
+            v = v or "0"
+        return v
+
+
 class PurchaseLineInline(admin.TabularInline):
     model = PurchaseLine
+    form = PurchaseLineInlineForm  # ✅ agregado
     extra = 0
     can_delete = True
 
@@ -85,8 +101,9 @@ class PurchaseLineInline(admin.TabularInline):
                 attrs={"style": "width:70px; text-align:right;"}
             )
         elif db_field.name == "precio_unitario":
+            # ✅ importante: TextInput para permitir "$ 1.234.567"
             kwargs["widget"] = admin.widgets.AdminTextInputWidget(
-                attrs={"style": "width:90px; text-align:right;"}
+                attrs={"style": "width:110px; text-align:right;", "inputmode": "numeric"}
             )
         return super().formfield_for_dbfield(db_field, **kwargs)
 
@@ -159,6 +176,10 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "paw_numero",
         "paw_nombre",
     )
+
+    # ✅ Cargar JS para formatear precio_unitario en los inlines
+    class Media:
+        js = ("Compras_oil/js/precio_unitario_format.js",)
 
     @admin.display(description="PAW Número")
     def paw_numero(self, obj):
