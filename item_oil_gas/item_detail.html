@@ -1,0 +1,9 @@
+<h1>{{ item.codigo }}</h1>
+
+<p><b>Descripción:</b> {{ item.descripcion }}</p>
+<p><b>Unidad Medida:</b> {{ item.unidad_medida }}</p>
+<p><b>Clasificación:</b> {{ item.clasificacion }}</p>
+<p><b>Grupo Inventario:</b> {{ item.grupo_inventario }}</p>
+
+<a href="{% url 'item_oil_gas:item_update' item.pk %}">Editar</a> |
+<a href="{% url 'item_oil_gas:item_list' %}">Volver</a>

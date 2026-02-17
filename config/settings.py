@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "finanzas",
     "inventario",
     "bonos",
+    "item_oil_gas",
 ]
 
 

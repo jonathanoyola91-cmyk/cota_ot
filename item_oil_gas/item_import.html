@@ -1,0 +1,8 @@
+<h1>Importar Items desde Excel</h1>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Importar</button>
+  <a href="{% url 'item_oil_gas:item_list' %}">Volver</a>
+</form>

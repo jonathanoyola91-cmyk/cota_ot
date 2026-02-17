@@ -1,0 +1,8 @@
+<h1>Item Oil & Gas</h1>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Guardar</button>
+  <a href="{% url 'item_oil_gas:item_list' %}">Volver</a>
+</form>
