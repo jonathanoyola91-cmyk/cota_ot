@@ -3,6 +3,6 @@ from .models import Item
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ("codigo", "descripcion", "unidad_medida", "clasificacion", "grupo_inventario", "activo")
-    search_fields = ("codigo", "descripcion", "grupo_inventario")
-    list_filter = ("clasificacion", "activo")
+    search_fields = ("codigo", "descripcion")
+    list_display = ("codigo", "descripcion", "activo")
+    list_filter = ("activo", "clasificacion", "grupo_inventario")

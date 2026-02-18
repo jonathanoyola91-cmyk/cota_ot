@@ -4,6 +4,8 @@ from .models import Factura
 
 @admin.register(Factura)
 class FacturaAdmin(admin.ModelAdmin):
+    autocomplete_fields = ("item_factura",)
+
     list_display = (
         "estado",
         "numero_factura",
@@ -11,8 +13,11 @@ class FacturaAdmin(admin.ModelAdmin):
         "get_nombre_paw",
         "get_cliente",
         "get_campo",
-        "municipio",
+        "lugar_entrega",     # ✅ antes municipio
+        "lugar_servicio",
         "numero_servicio",
+        "get_item_codigo",
+        "get_item_descripcion",
         "precio",
         "tipo_pago",
         "fecha_radicacion",
@@ -22,21 +27,60 @@ class FacturaAdmin(admin.ModelAdmin):
     search_fields = (
         "numero_factura",
         "numero_servicio",
-        "municipio",
+        "lugar_entrega",
+        "lugar_servicio",
         "paw__numero_paw",
         "paw__nombre_paw",
         "paw__cliente",
         "paw__campo",
+        "item_factura__codigo",
+        "item_factura__descripcion",
     )
 
-    list_filter = ("estado", "tipo_pago", "fecha_radicacion", "fecha_vencimiento", "municipio")
+    list_filter = (
+        "estado",
+        "tipo_pago",
+        "fecha_radicacion",
+        "fecha_vencimiento",
+        "lugar_entrega",     # ✅ antes municipio
+    )
 
     readonly_fields = ("paw",)
 
     def _es_finanzas(self, request):
         return request.user.groups.filter(name="FINANZAS").exists()
 
-    # ---- Datos arrastrados desde PAW ----
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(super().get_readonly_fields(request, obj))
+
+        # SOLO FINANZAS
+        solo_finanzas = [
+            "numero_factura",
+            "fecha_vencimiento",
+            "fecha_radicacion",
+            "tipo_pago",
+            "estado",
+        ]
+
+        # SOLO PAW (NO FINANZAS)
+        solo_paw = [
+            "lugar_entrega",
+            "lugar_servicio",
+            "numero_servicio",
+            "item_factura",
+        ]
+
+        if request.user.is_superuser:
+            return ro
+
+        if self._es_finanzas(request):
+            # Finanzas NO edita lo operativo
+            return ro + solo_paw
+
+        # PAW/NO FINANZAS no edita lo financiero (pero sí precio)
+        return ro + solo_finanzas
+
+    # --- Datos arrastrados desde PAW ---
     def get_numero_paw(self, obj): return obj.paw.numero_paw
     get_numero_paw.short_description = "Número PAW"
 
@@ -49,36 +93,11 @@ class FacturaAdmin(admin.ModelAdmin):
     def get_campo(self, obj): return obj.paw.campo
     get_campo.short_description = "Campo"
 
-    def get_readonly_fields(self, request, obj=None):
-        ro = list(super().get_readonly_fields(request, obj))
+    # --- Item factura (codigo/descripcion) ---
+    def get_item_codigo(self, obj):
+        return obj.item_factura.codigo if obj.item_factura else ""
+    get_item_codigo.short_description = "Código item"
 
-        # Campos que SOLO FINANZAS debe editar
-        solo_finanzas = [
-            "numero_factura",
-            "fecha_vencimiento",
-            "fecha_radicacion",
-            "tipo_pago",
-            "estado",
-        ]
-
-        # Campos que SOLO PAW debe editar
-        solo_paw = [
-            "municipio",
-            "numero_servicio",
-        ]
-
-        # Superuser: todo (excepto paw)
-        if request.user.is_superuser:
-            return ro
-
-        # FINANZAS: no edita municipio/servicio
-        if self._es_finanzas(request):
-            return ro + solo_paw
-
-        # PAW / NO FINANZAS:
-        # bloquea lo financiero EXCEPTO precio
-        return ro + solo_finanzas
-
-    # Opcional: evitar crear facturas manualmente
-    def has_add_permission(self, request):
-        return request.user.is_superuser
+    def get_item_descripcion(self, obj):
+        return obj.item_factura.descripcion if obj.item_factura else ""
+    get_item_descripcion.short_description = "Descripción item"
