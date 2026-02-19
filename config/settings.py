@@ -48,7 +48,8 @@ INSTALLED_APPS = [
     "inventario",
     "bonos",
     "item_oil_gas",
-    "facturacion"
+    "facturacion",
+    "aprobacion",
 ]
 
 

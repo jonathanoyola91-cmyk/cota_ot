@@ -225,6 +225,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "marcar_en_revision",
         "cerrar_solicitud",
         "enviar_a_finanzas",
+        "enviar_a_aprobacion_compras",
         "enviar_a_inventario",
         "descargar_pdf",
         "descargar_excel",
@@ -337,6 +338,42 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
 
         messages.success(request, f"{enviados} solicitud(es) enviadas a Finanzas.")
 
+    @admin.action(description="Enviar a Aprobación de Compras (Finanzas)")
+    def enviar_a_aprobacion_compras(self, request, queryset):
+        if not (
+            request.user.is_superuser
+            or request.user.groups.filter(name="COMPRAS_OIL").exists()
+        ):
+            messages.error(request, "No tienes permisos para enviar solicitudes a Aprobación de Compras.")
+            return
+
+        try:
+            from aprobacion.models import PurchaseApproval
+        except Exception as e:
+            messages.error(request, f"No se pudo importar aprobacion.PurchaseApproval. Error: {e}")
+            return
+
+        enviados = 0
+        for pr in queryset:
+            pa, created = PurchaseApproval.objects.get_or_create(
+                purchase_request=pr,
+                defaults={
+                    "estado": PurchaseApproval.Estado.PENDIENTE,
+                    "enviado_por": request.user,
+                    "enviado_en": timezone.now(),
+                },
+            )
+
+            if not created:
+                pa.estado = PurchaseApproval.Estado.PENDIENTE
+                pa.enviado_por = request.user
+                pa.enviado_en = timezone.now()
+                pa.save(update_fields=["estado", "enviado_por", "enviado_en", "actualizado_en"])
+
+            enviados += 1
+
+        messages.success(request, f"{enviados} solicitud(es) enviadas a Aprobación de Compras.")
+
     @admin.action(description="Enviar a Inventario (crear recepción por línea)")
     def enviar_a_inventario(self, request, queryset):
         if not (
@@ -369,7 +406,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         messages.success(request, f"Enviadas {enviados} solicitud(es) a Inventario.")
 
     # ---------------- EXPORTS (PDF / EXCEL) ----------------
-    # (dejo tu export tal cual; no lo recorto para no alterar tu lógica)
 
     @admin.action(description="Descargar PAW en Excel")
     def descargar_excel(self, request, queryset):
@@ -471,7 +507,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         for pr in qs:
             paw_nums.append(pr.paw_numero or str(pr.id))
 
-            if y < 140:
+            if y < 160:
                 p.showPage()
                 y = height - 40
 
@@ -487,15 +523,21 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
             p.drawString(40, y, f"Estado Compra: {pr.estado} | Tipo Pago Encabezado: {pr.tipo_pago or '-'}")
             y -= 16
 
-            p.setFont("Helvetica-Bold", 9)
+            # Encabezados con cantidades requerida/disponible/a comprar y precio unitario
+            p.setFont("Helvetica-Bold", 8)
             p.drawString(40, y, "PLANO")
-            p.drawString(95, y, "COD")
-            p.drawString(140, y, "DESCRIPCIÓN")
-            p.drawRightString(400, y, "CANT")
-            p.drawRightString(475, y, "P.UNIT")
+            p.drawString(90, y, "COD")
+            p.drawString(135, y, "DESCRIPCIÓN")
+
+            p.drawRightString(395, y, "REQ")
+            p.drawRightString(435, y, "DISP")
+            p.drawRightString(480, y, "COMPR")
+
+            p.drawRightString(525, y, "P.UNIT")
             p.drawRightString(560, y, "VALOR")
             y -= 12
-            p.setFont("Helvetica", 9)
+
+            p.setFont("Helvetica", 8)
 
             total_pr = 0
 
@@ -503,22 +545,40 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 if y < 90:
                     p.showPage()
                     y = height - 40
-                    p.setFont("Helvetica", 9)
+                    p.setFont("Helvetica", 8)
 
-                qty = ln.cantidad_a_comprar or 0
+                    # Repetir encabezado
+                    p.setFont("Helvetica-Bold", 8)
+                    p.drawString(40, y, "PLANO")
+                    p.drawString(90, y, "COD")
+                    p.drawString(135, y, "DESCRIPCIÓN")
+                    p.drawRightString(395, y, "REQ")
+                    p.drawRightString(435, y, "DISP")
+                    p.drawRightString(480, y, "COMPR")
+                    p.drawRightString(525, y, "P.UNIT")
+                    p.drawRightString(560, y, "VALOR")
+                    y -= 12
+                    p.setFont("Helvetica", 8)
+
+                req = ln.cantidad_requerida or 0
+                disp = ln.cantidad_disponible or 0
+                compr = ln.cantidad_a_comprar or 0
                 price = ln.precio_unitario or 0
-                item_value = qty * price
+                item_value = compr * price
                 total_pr += item_value
 
-                plano = (ln.plano or "")[:10]
+                plano = (ln.plano or "")[:8]
                 cod = (ln.codigo or "")[:10]
-                desc = (ln.descripcion or "")[:35]
+                desc = (ln.descripcion or "")[:30]
 
                 p.drawString(40, y, plano)
-                p.drawString(95, y, cod)
-                p.drawString(140, y, desc)
-                p.drawRightString(400, y, f"{qty}")
-                p.drawRightString(475, y, f"{price}")
+                p.drawString(90, y, cod)
+                p.drawString(135, y, desc)
+
+                p.drawRightString(395, y, f"{req}")
+                p.drawRightString(435, y, f"{disp}")
+                p.drawRightString(480, y, f"{compr}")
+                p.drawRightString(525, y, f"{price}")
                 p.drawRightString(560, y, f"{item_value}")
                 y -= 12
 
