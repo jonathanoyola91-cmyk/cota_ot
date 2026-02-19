@@ -225,7 +225,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "marcar_en_revision",
         "cerrar_solicitud",
         "enviar_a_finanzas",
-        "enviar_a_aprobacion_compras",
+        "enviar_a_aprobacion_compras",  # ✅ NUEVA
         "enviar_a_inventario",
         "descargar_pdf",
         "descargar_excel",
@@ -242,6 +242,11 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     class Media:
         js = ("Compras_oil/js/precio_unitario_format.js",)
 
+    # ---------- helper formato ----------
+    def _fmt_int(self, value: Decimal) -> str:
+        # 45.000 (sin decimales)
+        return f"{int(value):,}".replace(",", ".")
+
     @admin.display(description="PAW Número")
     def paw_numero(self, obj):
         return obj.paw_numero or "-"
@@ -255,23 +260,25 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         fa = getattr(obj, "finance_approval", None)
         return fa.estado if fa else "—"
 
+    # ✅ SIN DECIMALES
     @admin.display(description="Subtotal requerido")
     def subtotal_requerido(self, obj):
-        total = 0
+        total = Decimal("0")
         for ln in obj.lineas.all():
-            qty = ln.cantidad_requerida or 0
-            price = ln.precio_unitario or 0
+            qty = ln.cantidad_requerida or Decimal("0")
+            price = ln.precio_unitario or Decimal("0")
             total += qty * price
-        return total
+        return self._fmt_int(total)
 
+    # ✅ SIN DECIMALES
     @admin.display(description="Total PAW")
     def total_paw(self, obj):
-        total = 0
+        total = Decimal("0")
         for ln in obj.lineas.all():
-            qty = ln.cantidad_a_comprar or 0
-            price = ln.precio_unitario or 0
+            qty = ln.cantidad_a_comprar or Decimal("0")
+            price = ln.precio_unitario or Decimal("0")
             total += qty * price
-        return total
+        return self._fmt_int(total)
 
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
@@ -338,6 +345,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
 
         messages.success(request, f"{enviados} solicitud(es) enviadas a Finanzas.")
 
+    # ✅ NUEVA ACCIÓN (no toca finanzas actual)
     @admin.action(description="Enviar a Aprobación de Compras (Finanzas)")
     def enviar_a_aprobacion_compras(self, request, queryset):
         if not (
@@ -406,6 +414,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         messages.success(request, f"Enviadas {enviados} solicitud(es) a Inventario.")
 
     # ---------------- EXPORTS (PDF / EXCEL) ----------------
+    # (dejo tu export tal cual; no lo recorto para no alterar tu lógica)
 
     @admin.action(description="Descargar PAW en Excel")
     def descargar_excel(self, request, queryset):
@@ -523,20 +532,16 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
             p.drawString(40, y, f"Estado Compra: {pr.estado} | Tipo Pago Encabezado: {pr.tipo_pago or '-'}")
             y -= 16
 
-            # Encabezados con cantidades requerida/disponible/a comprar y precio unitario
             p.setFont("Helvetica-Bold", 8)
             p.drawString(40, y, "PLANO")
             p.drawString(90, y, "COD")
             p.drawString(135, y, "DESCRIPCIÓN")
-
             p.drawRightString(395, y, "REQ")
             p.drawRightString(435, y, "DISP")
             p.drawRightString(480, y, "COMPR")
-
             p.drawRightString(525, y, "P.UNIT")
             p.drawRightString(560, y, "VALOR")
             y -= 12
-
             p.setFont("Helvetica", 8)
 
             total_pr = 0
@@ -545,9 +550,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 if y < 90:
                     p.showPage()
                     y = height - 40
-                    p.setFont("Helvetica", 8)
-
-                    # Repetir encabezado
                     p.setFont("Helvetica-Bold", 8)
                     p.drawString(40, y, "PLANO")
                     p.drawString(90, y, "COD")
@@ -565,6 +567,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 compr = ln.cantidad_a_comprar or 0
                 price = ln.precio_unitario or 0
                 item_value = compr * price
+
                 total_pr += item_value
 
                 plano = (ln.plano or "")[:8]
@@ -574,7 +577,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 p.drawString(40, y, plano)
                 p.drawString(90, y, cod)
                 p.drawString(135, y, desc)
-
                 p.drawRightString(395, y, f"{req}")
                 p.drawRightString(435, y, f"{disp}")
                 p.drawRightString(480, y, f"{compr}")
