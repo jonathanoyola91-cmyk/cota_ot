@@ -1,11 +1,13 @@
 # Compras_oil/admin.py
 from io import BytesIO
+from decimal import Decimal
+import re
 
 from django.contrib import admin, messages
 from django.db import models
 from django.http import HttpResponse
 from django.utils import timezone
-from django import forms  # ✅ agregado
+from django import forms
 
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -37,26 +39,67 @@ class SupplierAdmin(admin.ModelAdmin):
 # ---------------- LINEAS DE COMPRA (INLINE) ----------------
 
 class PurchaseLineInlineForm(forms.ModelForm):
+    """
+    precio_unitario se captura como texto para permitir:
+    "$ 250.000" / "250.000,50" / "250000"
+    y luego se convierte a Decimal en clean_precio_unitario().
+    """
+    precio_unitario = forms.CharField(required=False)
+
     class Meta:
         model = PurchaseLine
         fields = "__all__"
 
     def clean_precio_unitario(self):
         v = self.cleaned_data.get("precio_unitario")
-        # Si llega con formato "$ 1.234.567", lo limpiamos
-        if isinstance(v, str):
-            v = v.replace("$", "").replace(".", "").replace(" ", "").strip()
-            v = v or "0"
-        return v
+        if v in (None, ""):
+            return None
+
+        s = str(v)
+
+        # quitar símbolos y espacios (incluye NBSP)
+        s = s.replace("COP", "").replace("$", "")
+        s = s.replace("\u00A0", " ").strip()
+        s = s.replace(" ", "")
+
+        # dejar solo dígitos, separadores y signo
+        s = re.sub(r"[^0-9,.\-]", "", s)
+
+        if s in ("", "-", ",", "."):
+            return None
+
+        # Regla robusta:
+        # el separador decimal es el ÚLTIMO (.,) SOLO si tiene 1 o 2 dígitos después
+        last_dot = s.rfind(".")
+        last_comma = s.rfind(",")
+        last_sep = max(last_dot, last_comma)
+
+        if last_sep != -1:
+            decimals = s[last_sep + 1:]
+            if decimals.isdigit() and 1 <= len(decimals) <= 2:
+                int_part = re.sub(r"[.,]", "", s[:last_sep])  # quita miles
+                s = f"{int_part}.{decimals}"
+            else:
+                # no parece decimal => todo separador es miles
+                s = re.sub(r"[.,]", "", s)
+        else:
+            # sin separadores
+            pass
+
+        try:
+            return Decimal(s)
+        except Exception:
+            raise forms.ValidationError("Precio unitario inválido. Ej: 250000 o 250000,50")
 
 
 class PurchaseLineInline(admin.TabularInline):
     model = PurchaseLine
-    form = PurchaseLineInlineForm  # ✅ agregado
+    form = PurchaseLineInlineForm
     extra = 0
     can_delete = True
 
     fields = (
+        "plano",
         "codigo",
         "descripcion",
         "unidad",
@@ -71,6 +114,7 @@ class PurchaseLineInline(admin.TabularInline):
     )
 
     readonly_fields = (
+        "plano",
         "codigo",
         "descripcion",
         "unidad",
@@ -87,49 +131,65 @@ class PurchaseLineInline(admin.TabularInline):
         }
     }
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # ✅ Ocultar items con cantidad requerida en 0 (o menor)
+        return qs.exclude(cantidad_requerida__lte=Decimal("0"))
+
+    def get_formset(self, request, obj=None, **kwargs):
+        """
+        ✅ Blindaje extra: fuerza el campo a CharField dentro del formset.
+        Esto evita que Django lo trate como DecimalField y dispare:
+        "el valor debe ser un número decimal"
+        """
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields["precio_unitario"] = forms.CharField(required=False)
+        return formset
+
     def formfield_for_dbfield(self, db_field, **kwargs):
-        if db_field.name == "codigo":
-            kwargs["widget"] = admin.widgets.AdminTextInputWidget(
-                attrs={"style": "width:90px;"}
-            )
+        if db_field.name == "plano":
+            kwargs["widget"] = admin.widgets.AdminTextInputWidget(attrs={"style": "width:90px;"})
+
+        elif db_field.name == "codigo":
+            kwargs["widget"] = admin.widgets.AdminTextInputWidget(attrs={"style": "width:90px;"})
+
         elif db_field.name == "unidad":
             kwargs["widget"] = admin.widgets.AdminTextInputWidget(
                 attrs={"style": "width:60px; text-align:center;"}
             )
+
         elif db_field.name in ("cantidad_requerida", "cantidad_disponible", "cantidad_a_comprar"):
             kwargs["widget"] = admin.widgets.AdminTextInputWidget(
                 attrs={"style": "width:70px; text-align:right;"}
             )
+
         elif db_field.name == "precio_unitario":
-            # ✅ importante: TextInput para permitir "$ 1.234.567"
+            # ✅ Forzar CharField (si no, Django valida como Decimal antes del clean)
+            kwargs["form_class"] = forms.CharField
+            kwargs["required"] = False
             kwargs["widget"] = admin.widgets.AdminTextInputWidget(
-                attrs={"style": "width:110px; text-align:right;", "inputmode": "numeric"}
+                attrs={"style": "width:130px; text-align:right;", "inputmode": "numeric"}
             )
+
         return super().formfield_for_dbfield(db_field, **kwargs)
 
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return self.readonly_fields
-
         if request.user.groups.filter(name="COMPRAS_OIL").exists():
             return self.readonly_fields
-
         return [f.name for f in self.model._meta.fields]
 
     def has_add_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        # obj aquí es el PurchaseRequest (padre)
         if request.user.is_superuser:
             return True
-
         if request.user.groups.filter(name="COMPRAS_OIL").exists():
-            # ✅ regla mínima: permitir borrar mientras NO esté cerrada
             if obj is None:
-                return True  # por seguridad en vistas donde obj aún no existe
+                return True
             return obj.estado != "CERRADA"
-
         return False
 
 
@@ -144,6 +204,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "estado",
         "tipo_pago",
         "estado_finanzas",
+        "subtotal_requerido",
         "total_paw",
         "creado_por",
         "actualizado_en",
@@ -177,7 +238,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         "paw_nombre",
     )
 
-    # ✅ Cargar JS para formatear precio_unitario en los inlines
     class Media:
         js = ("Compras_oil/js/precio_unitario_format.js",)
 
@@ -194,6 +254,15 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         fa = getattr(obj, "finance_approval", None)
         return fa.estado if fa else "—"
 
+    @admin.display(description="Subtotal requerido")
+    def subtotal_requerido(self, obj):
+        total = 0
+        for ln in obj.lineas.all():
+            qty = ln.cantidad_requerida or 0
+            price = ln.precio_unitario or 0
+            total += qty * price
+        return total
+
     @admin.display(description="Total PAW")
     def total_paw(self, obj):
         total = 0
@@ -206,10 +275,8 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return list(self.readonly_fields)
-
         if request.user.groups.filter(name="COMPRAS_OIL").exists():
             return list(self.readonly_fields)
-
         return [f.name for f in self.model._meta.fields]
 
     def save_model(self, request, obj, form, change):
@@ -302,6 +369,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         messages.success(request, f"Enviadas {enviados} solicitud(es) a Inventario.")
 
     # ---------------- EXPORTS (PDF / EXCEL) ----------------
+    # (dejo tu export tal cual; no lo recorto para no alterar tu lógica)
 
     @admin.action(description="Descargar PAW en Excel")
     def descargar_excel(self, request, queryset):
@@ -311,7 +379,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
 
         headers = [
             "Paw #", "PAW Nombre", "OT", "Estado Compra", "Tipo Pago Encabezado",
-            "Código", "Descripción", "Unidad",
+            "Plano", "Código", "Descripción", "Unidad",
             "Cant. requerida", "Cant. disponible", "Cant. a comprar",
             "Tipo pago ítem", "Proveedor",
             "Precio unitario", "Valor ítem",
@@ -346,6 +414,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                     ot_num,
                     pr.estado,
                     pr.tipo_pago or "",
+                    ln.plano or "",
                     ln.codigo or "",
                     ln.descripcion or "",
                     ln.unidad or "",
@@ -361,12 +430,12 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 ])
 
             ws.append([""] * len(headers))
-            ws.append([""] * 13 + ["TOTAL PAW:", float(total_pr)] + ["", ""])
+            ws.append([""] * 14 + ["TOTAL PAW:", float(total_pr)] + ["", ""])
             ws.append([""] * len(headers))
 
             grand_total += total_pr
 
-        ws.append([""] * 13 + ["TOTAL GENERAL:", float(grand_total)] + ["", ""])
+        ws.append([""] * 14 + ["TOTAL GENERAL:", float(grand_total)] + ["", ""])
 
         for col in range(1, len(headers) + 1):
             ws.column_dimensions[get_column_letter(col)].width = 18
@@ -375,11 +444,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         wb.save(out)
         out.seek(0)
 
-        if len(paw_nums) == 1:
-            filename = f'Paw #{paw_nums[0]} - export.xlsx'
-        else:
-            filename = f'Paw # MULTI ({len(paw_nums)}) - export.xlsx'
-
+        filename = f'Paw # MULTI ({len(paw_nums)}) - export.xlsx' if len(paw_nums) > 1 else f'Paw #{paw_nums[0]} - export.xlsx'
         resp = HttpResponse(
             out.getvalue(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -423,11 +488,12 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
             y -= 16
 
             p.setFont("Helvetica-Bold", 9)
-            p.drawString(40, y, "COD")
-            p.drawString(95, y, "DESCRIPCIÓN")
-            p.drawRightString(370, y, "CANT")
-            p.drawRightString(445, y, "P.UNIT")
-            p.drawRightString(520, y, "VALOR")
+            p.drawString(40, y, "PLANO")
+            p.drawString(95, y, "COD")
+            p.drawString(140, y, "DESCRIPCIÓN")
+            p.drawRightString(400, y, "CANT")
+            p.drawRightString(475, y, "P.UNIT")
+            p.drawRightString(560, y, "VALOR")
             y -= 12
             p.setFont("Helvetica", 9)
 
@@ -444,18 +510,21 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 item_value = qty * price
                 total_pr += item_value
 
-                desc = (ln.descripcion or "")[:45]
+                plano = (ln.plano or "")[:10]
+                cod = (ln.codigo or "")[:10]
+                desc = (ln.descripcion or "")[:35]
 
-                p.drawString(40, y, (ln.codigo or "")[:10])
-                p.drawString(95, y, desc)
-                p.drawRightString(370, y, f"{qty}")
-                p.drawRightString(445, y, f"{price}")
-                p.drawRightString(520, y, f"{item_value}")
+                p.drawString(40, y, plano)
+                p.drawString(95, y, cod)
+                p.drawString(140, y, desc)
+                p.drawRightString(400, y, f"{qty}")
+                p.drawRightString(475, y, f"{price}")
+                p.drawRightString(560, y, f"{item_value}")
                 y -= 12
 
             y -= 6
             p.setFont("Helvetica-Bold", 10)
-            p.drawRightString(520, y, f"TOTAL PAW: {total_pr}")
+            p.drawRightString(560, y, f"TOTAL PAW: {total_pr}")
             p.setFont("Helvetica", 9)
             y -= 18
 
@@ -466,18 +535,14 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
                 p.showPage()
                 y = height - 40
             p.setFont("Helvetica-Bold", 11)
-            p.drawRightString(520, y, f"TOTAL GENERAL: {grand_total}")
+            p.drawRightString(560, y, f"TOTAL GENERAL: {grand_total}")
             y -= 20
 
         p.showPage()
         p.save()
         buffer.seek(0)
 
-        if len(paw_nums) == 1:
-            filename = f'Paw #{paw_nums[0]} - export.pdf'
-        else:
-            filename = f'Paw # MULTI ({len(paw_nums)}) - export.pdf'
-
+        filename = f'Paw # MULTI ({len(paw_nums)}) - export.pdf' if len(paw_nums) > 1 else f'Paw #{paw_nums[0]} - export.pdf'
         resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp

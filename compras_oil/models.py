@@ -1,4 +1,6 @@
 # compras_oil/models.py
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 
@@ -90,6 +92,16 @@ class PurchaseLine(models.Model):
         related_name="lineas"
     )
 
+    # ✅ NUEVO: vínculo directo al ítem del BOM para “arrastrar” plano/código/etc sin riesgo
+    bom_item = models.ForeignKey(
+        "bom.BomItem",
+        on_delete=models.PROTECT,
+        related_name="purchase_lines",
+        null=True,
+        blank=True
+    )
+
+    # Datos visibles en compras
     plano = models.CharField(max_length=120, blank=True)
     codigo = models.CharField(max_length=80, blank=True)
     descripcion = models.CharField(max_length=200)
@@ -128,14 +140,43 @@ class PurchaseLine(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        """
+        - Hereda tipo_pago desde encabezado al crear.
+        - ✅ Arrastra plano/código/desc/unidad/observaciones y cantidad_requerida desde BomItem si existe.
+        - Calcula cantidad_a_comprar = max(cantidad_requerida - cantidad_disponible, 0)
+        """
+
         # Si la línea es nueva y el encabezado tiene tipo_pago, heredarlo
         if not self.pk and self.request and self.request.tipo_pago:
             self.tipo_pago = self.request.tipo_pago
 
-        req = self.cantidad_requerida or 0
-        disp = self.cantidad_disponible or 0
+        # ✅ Arrastrar datos desde BOM ITEM (si está enlazado)
+        if self.bom_item_id:
+            bi = self.bom_item
+
+            # Si están vacíos, se rellenan desde BOM Item
+            if not self.plano:
+                self.plano = (bi.plano or "")[:120]
+            if not self.codigo:
+                self.codigo = (bi.codigo or "")[:80]
+            if not self.descripcion:
+                self.descripcion = bi.descripcion  # este campo no permite blank, así que es importante
+            if not self.unidad:
+                self.unidad = (bi.unidad or "")[:20]
+
+            # Observaciones del BOM
+            if not self.observaciones_bom:
+                self.observaciones_bom = bi.observaciones or ""
+
+            # Cantidad requerida en compras viene de BOM Item: cantidad_solicitada
+            # Solo la forzamos si está en 0 (para no sobreescribir ediciones manuales si ustedes las hacen)
+            if (self.cantidad_requerida is None) or (Decimal(self.cantidad_requerida) <= Decimal("0")):
+                self.cantidad_requerida = bi.cantidad_solicitada or Decimal("0")
+
+        req = self.cantidad_requerida or Decimal("0")
+        disp = self.cantidad_disponible or Decimal("0")
         x = req - disp
-        self.cantidad_a_comprar = x if x > 0 else 0
+        self.cantidad_a_comprar = x if x > 0 else Decimal("0")
 
         super().save(*args, **kwargs)
 
