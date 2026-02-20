@@ -290,25 +290,78 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     def descargar_pdf(self, request, queryset):
         buffer = BytesIO()
         p = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
 
-        y = 750
-        for pr in queryset:
-            p.drawString(40, y, f"PAW {pr.paw_numero} - {pr.paw_nombre}")
-            y -= 20
+        y = height - 40
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(40, y, "PAW - Solicitud de Compra")
+        y -= 25
 
+        qs = queryset.select_related("bom__workorder").prefetch_related("lineas__proveedor")
+
+        for pr in qs:
+            if y < 140:
+                p.showPage()
+                y = height - 40
+
+            # ---------- ENCABEZADO ----------
+            ot = getattr(pr.bom.workorder, "numero", "-")
+            p.setFont("Helvetica-Bold", 10)
+            p.drawString(40, y, f"PAW #{pr.paw_numero} - {pr.paw_nombre}")
+            y -= 14
+            p.setFont("Helvetica", 9)
+            p.drawString(40, y, f"OT: {ot} | Estado: {pr.estado} | Tipo Pago: {pr.tipo_pago or '-'}")
+            y -= 18
+
+            # ---------- CABECERA TABLA ----------
+            p.setFont("Helvetica-Bold", 8)
+            p.drawString(40, y, "CÓDIGO")
+            p.drawString(95, y, "DESCRIPCIÓN")
+            p.drawRightString(360, y, "REQ")
+            p.drawRightString(405, y, "DISP")
+            p.drawRightString(450, y, "COMPR")
+            p.drawRightString(505, y, "P.UNIT")
+            p.drawRightString(560, y, "VALOR")
+            y -= 12
+
+            p.setFont("Helvetica", 8)
+
+            # ---------- FILAS ----------
             for ln in pr.lineas.all():
-                p.drawString(
-                    40, y,
-                    f"{ln.codigo} | Req:{ln.cantidad_requerida} "
-                    f"Disp:{ln.cantidad_disponible} "
-                    f"Comprar:{ln.cantidad_a_comprar} "
-                    f"P.Unit:{ln.precio_unitario}"
-                )
+                if y < 90:
+                    p.showPage()
+                    y = height - 40
+
+                    # repetir cabecera
+                    p.setFont("Helvetica-Bold", 8)
+                    p.drawString(40, y, "CÓDIGO")
+                    p.drawString(95, y, "DESCRIPCIÓN")
+                    p.drawRightString(360, y, "REQ")
+                    p.drawRightString(405, y, "DISP")
+                    p.drawRightString(450, y, "COMPR")
+                    p.drawRightString(505, y, "P.UNIT")
+                    p.drawRightString(560, y, "VALOR")
+                    y -= 12
+                    p.setFont("Helvetica", 8)
+
+                req = ln.cantidad_requerida or 0
+                disp = ln.cantidad_disponible or 0
+                compr = ln.cantidad_a_comprar or 0
+                price = ln.precio_unitario or 0
+                value = compr * price
+
+                p.drawString(40, y, (ln.codigo or "")[:12])
+                p.drawString(95, y, (ln.descripcion or "")[:35])
+                p.drawRightString(360, y, f"{req}")
+                p.drawRightString(405, y, f"{disp}")
+                p.drawRightString(450, y, f"{compr}")
+                p.drawRightString(505, y, f"{price}")
+                p.drawRightString(560, y, f"{value}")
                 y -= 12
 
-            y -= 20
-            p.showPage()
+            y -= 10
 
+        p.showPage()
         p.save()
         buffer.seek(0)
 
