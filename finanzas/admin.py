@@ -1,3 +1,6 @@
+# finanzas/admin.py
+from decimal import Decimal
+
 from django.contrib import admin, messages
 from django.utils import timezone
 from django.db import models
@@ -31,9 +34,7 @@ class FinanceApprovalLineInline(admin.TabularInline):
     extra = 0
     can_delete = False
 
-    # ----------------------------------------------
-    # Nota admin en 2 renglones (control de ancho)
-    # ----------------------------------------------
+    # ✅ Nota admin en 2 renglones y con ancho controlado
     formfield_overrides = {
         models.TextField: {
             "widget": Textarea(attrs={
@@ -43,13 +44,13 @@ class FinanceApprovalLineInline(admin.TabularInline):
         }
     }
 
-    # ----------------------------------------------
-    # Columnas del inline
-    # ----------------------------------------------
+    # ✅ Columnas del inline (incluye cantidad y total)
     fields = (
         "purchase_line",
         "proveedor",
-        "precio",
+        "cantidad_a_comprar",
+        "precio_unitario",
+        "valor_total",
         "decision",
         "scheduled_date",
         "nota_admin",
@@ -63,69 +64,66 @@ class FinanceApprovalLineInline(admin.TabularInline):
     readonly_fields = (
         "purchase_line",
         "proveedor",
-        "precio",
+        "cantidad_a_comprar",
+        "precio_unitario",
+        "valor_total",
         "decidido_por",
         "decidido_en",
         "pagado_en",
         "pagado_por",
     )
 
-    # ----------------------------------------------
-    # Columnas calculadas
-    # ----------------------------------------------
+    # --------------------------------------------------
+    # Columnas informativas desde PurchaseLine
+    # --------------------------------------------------
 
     @admin.display(description="Proveedor")
     def proveedor(self, obj: FinanceApprovalLine):
         pl = obj.purchase_line
-
-        # Campo típico en compras
-        value = (
-            getattr(pl, "proveedor", None)
-            or getattr(pl, "supplier", None)
-            or getattr(pl, "vendor", None)
-        )
-
+        value = getattr(pl, "proveedor", None) or getattr(pl, "supplier", None) or getattr(pl, "vendor", None)
         return str(value) if value else "-"
 
+    @admin.display(description="Cantidad a comprar")
+    def cantidad_a_comprar(self, obj: FinanceApprovalLine):
+        pl = obj.purchase_line
+        val = getattr(pl, "cantidad_a_comprar", None)
+        if val in (None, ""):
+            return "-"
+        try:
+            return number_format(val, decimal_pos=3, force_grouping=True)
+        except Exception:
+            return str(val)
+
     @admin.display(description="Precio unitario")
-    def precio(self, obj: FinanceApprovalLine):
+    def precio_unitario(self, obj: FinanceApprovalLine):
+        pl = obj.purchase_line
+        val = getattr(pl, "precio_unitario", None)
+        if val in (None, ""):
+            return "-"
+        try:
+            return number_format(val, decimal_pos=2, force_grouping=True)
+        except Exception:
+            return str(val)
+
+    @admin.display(description="Valor total")
+    def valor_total(self, obj: FinanceApprovalLine):
         """
-        Lee el PRECIO UNITARIO real desde PurchaseLine,
-        incluso si el nombre del campo cambia.
+        En Compras lo calculan como:
+        value = cantidad_a_comprar * precio_unitario
         """
         pl = obj.purchase_line
+        qty = getattr(pl, "cantidad_a_comprar", None) or 0
+        price = getattr(pl, "precio_unitario", None) or 0
 
-        # 1) Intentos directos (casos más comunes)
-        for name in (
-            "precio_unitario",
-            "precio_unit",
-            "valor_unitario",
-            "unit_price",
-        ):
-            if hasattr(pl, name):
-                val = getattr(pl, name)
-                if callable(val):
-                    try:
-                        val = val()
-                    except TypeError:
-                        pass
+        try:
+            total = Decimal(str(qty)) * Decimal(str(price))
+            return number_format(total, decimal_pos=2, force_grouping=True)
+        except Exception:
+            return "-"
 
-                if val not in (None, ""):
-                    return number_format(val, decimal_pos=2, force_grouping=True)
-
-        # 2) Búsqueda automática en campos reales del modelo
-        for field in pl._meta.fields:
-            fname = field.name.lower()
-            if "precio" in fname and ("unit" in fname or "unitario" in fname):
-                val = getattr(pl, field.name, None)
-                if val not in (None, ""):
-                    return number_format(val, decimal_pos=2, force_grouping=True)
-
-        return "-"
-
-    # ----------------------------------------------
-    # Permisos
-    # ----------------------------------------------
+    # --------------------------------------------------
+    # Permisos (igual a tu lógica actual)
+    # --------------------------------------------------
 
     def has_change_permission(self, request, obj=None):
         if request.user.is_superuser:
@@ -140,7 +138,7 @@ class FinanceApprovalLineInline(admin.TabularInline):
         if request.user.is_superuser:
             return base
 
-        # FINANZAS puede marcar pagado, pero NO decidir
+        # FINANZAS puede marcar pagado, pero NO decide
         if request.user.groups.filter(name="FINANZAS").exists():
             return base + ["decision", "scheduled_date", "nota_admin"]
 
@@ -178,24 +176,26 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
 
     inlines = [FinanceApprovalLineInline]
 
-    actions = (
+    actions = [
         "marcar_pendiente",
         "marcar_aprobado",
         "marcar_rechazado",
-    )
+    ]
 
-    # ----------------------------------------------
-    # Sincronizar líneas al abrir
-    # ----------------------------------------------
+    # --------------------------------------------------
+    # Sync líneas al abrir (igual)
+    # --------------------------------------------------
+
     def change_view(self, request, object_id, form_url="", extra_context=None):
         obj = self.get_object(request, object_id)
         if obj:
             sync_finance_lines(obj)
         return super().change_view(request, object_id, form_url, extra_context)
 
-    # ----------------------------------------------
-    # Columnas
-    # ----------------------------------------------
+    # --------------------------------------------------
+    # COLUMNAS (igual)
+    # --------------------------------------------------
+
     @admin.display(description="PAW")
     def paw_numero(self, obj):
         return obj.purchase_request.paw_numero or "-"
@@ -211,7 +211,7 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
         return last.decidido_en if last else "-"
 
     # ==================================================
-    # ACCIONES DE ESTADO
+    # ACCIONES DE ESTADO (igual)
     # ==================================================
 
     def _check_finance_permission(self, request):
@@ -226,6 +226,7 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def marcar_pendiente(self, request, queryset):
         if not self._check_finance_permission(request):
             return
+
         updated = queryset.update(estado=FinanceApproval.Estado.PENDIENTE)
         messages.success(request, f"{updated} PAW(s) marcados como PENDIENTE.")
 
@@ -233,6 +234,7 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def marcar_aprobado(self, request, queryset):
         if not self._check_finance_permission(request):
             return
+
         updated = queryset.update(estado=FinanceApproval.Estado.APROBADO)
         messages.success(request, f"{updated} PAW(s) marcados como APROBADO.")
 
@@ -240,12 +242,14 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def marcar_rechazado(self, request, queryset):
         if not self._check_finance_permission(request):
             return
+
         updated = queryset.update(estado=FinanceApproval.Estado.RECHAZADO)
         messages.success(request, f"{updated} PAW(s) marcados como RECHAZADO.")
 
-    # ----------------------------------------------
-    # Guardado inline (pagado)
-    # ----------------------------------------------
+    # --------------------------------------------------
+    # Guardado inline (pagado) (igual)
+    # --------------------------------------------------
+
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
 
