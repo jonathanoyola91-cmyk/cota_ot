@@ -1,6 +1,8 @@
-# finanzas/admin.py
 from django.contrib import admin, messages
 from django.utils import timezone
+from django.db import models
+from django.forms import Textarea
+from django.utils.formats import number_format
 
 from .models import FinanceApproval, FinanceApprovalLine
 
@@ -29,8 +31,25 @@ class FinanceApprovalLineInline(admin.TabularInline):
     extra = 0
     can_delete = False
 
+    # ----------------------------------------------
+    # Nota admin en 2 renglones (control de ancho)
+    # ----------------------------------------------
+    formfield_overrides = {
+        models.TextField: {
+            "widget": Textarea(attrs={
+                "rows": 2,
+                "style": "width: 420px; max-width: 420px;",
+            })
+        }
+    }
+
+    # ----------------------------------------------
+    # Columnas del inline
+    # ----------------------------------------------
     fields = (
         "purchase_line",
+        "proveedor",
+        "precio",
         "decision",
         "scheduled_date",
         "nota_admin",
@@ -43,11 +62,70 @@ class FinanceApprovalLineInline(admin.TabularInline):
 
     readonly_fields = (
         "purchase_line",
+        "proveedor",
+        "precio",
         "decidido_por",
         "decidido_en",
         "pagado_en",
         "pagado_por",
     )
+
+    # ----------------------------------------------
+    # Columnas calculadas
+    # ----------------------------------------------
+
+    @admin.display(description="Proveedor")
+    def proveedor(self, obj: FinanceApprovalLine):
+        pl = obj.purchase_line
+
+        # Campo típico en compras
+        value = (
+            getattr(pl, "proveedor", None)
+            or getattr(pl, "supplier", None)
+            or getattr(pl, "vendor", None)
+        )
+
+        return str(value) if value else "-"
+
+    @admin.display(description="Precio unitario")
+    def precio(self, obj: FinanceApprovalLine):
+        """
+        Lee el PRECIO UNITARIO real desde PurchaseLine,
+        incluso si el nombre del campo cambia.
+        """
+        pl = obj.purchase_line
+
+        # 1) Intentos directos (casos más comunes)
+        for name in (
+            "precio_unitario",
+            "precio_unit",
+            "valor_unitario",
+            "unit_price",
+        ):
+            if hasattr(pl, name):
+                val = getattr(pl, name)
+                if callable(val):
+                    try:
+                        val = val()
+                    except TypeError:
+                        pass
+
+                if val not in (None, ""):
+                    return number_format(val, decimal_pos=2, force_grouping=True)
+
+        # 2) Búsqueda automática en campos reales del modelo
+        for field in pl._meta.fields:
+            fname = field.name.lower()
+            if "precio" in fname and ("unit" in fname or "unitario" in fname):
+                val = getattr(pl, field.name, None)
+                if val not in (None, ""):
+                    return number_format(val, decimal_pos=2, force_grouping=True)
+
+        return "-"
+
+    # ----------------------------------------------
+    # Permisos
+    # ----------------------------------------------
 
     def has_change_permission(self, request, obj=None):
         if request.user.is_superuser:
@@ -62,7 +140,7 @@ class FinanceApprovalLineInline(admin.TabularInline):
         if request.user.is_superuser:
             return base
 
-        # FINANZAS puede marcar pagado, pero NO decide
+        # FINANZAS puede marcar pagado, pero NO decidir
         if request.user.groups.filter(name="FINANZAS").exists():
             return base + ["decision", "scheduled_date", "nota_admin"]
 
@@ -100,26 +178,24 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
 
     inlines = [FinanceApprovalLineInline]
 
-    actions = [
+    actions = (
         "marcar_pendiente",
         "marcar_aprobado",
         "marcar_rechazado",
-    ]
+    )
 
-    # --------------------------------------------------
-    # Sync líneas al abrir
-    # --------------------------------------------------
-
+    # ----------------------------------------------
+    # Sincronizar líneas al abrir
+    # ----------------------------------------------
     def change_view(self, request, object_id, form_url="", extra_context=None):
         obj = self.get_object(request, object_id)
         if obj:
             sync_finance_lines(obj)
         return super().change_view(request, object_id, form_url, extra_context)
 
-    # --------------------------------------------------
-    # COLUMNAS
-    # --------------------------------------------------
-
+    # ----------------------------------------------
+    # Columnas
+    # ----------------------------------------------
     @admin.display(description="PAW")
     def paw_numero(self, obj):
         return obj.purchase_request.paw_numero or "-"
@@ -135,7 +211,7 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
         return last.decidido_en if last else "-"
 
     # ==================================================
-    # ACCIONES DE ESTADO (ENCABEZADO)
+    # ACCIONES DE ESTADO
     # ==================================================
 
     def _check_finance_permission(self, request):
@@ -150,7 +226,6 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def marcar_pendiente(self, request, queryset):
         if not self._check_finance_permission(request):
             return
-
         updated = queryset.update(estado=FinanceApproval.Estado.PENDIENTE)
         messages.success(request, f"{updated} PAW(s) marcados como PENDIENTE.")
 
@@ -158,7 +233,6 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def marcar_aprobado(self, request, queryset):
         if not self._check_finance_permission(request):
             return
-
         updated = queryset.update(estado=FinanceApproval.Estado.APROBADO)
         messages.success(request, f"{updated} PAW(s) marcados como APROBADO.")
 
@@ -166,14 +240,12 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
     def marcar_rechazado(self, request, queryset):
         if not self._check_finance_permission(request):
             return
-
         updated = queryset.update(estado=FinanceApproval.Estado.RECHAZADO)
         messages.success(request, f"{updated} PAW(s) marcados como RECHAZADO.")
 
-    # --------------------------------------------------
+    # ----------------------------------------------
     # Guardado inline (pagado)
-    # --------------------------------------------------
-
+    # ----------------------------------------------
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
 
