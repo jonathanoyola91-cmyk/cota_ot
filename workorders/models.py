@@ -3,7 +3,38 @@ from django.db import models
 from django.contrib.auth.models import Group
 
 
+# =========================
+# QuerySet y Manager de ACTIVOS
+# (NO afecta objects)
+# =========================
+
+class WorkOrderQuerySet(models.QuerySet):
+    def activos(self):
+        return self.exclude(estado=WorkOrder.Status.TERMINADA)
+
+    def finalizadas(self):
+        return self.filter(estado=WorkOrder.Status.TERMINADA)
+
+
+class WorkOrderActiveManager(models.Manager):
+    FINAL_STATES = ["TERMINADA"]
+
+    def get_queryset(self):
+        return super().get_queryset().exclude(estado__in=self.FINAL_STATES)
+
+    def activos(self):
+        return self.get_queryset()
+
+    def finalizadas(self):
+        return super().get_queryset().filter(estado__in=self.FINAL_STATES)
+
+
+# =========================
+# MODELO WORKORDER
+# =========================
+
 class WorkOrder(models.Model):
+
     class Priority(models.TextChoices):
         BAJA = "BAJA", "Baja"
         MEDIA = "MEDIA", "Media"
@@ -97,26 +128,50 @@ class WorkOrder(models.Model):
 
     comentario_taller = models.TextField(blank=True)
 
-
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
+
+    # 🔒 Manager original (NO SE TOCA)
+    objects = models.Manager()
+
+    # ✅ Nuevo manager SOLO activos
+    active_objects = WorkOrderActiveManager()
 
     def __str__(self):
         return f"OT #{self.numero} - {self.titulo}"
 
 
+# =========================
+# MODELO TASK
+# =========================
+
 class WorkOrderTask(models.Model):
+
     class Status(models.TextChoices):
         PENDIENTE = "PENDIENTE", "Pendiente"
         EN_PROCESO = "EN_PROCESO", "En proceso"
         HECHA = "HECHA", "Hecha"
 
-    workorder = models.ForeignKey(WorkOrder, on_delete=models.CASCADE, related_name="tareas")
+    workorder = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="tareas"
+    )
+
     titulo = models.CharField(max_length=160)
-    estado = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDIENTE)
+
+    estado = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDIENTE
+    )
 
     responsable = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="tareas_asignadas"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tareas_asignadas"
     )
 
     comentario = models.TextField(blank=True)

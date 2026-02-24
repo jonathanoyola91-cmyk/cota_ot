@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    "accounts",
+    "accounts.apps.AccountsConfig",
     "bom",
     "workorders",
     "paw_app",
@@ -50,6 +50,9 @@ INSTALLED_APPS = [
     "item_oil_gas",
     "facturacion",
     "aprobacion",
+    "historial",
+    "presupuesto.apps.PresupuestoConfig",
+
 ]
 
 
@@ -61,7 +64,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.locale.LocaleMiddleware",   # 👈 agrégalo aquí
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -126,7 +129,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "es"
 
-TIME_ZONE = "America/Bogota"   # o el que corresponda
+TIME_ZONE = "America/Bogota"
 
 USE_I18N = True
 USE_L10N = True
@@ -152,5 +155,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # =========================
 # Render / Proxy SSL (recomendado)
 # =========================
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+
+# =========================
+# Telegram Bot
+# =========================
+
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
+TG_ENABLED = os.environ.get("TG_ENABLED", "True").lower() == "true"

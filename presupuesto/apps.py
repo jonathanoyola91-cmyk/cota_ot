@@ -1,9 +1,8 @@
 from django.apps import AppConfig
 
-
-class WorkordersConfig(AppConfig):
+class PresupuestoConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "workorders"
+    name = "presupuesto"
 
     def ready(self):
-        from . import signals  # noqa
+        import presupuesto.signals  # noqa

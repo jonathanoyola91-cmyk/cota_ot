@@ -240,52 +240,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     # EXPORT EXCEL
     # =========================
 
-    @admin.action(description="Descargar PAW en Excel")
-    def descargar_excel(self, request, queryset):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "PAW"
-
-        headers = [
-            "PAW", "Nombre", "OT", "Estado", "Tipo Pago",
-            "Código", "Descripción", "Unidad",
-            "Req", "Disp", "Comprar",
-            "Proveedor", "Precio", "Valor",
-        ]
-        ws.append(headers)
-
-        for pr in queryset:
-            for ln in pr.lineas.all():
-                ws.append([
-                    pr.paw_numero,
-                    pr.paw_nombre,
-                    getattr(pr.bom.workorder, "numero", ""),
-                    pr.estado,
-                    pr.tipo_pago,
-                    ln.codigo,
-                    ln.descripcion,
-                    ln.unidad,
-                    float(ln.cantidad_requerida or 0),
-                    float(ln.cantidad_disponible or 0),
-                    float(ln.cantidad_a_comprar or 0),
-                    ln.proveedor.nombre if ln.proveedor else "",
-                    float(ln.precio_unitario or 0),
-                    float((ln.cantidad_a_comprar or 0) * (ln.precio_unitario or 0)),
-                ])
-
-        out = BytesIO()
-        wb.save(out)
-        out.seek(0)
-
-        return HttpResponse(
-            out.getvalue(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-
-    # =========================
-    # EXPORT PDF
-    # =========================
-
     @admin.action(description="Descargar PAW en PDF")
     def descargar_pdf(self, request, queryset):
         buffer = BytesIO()
@@ -326,8 +280,10 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
 
             p.setFont("Helvetica", 8)
 
-            # ---------- FILAS ----------
-            for ln in pr.lineas.all():
+            # ✅ FILTRO: solo líneas con cantidad requerida > 0
+            lineas = pr.lineas.exclude(cantidad_requerida__lte=Decimal("0"))
+
+            for ln in lineas:
                 if y < 90:
                     p.showPage()
                     y = height - 40
@@ -366,3 +322,4 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
         buffer.seek(0)
 
         return HttpResponse(buffer.getvalue(), content_type="application/pdf")
+

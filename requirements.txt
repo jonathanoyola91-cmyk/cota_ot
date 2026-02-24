@@ -23,3 +23,5 @@ tablib==3.9.0
 typing_extensions==4.15.0
 tzdata==2025.3
 whitenoise==6.11.0
+python-telegram-bot==13.15
+urllib3<2
