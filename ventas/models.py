@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from decimal import Decimal
 
 
@@ -19,6 +20,25 @@ class PeriodoVenta(models.Model):
             9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
         }
         return f"{meses.get(self.mes, self.mes)} {self.anio}"
+
+    def total_ventas_valor(self):
+        total = self.ventas.aggregate(total=Sum("precio"))["total"]
+        return total or Decimal("0")
+
+    def total_costos(self):
+        total = self.ventas.aggregate(total=Sum("costo"))["total"]
+        return total or Decimal("0")
+
+    def total_abonado(self):
+        total = self.ventas.aggregate(total=Sum("valor_abonado"))["total"]
+        return total or Decimal("0")
+
+    def total_por_cobrar(self):
+        total = self.ventas.aggregate(total=Sum("valor_deber"))["total"]
+        return total or Decimal("0")
+
+    def utilidad_bruta(self):
+        return self.total_ventas_valor() - self.total_costos()
 
 
 class Venta(models.Model):
