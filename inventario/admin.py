@@ -20,7 +20,11 @@ from .models import (
 # ======================================================
 
 EDIT_GROUPS_INVENTARIO = {"INVENTARIO", "COMPRAS_OIL"}
-EDIT_GROUPS_ENTREGA_TALLER = {"ENTREGA TALLER"}
+EDIT_GROUPS_ENTREGA_TALLER = {
+    "ENTREGA TALLER",
+    "COMPRAS_OIL",
+    "INVENTARIO",
+}
 
 
 # ======================================================
