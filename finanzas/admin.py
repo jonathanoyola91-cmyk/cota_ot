@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db import models
 from django.forms import Textarea
 from django.utils.formats import number_format
+from django.utils.html import format_html
 
 from .models import FinanceApproval, FinanceApprovalLine
 
@@ -51,6 +52,7 @@ class FinanceApprovalLineInline(admin.TabularInline):
         "cantidad_a_comprar",
         "precio_unitario",
         "valor_total",
+        "obs_compras",
         "decision",
         "scheduled_date",
         "nota_admin",
@@ -67,6 +69,7 @@ class FinanceApprovalLineInline(admin.TabularInline):
         "cantidad_a_comprar",
         "precio_unitario",
         "valor_total",
+        "obs_compras",
         "decidido_por",
         "decidido_en",
         "pagado_en",
@@ -82,6 +85,36 @@ class FinanceApprovalLineInline(admin.TabularInline):
         pl = obj.purchase_line
         value = getattr(pl, "proveedor", None) or getattr(pl, "supplier", None) or getattr(pl, "vendor", None)
         return str(value) if value else "-"
+
+    @admin.display(description="Comentario Compras")
+    def obs_compras(self, obj):
+        pl = obj.purchase_line
+        val = getattr(pl, "observaciones_compras", "")
+
+        if not val:
+            return "-"
+
+        texto = val.lower()
+
+    # 🔴 ROJO = anticipo / urgente / hoy
+        if "100%" in texto or "anticipo" in texto or "urgente" in texto or "hoy" in texto:
+            return format_html(
+                '<span style="color:white; background:#dc3545; padding:4px 8px; border-radius:6px; font-weight:bold;">{}</span>',
+                val
+            )
+
+    # 🟡 AMARILLO = parcial / pendiente / revisar
+        if "50%" in texto or "anticipo" in texto or "urgente" in texto or "hoy" in texto:
+            return format_html(
+                '<span style="color:black; background:#ffc107; padding:4px 8px; border-radius:6px; font-weight:bold;">{}</span>',
+                val
+            )
+
+    # 🟢 normal
+        return format_html(
+            '<span style="color:white; background:#198754; padding:4px 8px; border-radius:6px;">{}</span>',
+            val
+            )
 
     @admin.display(description="Cantidad a comprar")
     def cantidad_a_comprar(self, obj: FinanceApprovalLine):

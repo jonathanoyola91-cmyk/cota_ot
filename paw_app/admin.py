@@ -168,6 +168,7 @@ class PawAdmin(admin.ModelAdmin):
     def quotation_info(self, request, quotation_id: int):
         q = Quotation.objects.get(pk=quotation_id)
         return JsonResponse({
+            "nombre_paw": q.nombre_cotizacion or "",   
             "cliente": q.cliente or "",
             "campo": q.campo or "",
         })
