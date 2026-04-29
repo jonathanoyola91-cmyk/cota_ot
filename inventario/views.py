@@ -6,6 +6,15 @@ from decimal import Decimal
 from .models import InventoryReception, InventoryReceptionLine, WorkshopDelivery
 from django.http import HttpResponse
 
+from io import BytesIO
+from django.http import HttpResponse
+from django.utils import timezone
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
 @login_required
 def entrega_taller_pdf(request, pk):
     entrega = get_object_or_404(
@@ -129,3 +138,107 @@ def entrega_taller_detail(request, pk):
     return render(request, "inventario/entrega_taller_detail.html", {
         "entrega": entrega
     })
+
+
+@login_required
+def entrega_taller_pdf(request, pk):
+    entrega = get_object_or_404(
+        WorkshopDelivery.objects
+        .select_related("purchase_request")
+        .prefetch_related("lineas"),
+        pk=pk
+    )
+
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=28,
+        rightMargin=28,
+        topMargin=28,
+        bottomMargin=28,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("<b>ENTREGA TALLER</b>", styles["Title"]))
+    story.append(Spacer(1, 8))
+
+    story.append(Paragraph(
+        f"<b>Paw #:</b> {entrega.purchase_request.paw_numero} "
+        f"&nbsp;&nbsp;&nbsp; <b>Nombre PAW:</b> {entrega.purchase_request.paw_nombre}",
+        styles["Normal"]
+    ))
+
+    story.append(Paragraph(
+        f"<b>Fecha impresión:</b> {timezone.now().date()}",
+        styles["Normal"]
+    ))
+
+    story.append(Spacer(1, 12))
+
+    data = [[
+        "CÓDIGO",
+        "DESCRIPCIÓN",
+        "UNID",
+        "CANT. REQ",
+        "CANT. ENT",
+    ]]
+
+    for linea in entrega.lineas.all():
+        data.append([
+            linea.codigo or "",
+            Paragraph(linea.descripcion or "", styles["Normal"]),
+            linea.unidad or "",
+            f"{linea.cantidad_requerida or 0}",
+            f"{linea.cantidad_entregada or 0}",
+        ])
+
+    table = Table(
+        data,
+        colWidths=[70, 270, 45, 65, 65],
+        repeatRows=1,
+    )
+
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+
+    story.append(table)
+
+    story.append(Spacer(1, 18))
+    story.append(Paragraph("<b>Comentarios</b>", styles["Heading3"]))
+    story.append(Paragraph(entrega.comentarios or " ", styles["Normal"]))
+
+    story.append(Spacer(1, 36))
+    story.append(Paragraph("<b>Firmas</b>", styles["Heading3"]))
+    story.append(Spacer(1, 32))
+
+    firmas = Table([
+        ["__________________________", "__________________________"],
+        ["Firma entrega", "Firma recibe (Taller)"],
+        ["", ""],
+        ["Fecha", "Fecha"],
+    ], colWidths=[250, 250])
+
+    firmas.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+    ]))
+
+    story.append(firmas)
+
+    doc.build(story)
+
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'inline; filename="ENTREGA_TALLER_{entrega.purchase_request.paw_numero}.pdf"'
+    )
+    return response
