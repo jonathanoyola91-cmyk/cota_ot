@@ -293,6 +293,13 @@ tr:hover{
     </a>
     {% endif %}
 
+    {% if es_finanzas or es_comercial or es_gerente or request.user.is_superuser %}
+    <a href="/facturacion/"
+       class="{% if '/facturacion/' in request.path %}active{% endif %}">
+        Facturación
+    </a>
+    {% endif %}
+
     {% if es_gerente %}
     <a href="{% url 'finanzas:aprobacion_pagos' %}"
        class="{% if 'aprobacion-pagos' in request.path %}active{% endif %}">
