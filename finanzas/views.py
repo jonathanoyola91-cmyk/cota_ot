@@ -8,6 +8,19 @@ from .models import FinanceApproval, FinanceApprovalLine
 
 
 @login_required
+def dashboard_finanzas(request):
+    if not tiene_rol(request.user, ["FINANZAS", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes acceso a Finanzas.")
+        return redirect("/")
+
+    items = FinanceApproval.objects.select_related(
+        "purchase_request"
+    ).order_by("-actualizado_en")
+
+    return render(request, "finanzas/dashboard.html", {
+        "items": items
+    })
+@login_required
 def aprobacion_pagos(request):
     if not tiene_rol(request.user, ["GERENTE", "ADMIN"]):
         messages.error(request, "Solo gerencia puede aprobar pagos.")
@@ -25,7 +38,6 @@ def aprobacion_pagos(request):
     return render(request, "finanzas/aprobacion_pagos.html", {
         "lineas": lineas,
     })
-
 
 @login_required
 def aprobar_linea_pago(request, linea_id):
