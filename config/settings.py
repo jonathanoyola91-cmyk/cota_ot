@@ -167,3 +167,11 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
 TG_ENABLED = os.environ.get("TG_ENABLED", "True").lower() == "true"
+
+# =========================
+# AUTH (login)
+# =========================
+
+LOGIN_URL = "/admin/login/"
+LOGIN_REDIRECT_URL = "/dashboard/"
+LOGOUT_REDIRECT_URL = "/admin/login/"
