@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     "compras_oil",
     "finanzas",
     "inventario",
-    "bonos",
     "item_oil_gas",
     "facturacion",
     "aprobacion",
@@ -54,6 +53,7 @@ INSTALLED_APPS = [
     "presupuesto.apps.PresupuestoConfig",
     "ventas",
     "dashboard",
+    "taller", 
 
 ]
 

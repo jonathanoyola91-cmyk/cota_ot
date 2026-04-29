@@ -1,0 +1,266 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Taller{% endblock %}
+
+{% block content %}
+
+<style>
+.badge{
+    display:inline-block;
+    padding:4px 8px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+}
+.badge-red{background:#fee2e2;color:#991b1b;}
+.badge-yellow{background:#fef3c7;color:#92400e;}
+.badge-blue{background:#dbeafe;color:#1e40af;}
+.badge-green{background:#dcfce7;color:#166534;}
+.progress-wrap{
+    background:#e5e7eb;
+    border-radius:999px;
+    height:10px;
+    overflow:hidden;
+    width:160px;
+}
+.progress-bar{
+    background:#2563eb;
+    height:100%;
+    border-radius:999px;
+}
+.section-title{
+    margin:22px 0 12px;
+}
+</style>
+
+<div class="cards">
+    <div class="card">
+        <small>Pendientes por BOM</small>
+        <strong>{{ total_pendientes_bom }}</strong>
+    </div>
+
+    <div class="card">
+        <small>BOM en edición</small>
+        <strong>{{ total_bom_borrador }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Esperando material</small>
+        <strong>{{ total_esperando_material }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Material parcial</small>
+        <strong>{{ total_material_parcial }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Listos para ensamble</small>
+        <strong>{{ total_material_entregado }}</strong>
+    </div>
+</div>
+
+<div class="panel">
+    <h2>🔧 Panel operativo de Taller</h2>
+    <p>
+        Aquí Taller ve qué PAW/OT requieren BOM, cuáles están en compras,
+        cuáles tienen material parcial y cuáles ya pueden avanzar a ensamble.
+    </p>
+</div>
+
+<h3 class="section-title">1. Pendientes por crear BOM</h3>
+
+<div class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>Proyecto</th>
+                <th>Estado OT</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ot in pendientes_bom %}
+            <tr>
+                <td><strong>{{ ot.numero }}</strong></td>
+                <td>{{ ot.paw.numero_paw }}</td>
+                <td>{{ ot.cliente }}</td>
+                <td>{{ ot.titulo }}</td>
+                <td><span class="badge badge-red">SIN BOM</span></td>
+                <td>
+                    <a class="btn" href="/bom/crear/{{ ot.numero }}/">
+                        Crear BOM
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No hay OT pendientes por BOM.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h3 class="section-title">2. BOM en edición</h3>
+
+<div class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>BOM</th>
+                <th>Estado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in bom_borrador %}
+            <tr>
+                <td><strong>{{ item.ot.numero }}</strong></td>
+                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.cliente }}</td>
+                <td>BOM #{{ item.bom.id }}</td>
+                <td><span class="badge badge-yellow">BORRADOR</span></td>
+                <td>
+                    <a class="btn" href="/bom/{{ item.bom.id }}/">
+                        Ver / editar BOM
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No hay BOM en edición.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h3 class="section-title">3. Esperando material</h3>
+
+<div class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>BOM</th>
+                <th>Compra</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in esperando_material %}
+            <tr>
+                <td><strong>{{ item.ot.numero }}</strong></td>
+                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.cliente }}</td>
+                <td>BOM #{{ item.bom.id }}</td>
+                <td>
+                    {% if item.compra %}
+                        PAW {{ item.compra.paw_numero }}
+                    {% else %}
+                        Sin compra
+                    {% endif %}
+                </td>
+                <td><span class="badge badge-blue">ESPERANDO MATERIAL</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No hay trabajos esperando material.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h3 class="section-title">4. Material parcial disponible</h3>
+
+<div class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>Entrega</th>
+                <th>Progreso</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in material_parcial %}
+            <tr>
+                <td><strong>{{ item.ot.numero }}</strong></td>
+                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.cliente }}</td>
+                <td>{{ item.entregadas }} / {{ item.total_lineas }} líneas</td>
+                <td>
+                    <div class="progress-wrap">
+                        <div class="progress-bar" style="width:{{ item.porcentaje_entrega }}%;"></div>
+                    </div>
+                    <small>{{ item.porcentaje_entrega }}%</small>
+                </td>
+                <td>
+                    <a class="btn" href="/inventario/entrega/{{ item.entrega.id }}/">
+                        Ver entrega
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No hay entregas parciales disponibles.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h3 class="section-title">5. Listos para ensamble</h3>
+
+<div class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>Entrega</th>
+                <th>Progreso</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in material_entregado %}
+            <tr>
+                <td><strong>{{ item.ot.numero }}</strong></td>
+                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.cliente }}</td>
+                <td>{{ item.entregadas }} / {{ item.total_lineas }} líneas</td>
+                <td>
+                    <div class="progress-wrap">
+                        <div class="progress-bar" style="width:100%;"></div>
+                    </div>
+                    <small>100%</small>
+                </td>
+                <td>
+                    <a class="btn btn-secondary" href="/ot/{{ item.ot.numero }}/">
+                        Ver OT
+                    </a>
+
+                    <form method="post"
+                          action="{% url 'taller:confirmar_ensamble_ok' item.ot.id %}"
+                          style="display:inline;">
+                        {% csrf_token %}
+                        <button class="btn" type="submit">
+                            Confirmar ensamble OK
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No hay trabajos listos para ensamble.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

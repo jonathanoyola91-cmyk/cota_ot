@@ -286,6 +286,11 @@ tr:hover{
         Órdenes de Trabajo
     </a>
 
+    <a href="/taller/"
+      class="{% if '/taller/' in request.path %}active{% endif %}">
+    🔧 Taller
+    </a>
+
     {% if es_finanzas %}
     <a href="/finanzas/"
        class="{% if request.path == '/finanzas/' %}active{% endif %}">
