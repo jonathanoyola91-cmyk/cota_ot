@@ -165,7 +165,7 @@
                             {% elif ot and ot.bom %}
                                 <span class="paw-status status-bom">BOM creada</span>
 
-                            {% elif paw.ots.exists %}
+                            {% elif paw.ots.count %}
                                 <span class="paw-status status-ot">OT creada</span>
 
                             {% else %}
@@ -179,7 +179,7 @@
                             <div class="mini-progress" title="PAW · OT · BOM · Compras · Finanzas · Taller · Producto · Factura">
                                 <span class="mini-step done"></span>
 
-                                <span class="mini-step {% if paw.ots.exists %}done{% endif %}"></span>
+                                <span class="mini-step {% if paw.ots.count %}done{% endif %}"></span>
 
                                 <span class="mini-step {% if ot and ot.bom %}done{% endif %}"></span>
 

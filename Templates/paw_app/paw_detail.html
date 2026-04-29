@@ -291,7 +291,7 @@
 
             <div class="step-pill step-ok">1 PAW</div>
 
-            <div class="step-pill {% if paw.ots.exists %}step-ok{% else %}step-pending{% endif %}">
+            <div class="step-pill {% if paw.ots.count %}step-ok{% else %}step-pending{% endif %}">
                 2 OT
             </div>
 
@@ -410,11 +410,11 @@
                 </div>
             </div>
 
-            <div class="workflow-card {% if paw.ots.exists %}done{% else %}pending{% endif %}">
+            <div class="workflow-card {% if paw.ots.count %}done{% else %}pending{% endif %}">
                 <div>
                     <small>Etapa 2</small>
 
-                    {% if paw.ots.exists %}
+                    {% if paw.ots.count %}
                         <strong>OT creada ✅</strong>
                     {% else %}
                         <strong>OT pendiente</strong>
@@ -422,7 +422,7 @@
                 </div>
 
                 <div class="workflow-actions">
-                    {% if paw.ots.exists %}
+                    {% if paw.ots.count %}
                         {% for ot in paw.ots.all %}
                             <a class="btn" href="{% url 'ot_detail' ot.numero %}">
                                 Ver OT #{{ ot.numero }}

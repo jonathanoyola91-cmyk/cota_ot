@@ -187,7 +187,7 @@
                     </td>
 
                     <td>
-                        {% if c.paws.exists %}
+                        {% if c.paws.count %}
                             <span class="paw-badge paw-ok">PAW creado</span>
                         {% else %}
                             <span class="paw-badge no-paw">Sin PAW</span>
@@ -206,7 +206,7 @@
 
                             {% if c.estado == "ADJUDICADA" %}
 
-                                {% if c.paws.exists %}
+                                {% if c.paws.count %}
                                     <a class="btn btn-small" href="/paw/{{ c.paws.first.id }}/">
                                         Ver PAW
                                     </a>
