@@ -6,7 +6,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 
 from workorders.models import WorkOrder
-from bom.models import BOM
+from bom.models import Bom
 from compras_oil.models import PurchaseRequest
 from inventario.models import WorkshopDelivery
 
@@ -107,7 +107,10 @@ def dashboard(request):
 @require_POST
 @login_required
 def confirmar_ensamble_ok(request, ot_id):
-    ot = get_object_or_404(WorkOrder.objects.select_related("paw"), id=ot_id)
+    ot = get_object_or_404(
+        WorkOrder.objects.select_related("paw"),
+        numero=ot_id
+    )
 
     bom = obtener_bom_seguro(ot)
 

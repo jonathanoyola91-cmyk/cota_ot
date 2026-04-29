@@ -85,7 +85,7 @@
             {% for ot in pendientes_bom %}
             <tr>
                 <td><strong>{{ ot.numero }}</strong></td>
-                <td>{{ ot.paw.numero_paw }}</td>
+                <td>{{ ot.paw }}</td>
                 <td>{{ ot.cliente }}</td>
                 <td>{{ ot.titulo }}</td>
                 <td><span class="badge badge-red">SIN BOM</span></td>
@@ -120,7 +120,7 @@
             {% for item in bom_borrador %}
             <tr>
                 <td><strong>{{ item.ot.numero }}</strong></td>
-                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.paw }}</td>
                 <td>{{ item.ot.cliente }}</td>
                 <td>BOM #{{ item.bom.id }}</td>
                 <td><span class="badge badge-yellow">BORRADOR</span></td>
@@ -155,7 +155,7 @@
             {% for item in esperando_material %}
             <tr>
                 <td><strong>{{ item.ot.numero }}</strong></td>
-                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.paw }}</td>
                 <td>{{ item.ot.cliente }}</td>
                 <td>BOM #{{ item.bom.id }}</td>
                 <td>
@@ -192,7 +192,7 @@
             {% for item in material_parcial %}
             <tr>
                 <td><strong>{{ item.ot.numero }}</strong></td>
-                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.paw }}</td>
                 <td>{{ item.ot.cliente }}</td>
                 <td>{{ item.entregadas }} / {{ item.total_lineas }} líneas</td>
                 <td>
@@ -232,7 +232,7 @@
             {% for item in material_entregado %}
             <tr>
                 <td><strong>{{ item.ot.numero }}</strong></td>
-                <td>{{ item.ot.paw.numero_paw }}</td>
+                <td>{{ item.ot.paw }}</td>
                 <td>{{ item.ot.cliente }}</td>
                 <td>{{ item.entregadas }} / {{ item.total_lineas }} líneas</td>
                 <td>
@@ -247,7 +247,7 @@
                     </a>
 
                     <form method="post"
-                          action="{% url 'taller:confirmar_ensamble_ok' item.ot.id %}"
+                          action="{% url 'taller:confirmar_ensamble_ok' item.ot.numero %}"
                           style="display:inline;">
                         {% csrf_token %}
                         <button class="btn" type="submit">
