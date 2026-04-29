@@ -31,7 +31,7 @@ class Paw(models.Model):
         blank=True,
     )
 
-    cotizacion = models.OneToOneField(
+    cotizacion = models.ForeignKey(
         "quotes.Quotation",
         on_delete=models.PROTECT,
         null=True,
