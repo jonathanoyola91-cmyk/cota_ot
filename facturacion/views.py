@@ -3,12 +3,18 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.utils import timezone
 
+from core.roles import tiene_rol
 from paw_app.models import Paw
 from .models import Factura
+from .forms import FacturaForm
 
 
 @login_required
 def dashboard_facturacion(request):
+    if not tiene_rol(request.user, ["COMERCIAL", "FINANZAS", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes acceso a Facturación.")
+        return redirect("/dashboard/")
+
     facturas = Factura.objects.select_related("paw").order_by("-actualizado_en")
 
     return render(request, "facturacion/dashboard.html", {
@@ -18,22 +24,17 @@ def dashboard_facturacion(request):
 
 @login_required
 def crear_desde_paw(request, paw_id):
-    paw = get_object_or_404(Paw, id=paw_id)
+    if not tiene_rol(request.user, ["COMERCIAL", "GERENTE", "ADMIN"]):
+        messages.error(request, "Solo Comercial puede enviar PAW a facturación.")
+        return redirect("paw_detail", paw_id=paw_id)
 
-    factura, created = Factura.objects.get_or_create(paw=paw)
-
-    paw.estado_operativo = "EN_FACTURACION"
-    paw.save(update_fields=["estado_operativo"])
-
-    messages.success(request, "PAW enviado a facturación.")
-    return redirect("facturacion:detalle", pk=factura.pk)
-
-@login_required
-def crear_desde_paw(request, paw_id):
     paw = get_object_or_404(Paw, id=paw_id)
 
     if paw.estado_operativo != "PRODUCTO_OK":
-        messages.error(request, "No puede enviar a facturación hasta que el producto esté OK.")
+        messages.error(
+            request,
+            "No puede enviar a facturación hasta que el producto esté OK."
+        )
         return redirect("paw_detail", paw_id=paw.id)
 
     factura, created = Factura.objects.get_or_create(paw=paw)
@@ -41,24 +42,30 @@ def crear_desde_paw(request, paw_id):
     paw.estado_operativo = "EN_FACTURACION"
     paw.save(update_fields=["estado_operativo"])
 
-    messages.success(request, "PAW enviado a facturación.")
+    if created:
+        messages.success(request, "PAW enviado a facturación correctamente.")
+    else:
+        messages.info(request, "Este PAW ya tenía una factura asociada.")
+
     return redirect("facturacion:detalle", pk=factura.pk)
 
 
 @login_required
 def detalle_factura(request, pk):
+    if not tiene_rol(request.user, ["COMERCIAL", "FINANZAS", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes permiso para ver esta factura.")
+        return redirect("/dashboard/")
+
     factura = get_object_or_404(
         Factura.objects.select_related("paw"),
         pk=pk
     )
 
-    from .forms import FacturaForm
-
     if request.method == "POST":
         form = FacturaForm(request.POST, instance=factura)
 
         if form.is_valid():
-            factura = form.save()
+            factura = form.save(commit=False)
 
             if factura.estado == "facturado":
                 factura.paw.estado_operativo = "FACTURADO"
@@ -66,27 +73,39 @@ def detalle_factura(request, pk):
                 factura.paw.estado_operativo = "RADICADO"
             elif factura.estado == "vencida":
                 factura.paw.estado_operativo = "RADICADO"
+            else:
+                factura.paw.estado_operativo = "EN_FACTURACION"
 
+            factura.save()
             factura.paw.save(update_fields=["estado_operativo"])
 
-            messages.success(request, "Factura actualizada.")
+            messages.success(request, "Factura actualizada correctamente.")
             return redirect("facturacion:detalle", pk=factura.pk)
-
     else:
         form = FacturaForm(instance=factura)
+
+    puede_radicar = tiene_rol(request.user, ["FINANZAS", "GERENTE", "ADMIN"])
+    puede_editar = tiene_rol(request.user, ["COMERCIAL", "FINANZAS", "GERENTE", "ADMIN"])
 
     return render(request, "facturacion/detalle.html", {
         "factura": factura,
         "form": form,
+        "puede_radicar": puede_radicar,
+        "puede_editar": puede_editar,
     })
+
 
 @login_required
 def radicar_factura(request, pk):
+    if not tiene_rol(request.user, ["FINANZAS", "GERENTE", "ADMIN"]):
+        messages.error(request, "Solo Finanzas puede radicar facturas.")
+        return redirect("facturacion:detalle", pk=pk)
+
     factura = get_object_or_404(Factura, pk=pk)
 
     factura.fecha_radicacion = timezone.now().date()
     factura.estado = "radicacion"
-    factura.save()
+    factura.save(update_fields=["fecha_radicacion", "estado", "actualizado_en"])
 
     paw = factura.paw
     paw.estado_operativo = "RADICADO"
