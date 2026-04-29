@@ -1,0 +1,39 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Iniciar sesión{% endblock %}
+
+{% block content %}
+<div style="max-width:400px;margin:40px auto;">
+
+    <div class="panel">
+        <h3 style="margin-bottom:15px;">🔐 Iniciar sesión</h3>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="toast">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            <label>Usuario</label>
+            <input class="form-control" type="text" name="username" required>
+
+            <br>
+
+            <label>Contraseña</label>
+            <input class="form-control" type="password" name="password" required>
+
+            <br>
+
+            <button class="btn" style="width:100%;">
+                Ingresar
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

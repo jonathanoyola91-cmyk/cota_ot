@@ -1,0 +1,47 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Mi perfil{% endblock %}
+
+{% block content %}
+<div style="max-width:500px;margin:40px auto;">
+
+    <div class="panel">
+        <h3 style="margin-bottom:15px;">👤 Mi perfil</h3>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="toast">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            <label>Nombre</label>
+            <input class="form-control" type="text" name="first_name"
+                   value="{{ request.user.first_name }}">
+
+            <br>
+
+            <label>Apellido</label>
+            <input class="form-control" type="text" name="last_name"
+                   value="{{ request.user.last_name }}">
+
+            <br>
+
+            <label>Correo</label>
+            <input class="form-control" type="email" name="email"
+                   value="{{ request.user.email }}">
+
+            <br>
+
+            <button class="btn">
+                Guardar cambios
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

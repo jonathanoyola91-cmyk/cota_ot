@@ -7,9 +7,11 @@ urlpatterns = [
 
     # raíz
     path("", lambda request: redirect("/dashboard/")),
-
-    # módulos
     path("dashboard/", include("dashboard.urls")),
+
+    path("accounts/", include("accounts.urls")),
+
+    # módulos    
     path("compras/", include("compras_oil.urls")),
     path("quotes/", include("quotes.urls")),
     path("historial/", include("historial.urls")),
@@ -20,4 +22,5 @@ urlpatterns = [
     path("finanzas/", include("finanzas.urls")),
     path("facturacion/", include("facturacion.urls")),
     path("inventario/", include("inventario.urls")),
+    
 ]

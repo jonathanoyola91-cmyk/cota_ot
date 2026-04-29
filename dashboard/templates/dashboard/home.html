@@ -264,6 +264,11 @@ tr:hover{
 
 <nav class="menu">
 
+    <a href="/dashboard/"
+       class="{% if request.path == '/dashboard/' or request.path == '/' %}active{% endif %}">
+        🏠 Home
+    </a>
+
     {% if es_compras %}
     <a href="/compras/"
        class="{% if '/compras/' in request.path %}active{% endif %}">
@@ -330,9 +335,50 @@ tr:hover{
 <div class="topbar">
 <h1>Dashboard</h1>
 
-<div class="user-box">
-Usuario: {{ request.user.username }}
+<div class="user-box" style="position:relative;">
+
+    <div onclick="toggleMenu()" style="cursor:pointer;">
+        👤 {{ request.user.get_full_name|default:request.user.username }}
+    </div>
+
+    <div id="userMenu" style="
+        display:none;
+        position:absolute;
+        right:0;
+        top:30px;
+        background:#fff;
+        border-radius:10px;
+        box-shadow:0 10px 20px rgba(0,0,0,.1);
+        overflow:hidden;
+        min-width:160px;
+    ">
+
+        <a href="/accounts/perfil/" class="menu-item">Mi perfil</a>
+        <a href="/accounts/logout/" class="menu-item">Cerrar sesión</a>
+
+    </div>
+
 </div>
+
+<style>
+.menu-item{
+    display:block;
+    padding:10px 14px;
+    text-decoration:none;
+    color:#1e293b;
+}
+
+.menu-item:hover{
+    background:#f1f5f9;
+}
+</style>
+
+<script>
+function toggleMenu(){
+    let m = document.getElementById("userMenu");
+    m.style.display = m.style.display === "block" ? "none" : "block";
+}
+</script>
 
 <a href="/dashboard/" class="btn" style="
     background:#111827;
