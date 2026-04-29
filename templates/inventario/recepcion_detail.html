@@ -1,5 +1,5 @@
 {% extends "dashboard/home.html" %}
-{% block page_title %}Recepción Inventario{% endblock %}
+{% block page_title %}Recepción inventario{% endblock %}
 
 {% block content %}
 
@@ -27,38 +27,58 @@
             <tbody>
                 {% for linea in recepcion.lineas.all %}
                 <tr>
-                    <td>{{ linea.purchase_line.codigo }}</td>
-                    <td>{{ linea.purchase_line.descripcion }}</td>
-                    <td>{{ linea.cantidad_esperada }}</td>
+                    <td>{{ linea.codigo }}</td>
+                    <td>{{ linea.descripcion }}</td>
+
+                    <td>{{ linea.cantidad_esperada|floatformat:0 }}</td>
+
                     <td>
-                        <input class="form-control" type="number" step="0.001"
-                               name="cantidad_recibida_{{ linea.id }}"
-                               value="{{ linea.cantidad_recibida }}">
+                        <input
+                            type="number"
+                            name="cantidad_recibida_{{ linea.id }}"
+                            value="{{ linea.cantidad_recibida|default:0|floatformat:0 }}"
+                            min="0"
+                            step="1"
+                            class="form-control"
+                        >
                     </td>
+
                     <td>
-                        <input class="form-control" type="date"
-                               name="fecha_llegada_{{ linea.id }}"
-                               value="{{ linea.fecha_llegada|date:'Y-m-d' }}">
+                        <input
+                            type="date"
+                            name="fecha_llegada_{{ linea.id }}"
+                            value="{{ linea.fecha_llegada|date:'Y-m-d' }}"
+                            class="form-control"
+                        >
                     </td>
+
                     <td>
-                        <span class="badge">{{ linea.estado }}</span>
+                        {{ linea.estado }}
                     </td>
+
                     <td>
-                        <input class="form-control" type="text"
-                               name="observacion_{{ linea.id }}"
-                               value="{{ linea.observacion_inventario }}">
+                        <input
+                            type="text"
+                            name="observacion_{{ linea.id }}"
+                            value="{{ linea.observacion_inventario }}"
+                            class="form-control"
+                        >
                     </td>
                 </tr>
-                {% empty %}
-                <tr><td colspan="7">No hay líneas para recibir.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
 
         <br>
 
-        <button class="btn" type="submit">Guardar recepción</button>
-        <a href="/inventario/" class="btn btn-secondary">Volver</a>
+        <button class="btn" type="submit">
+            Guardar recepción
+        </button>
+
+        <a href="/inventario/" class="btn btn-secondary">
+            Volver
+        </a>
+
     </form>
 </div>
 
