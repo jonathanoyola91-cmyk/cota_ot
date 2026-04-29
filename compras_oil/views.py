@@ -472,6 +472,9 @@ def enviar_inventario(request, pk):
             recepcion=recepcion,
             purchase_line=ln,
             defaults={
+                "codigo": ln.codigo or "",
+                "descripcion": ln.descripcion or "",
+                "unidad": ln.unidad or "",
                 "cantidad_esperada": ln.cantidad_a_comprar or 0,
                 "cantidad_recibida": 0,
                 "estado": "PENDIENTE",

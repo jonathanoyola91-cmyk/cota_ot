@@ -3,9 +3,63 @@
 
 {% block content %}
 
+<style>
+    .estado-recepcion{
+        display:inline-block;
+        padding:4px 8px;
+        border-radius:6px;
+        font-size:12px;
+        font-weight:700;
+        color:#fff;
+    }
+
+    .estado-pendiente{
+        background:#dc2626;
+    }
+
+    .estado-parcial{
+        background:#f59e0b;
+    }
+
+    .estado-listo{
+        background:#16a34a;
+    }
+
+    .progress-wrap{
+        background:#e5e7eb;
+        border-radius:999px;
+        height:18px;
+        overflow:hidden;
+        margin:14px 0 8px 0;
+    }
+
+    .progress-bar{
+        height:100%;
+        width:0%;
+        background:#2563eb;
+        border-radius:999px;
+        transition:.3s ease;
+    }
+
+    .progress-text{
+        font-size:13px;
+        color:#475569;
+        font-weight:600;
+        margin-bottom:18px;
+    }
+</style>
+
 <div class="panel">
     <h2>Recepción inventario · PAW {{ recepcion.purchase_request.paw_numero }}</h2>
     <p>{{ recepcion.purchase_request.paw_nombre }}</p>
+
+    <div class="progress-wrap">
+        <div id="recepcionProgressBar" class="progress-bar"></div>
+    </div>
+
+    <div id="recepcionProgressText" class="progress-text">
+        Progreso de recepción: 0%
+    </div>
 
     <br>
 
@@ -30,7 +84,9 @@
                     <td>{{ linea.codigo }}</td>
                     <td>{{ linea.descripcion }}</td>
 
-                    <td>{{ linea.cantidad_esperada|floatformat:0 }}</td>
+                    <td class="cantidad-esperada">
+                        {{ linea.cantidad_esperada|floatformat:0 }}
+                    </td>
 
                     <td>
                         <input
@@ -39,7 +95,7 @@
                             value="{{ linea.cantidad_recibida|default:0|floatformat:0 }}"
                             min="0"
                             step="1"
-                            class="form-control"
+                            class="form-control input-recibida"
                         >
                     </td>
 
@@ -53,7 +109,12 @@
                     </td>
 
                     <td>
-                        {{ linea.estado }}
+                        <span
+                            class="estado-recepcion"
+                            data-esperada="{{ linea.cantidad_esperada|floatformat:0 }}"
+                        >
+                            PENDIENTE
+                        </span>
                     </td>
 
                     <td>
@@ -64,6 +125,10 @@
                             class="form-control"
                         >
                     </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">No hay líneas de recepción.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -81,5 +146,87 @@
 
     </form>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    function actualizarEstado(row) {
+        const input = row.querySelector(".input-recibida");
+        const badge = row.querySelector(".estado-recepcion");
+
+        if (!input || !badge) return;
+
+        const recibida = parseFloat(input.value || 0);
+        const esperada = parseFloat(badge.dataset.esperada || 0);
+
+        badge.classList.remove("estado-pendiente", "estado-parcial", "estado-listo");
+
+        if (recibida >= esperada && esperada > 0) {
+            badge.textContent = "LISTO";
+            badge.classList.add("estado-listo");
+        } else if (recibida > 0) {
+            badge.textContent = "PARCIAL";
+            badge.classList.add("estado-parcial");
+        } else {
+            badge.textContent = "PENDIENTE";
+            badge.classList.add("estado-pendiente");
+        }
+    }
+
+    function actualizarProgreso() {
+        let totalEsperado = 0;
+        let totalRecibido = 0;
+
+        document.querySelectorAll("tbody tr").forEach(row => {
+            const input = row.querySelector(".input-recibida");
+            const badge = row.querySelector(".estado-recepcion");
+
+            if (!input || !badge) return;
+
+            const esperada = parseFloat(badge.dataset.esperada || 0);
+            const recibida = parseFloat(input.value || 0);
+
+            totalEsperado += esperada;
+            totalRecibido += Math.min(recibida, esperada);
+        });
+
+        let porcentaje = 0;
+
+        if (totalEsperado > 0) {
+            porcentaje = Math.round((totalRecibido / totalEsperado) * 100);
+        }
+
+        if (porcentaje > 100) {
+            porcentaje = 100;
+        }
+
+        const progressBar = document.getElementById("recepcionProgressBar");
+        const progressText = document.getElementById("recepcionProgressText");
+
+        if (progressBar) {
+            progressBar.style.width = porcentaje + "%";
+        }
+
+        if (progressText) {
+            progressText.textContent = "Progreso de recepción: " + porcentaje + "%";
+        }
+    }
+
+    document.querySelectorAll("tbody tr").forEach(row => {
+        actualizarEstado(row);
+
+        const input = row.querySelector(".input-recibida");
+        if (input) {
+            input.addEventListener("input", function () {
+                actualizarEstado(row);
+                actualizarProgreso();
+            });
+        }
+    });
+
+    actualizarProgreso();
+
+});
+</script>
 
 {% endblock %}

@@ -34,33 +34,20 @@ class InventoryReception(models.Model):
 
 
 class InventoryReceptionLine(models.Model):
-    """
-    Línea: una por cada PurchaseLine.
-    """
-    class Estado(models.TextChoices):
-        PENDIENTE = "PENDIENTE", "Pendiente"
-        PARCIAL = "PARCIAL", "Parcial"
-        LISTO = "LISTO", "Listo"
+    recepcion = models.ForeignKey(InventoryReception, on_delete=models.CASCADE, related_name="lineas")
+    purchase_line = models.ForeignKey("compras_oil.PurchaseLine", on_delete=models.CASCADE)
 
-    recepcion = models.ForeignKey(
-        InventoryReception,
-        on_delete=models.CASCADE,
-        related_name="lineas"
-    )
+    codigo = models.CharField(max_length=100, blank=True, null=True)
+    descripcion = models.TextField(blank=True, null=True)
+    unidad = models.CharField(max_length=20, blank=True, null=True)
 
-    purchase_line = models.OneToOneField(
-        "compras_oil.PurchaseLine",
-        on_delete=models.PROTECT,
-        related_name="recepcion_linea"
-    )
+    cantidad_esperada = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    cantidad_recibida = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    cantidad_esperada = models.DecimalField(max_digits=12, decimal_places=3, default=0)
-    cantidad_recibida = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    estado = models.CharField(max_length=20, default="PENDIENTE")
 
-    fecha_llegada = models.DateField(null=True, blank=True)
-    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
-    observacion_inventario = models.TextField(blank=True)
-
+    fecha_llegada = models.DateField(blank=True, null=True)
+    observacion_inventario = models.TextField(blank=True, null=True)
     def __str__(self):
         pl = getattr(self, "purchase_line", None)
         codigo = getattr(pl, "codigo", "") if pl else ""

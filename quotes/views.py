@@ -1,3 +1,6 @@
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from core.roles import tiene_rol
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Max
 from .models import Quotation
@@ -5,6 +8,18 @@ from .forms import QuotationForm
 from django.db.models import Sum
 from .models import Quotation
 
+
+@login_required
+def lista_cotizaciones(request):
+    if not tiene_rol(request.user, ["COMERCIAL", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes acceso a Cotizaciones.")
+        return redirect("/")
+
+    cotizaciones = Quotation.objects.all().order_by("-id")
+
+    return render(request, "quotes/lista.html", {
+        "cotizaciones": cotizaciones,
+    })
 
 def generar_numero_cotizacion():
     ultimo = Quotation.objects.aggregate(Max("id"))["id__max"] or 0

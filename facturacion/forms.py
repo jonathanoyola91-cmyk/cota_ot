@@ -6,13 +6,14 @@ class FacturaForm(forms.ModelForm):
     class Meta:
         model = Factura
         fields = [
-            "numero_factura",
-            "precio",
-            "fecha_vencimiento",
-            "tipo_pago",
             "lugar_entrega",
             "lugar_servicio",
             "numero_servicio",
+            "item_factura",
+            "precio",
+            "numero_factura",
+            "fecha_vencimiento",
+            "tipo_pago",
             "estado",
         ]
 
@@ -25,4 +26,5 @@ class FacturaForm(forms.ModelForm):
             "lugar_servicio": forms.TextInput(attrs={"class":"form-control"}),
             "numero_servicio": forms.TextInput(attrs={"class":"form-control"}),
             "estado": forms.Select(attrs={"class":"form-control"}),
+            "item_factura": forms.Select(attrs={"class": "form-control"}),
         }

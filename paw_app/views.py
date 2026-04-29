@@ -1,8 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+
+from core.roles import tiene_rol
 from .models import Paw
 from quotes.models import Quotation
-from django.contrib import messages
 
 
 @login_required
@@ -22,6 +24,10 @@ def paw_detail(request, paw_id):
 
 @login_required
 def crear_paw(request, cotizacion_id):
+    if not tiene_rol(request.user, ["COMERCIAL", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes permiso para crear PAW.")
+        return redirect("/paw/")
+
     cotizacion = get_object_or_404(Quotation, id=cotizacion_id)
 
     paw_existente = Paw.objects.filter(cotizacion=cotizacion).first()
@@ -43,7 +49,13 @@ def crear_paw(request, cotizacion_id):
         "cotizacion": cotizacion
     })
 
+
+@login_required
 def marcar_producto_ok(request, paw_id):
+    if not tiene_rol(request.user, ["TALLER", "INGENIERIA", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes permiso para marcar producto OK.")
+        return redirect("paw_detail", paw_id=paw_id)
+
     paw = get_object_or_404(Paw, id=paw_id)
 
     if paw.estado_operativo != "ENTREGADO_TALLER":
@@ -56,13 +68,13 @@ def marcar_producto_ok(request, paw_id):
     messages.success(request, "Producto marcado como OK.")
     return redirect("paw_detail", paw_id=paw.id)
 
-def registrar_ensamble(request, paw_id):
-    paw = get_object_or_404(Paw, id=paw_id)
-    paw.estado_operativo = "ENTREGADO_TALLER"
-    paw.save(update_fields=["estado_operativo"])
-    return redirect("paw_detail", paw_id=paw.id)
 
+@login_required
 def registrar_ensamble(request, paw_id):
+    if not tiene_rol(request.user, ["TALLER", "INGENIERIA", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes permiso para registrar ensamble.")
+        return redirect("paw_detail", paw_id=paw_id)
+
     paw = get_object_or_404(Paw, id=paw_id)
 
     if paw.estado_operativo != "MATERIAL_RECIBIDO":

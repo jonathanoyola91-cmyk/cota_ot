@@ -20,6 +20,7 @@
                 <th>Nombre</th>
                 <th>Líneas</th>
                 <th>Actualizado</th>
+                <th>Progreso</th>
                 <th>Acción</th>
             </tr>
         </thead>
@@ -30,6 +31,19 @@
                 <td>{{ r.purchase_request.paw_nombre }}</td>
                 <td>{{ r.lineas.count }}</td>
                 <td>{{ r.actualizado_en|date:"d/m/Y H:i" }}</td>
+                <td>
+                    <div style="font-size:12px;font-weight:700;margin-bottom:5px;">
+                        {{ r.lineas_listas }} / {{ r.total_lineas }} líneas listas
+                    </div>
+
+                    <div style="background:#e5e7eb;border-radius:999px;height:10px;overflow:hidden;width:180px;">
+                        <div style="background:#2563eb;height:100%;width:{{ r.porcentaje }}%;border-radius:999px;"></div>
+                    </div>
+
+                    <div style="font-size:11px;color:#64748b;margin-top:4px;">
+                        {{ r.porcentaje }}%
+                    </div>
+                </td>
                 <td>
                     <a class="btn" href="{% url 'inventario:recepcion_detail' r.id %}">
                         Recibir

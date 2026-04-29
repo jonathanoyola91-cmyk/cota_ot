@@ -3,52 +3,208 @@
 
 {% block content %}
 
+<style>
+.estado{
+    padding:4px 8px;
+    border-radius:6px;
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+    display:inline-block;
+}
+.pendiente{background:#dc2626;}
+.parcial{background:#f59e0b;}
+.entregado{background:#16a34a;}
+
+.progress-wrap{
+    background:#e5e7eb;
+    border-radius:999px;
+    height:14px;
+    overflow:hidden;
+    margin:14px 0 8px 0;
+}
+.progress-bar{
+    height:100%;
+    background:#2563eb;
+    width:0%;
+    transition:.3s;
+}
+.progress-text{
+    font-size:13px;
+    color:#475569;
+    font-weight:600;
+    margin-bottom:18px;
+}
+</style>
+
 <div class="panel">
     <h2>Entrega a taller · PAW {{ entrega.purchase_request.paw_numero }}</h2>
     <p>{{ entrega.purchase_request.paw_nombre }}</p>
 
-    <br>
+    <div class="progress-wrap">
+        <div id="progressBar" class="progress-bar"></div>
+    </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Código</th>
-                <th>Descripción</th>
-                <th>Unidad</th>
-                <th>Cantidad requerida</th>
-                <th>Cantidad entregada</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for linea in entrega.lineas.all %}
-            <tr>
-                <td>{{ linea.codigo }}</td>
-                <td>{{ linea.descripcion }}</td>
-                <td>{{ linea.unidad }}</td>
-                <td>{{ linea.cantidad_requerida }}</td>
-                <td>{{ linea.cantidad_entregada|default:"Pendiente físico" }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="5">No hay líneas de entrega.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <br>
+    <div id="progressText" class="progress-text">
+        Progreso de entrega: 0%
+    </div>
 
     <form method="post">
         {% csrf_token %}
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Unidad</th>
+                    <th>Cantidad requerida</th>
+                    <th>Cantidad entregada</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for linea in entrega.lineas.all %}
+                <tr>
+                    <td>{{ linea.codigo }}</td>
+                    <td>{{ linea.descripcion }}</td>
+                    <td>{{ linea.unidad }}</td>
+
+                    <td>
+                        {{ linea.cantidad_requerida|floatformat:0 }}
+                    </td>
+
+                    <td>
+                        <input
+                            type="number"
+                            name="cantidad_entregada_{{ linea.id }}"
+                            value="{{ linea.cantidad_entregada|default:0|floatformat:0 }}"
+                            min="0"
+                            step="1"
+                            class="form-control input-entrega"
+                        >
+                    </td>
+
+                    <td>
+                        <span
+                            class="estado estado-span"
+                            data-req="{{ linea.cantidad_requerida|floatformat:0 }}"
+                        >
+                            PENDIENTE
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">No hay líneas de entrega.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <br>
+
         <label><strong>Comentarios para entrega</strong></label>
         <textarea class="form-control" name="comentarios" rows="4">{{ entrega.comentarios }}</textarea>
 
         <br>
 
-        <button class="btn" type="submit">Guardar comentarios</button>
+        <button class="btn" type="submit">
+            Guardar entrega
+        </button>
+
         <a href="{% url 'inventario:entrega_taller_pdf' entrega.id %}" target="_blank" class="btn">
             Imprimir entrega PDF
         </a>
-        <a href="/inventario/" class="btn btn-secondary">Volver</a>
+
+        <a href="/inventario/" class="btn btn-secondary">
+            Volver
+        </a>
     </form>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+
+    function updateRow(row){
+        const input = row.querySelector(".input-entrega");
+        const badge = row.querySelector(".estado-span");
+
+        if(!input || !badge) return;
+
+        const val = parseFloat(input.value || 0);
+        const req = parseFloat(badge.dataset.req || 0);
+
+        badge.classList.remove("pendiente", "parcial", "entregado");
+
+        if(val >= req && req > 0){
+            badge.textContent = "ENTREGADO";
+            badge.classList.add("entregado");
+        }else if(val > 0){
+            badge.textContent = "PARCIAL";
+            badge.classList.add("parcial");
+        }else{
+            badge.textContent = "PENDIENTE";
+            badge.classList.add("pendiente");
+        }
+    }
+
+    function updateProgress(){
+        let total = 0;
+        let entregado = 0;
+
+        document.querySelectorAll("tbody tr").forEach(row => {
+            const input = row.querySelector(".input-entrega");
+            const badge = row.querySelector(".estado-span");
+
+            if(!input || !badge) return;
+
+            const req = parseFloat(badge.dataset.req || 0);
+            const val = parseFloat(input.value || 0);
+
+            total += req;
+            entregado += Math.min(val, req);
+        });
+
+        let pct = 0;
+
+        if(total > 0){
+            pct = Math.round((entregado / total) * 100);
+        }
+
+        if(pct > 100){
+            pct = 100;
+        }
+
+        const progressBar = document.getElementById("progressBar");
+        const progressText = document.getElementById("progressText");
+
+        if(progressBar){
+            progressBar.style.width = pct + "%";
+        }
+
+        if(progressText){
+            progressText.textContent = "Progreso de entrega: " + pct + "%";
+        }
+    }
+
+    document.querySelectorAll("tbody tr").forEach(row => {
+        updateRow(row);
+
+        const input = row.querySelector(".input-entrega");
+
+        if(input){
+            input.addEventListener("input", function(){
+                updateRow(row);
+                updateProgress();
+            });
+        }
+    });
+
+    updateProgress();
+
+});
+</script>
 
 {% endblock %}
