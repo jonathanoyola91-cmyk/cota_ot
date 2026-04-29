@@ -39,6 +39,7 @@ class InventoryReceptionLine(models.Model):
     """
     class Estado(models.TextChoices):
         PENDIENTE = "PENDIENTE", "Pendiente"
+        PARCIAL = "PARCIAL", "Parcial"
         LISTO = "LISTO", "Listo"
 
     recepcion = models.ForeignKey(
