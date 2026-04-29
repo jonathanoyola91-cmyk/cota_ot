@@ -319,7 +319,7 @@ def paw_detail(request, pk):
 
     from .forms import PurchaseLineFormSet
 
-    queryset = compra.lineas.all().order_by("id")
+    queryset = compra.lineas.filter(cantidad_a_comprar__gt=0).order_by("id")
 
     if request.method == "POST":
         if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
@@ -468,6 +468,13 @@ def enviar_inventario(request, pk):
     )
 
     for ln in compra.lineas.all():
+
+        cantidad = ln.cantidad_a_comprar or 0
+
+        # 🔥 FILTRO CLAVE
+        if cantidad <= 0:
+            continue
+
         InventoryReceptionLine.objects.get_or_create(
             recepcion=recepcion,
             purchase_line=ln,
@@ -475,7 +482,7 @@ def enviar_inventario(request, pk):
                 "codigo": ln.codigo or "",
                 "descripcion": ln.descripcion or "",
                 "unidad": ln.unidad or "",
-                "cantidad_esperada": ln.cantidad_a_comprar or 0,
+                "cantidad_esperada": cantidad,
                 "cantidad_recibida": 0,
                 "estado": "PENDIENTE",
             },
@@ -483,7 +490,6 @@ def enviar_inventario(request, pk):
 
     messages.success(request, "PAW enviado a Inventario correctamente.")
     return redirect("compras_oil:paw_detail", pk=compra.pk)
-
 
 @require_POST
 @login_required
@@ -513,6 +519,13 @@ def generar_entrega_taller(request, pk):
     creadas = 0
 
     for ln in compra.lineas.all():
+
+        cantidad = ln.cantidad_requerida or 0
+
+        # 🔥 FILTRO CLAVE
+        if cantidad <= 0:
+            continue
+
         _, created = WorkshopDeliveryLine.objects.get_or_create(
             delivery=entrega,
             purchase_line=ln,
@@ -520,7 +533,7 @@ def generar_entrega_taller(request, pk):
                 "codigo": ln.codigo or "",
                 "descripcion": ln.descripcion or "",
                 "unidad": ln.unidad or "",
-                "cantidad_requerida": ln.cantidad_requerida or 0,
+                "cantidad_requerida": cantidad,
             },
         )
 
