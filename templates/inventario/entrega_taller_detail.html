@@ -44,8 +44,8 @@
         <br>
 
         <button class="btn" type="submit">Guardar comentarios</button>
-        <a href="/admin/inventario/workshopdelivery/{{ entrega.id }}/change/" class="btn">
-            Abrir en Admin / Imprimir PDF
+        <a href="{% url 'inventario:entrega_taller_pdf' entrega.id %}" target="_blank" class="btn">
+            Imprimir PDF
         </a>
         <a href="/inventario/" class="btn btn-secondary">Volver</a>
     </form>
