@@ -22,8 +22,6 @@ body{
     min-height:100vh;
 }
 
-/* SIDEBAR */
-
 .sidebar{
     width:250px;
     background:#0f172a;
@@ -54,14 +52,10 @@ body{
     color:#fff;
 }
 
-/* MAIN */
-
 .main{
     flex:1;
     padding:24px;
 }
-
-/* TOPBAR */
 
 .topbar{
     background:#fff;
@@ -82,8 +76,6 @@ body{
     font-size:14px;
     color:#64748b;
 }
-
-/* QUICK CARDS */
 
 .dashboard-grid{
     display:grid;
@@ -116,8 +108,6 @@ body{
     font-size:18px;
 }
 
-/* PANEL */
-
 .panel{
     background:#fff;
     padding:24px;
@@ -133,8 +123,6 @@ body{
     color:#64748b;
     line-height:1.6;
 }
-
-/* COMPONENTES GENERALES */
 
 .cards{
     display:grid;
@@ -161,8 +149,6 @@ body{
     font-size:22px;
     color:#0f172a;
 }
-
-/* TABLAS */
 
 table{
     width:100%;
@@ -191,8 +177,6 @@ tr:hover{
     background:#f8fafc;
 }
 
-/* BOTONES */
-
 .btn{
     display:inline-block;
     background:#2563eb;
@@ -218,8 +202,6 @@ tr:hover{
     background:#475569;
 }
 
-/* TOAST */
-
 .toast-wrap{
     position:fixed;
     top:18px;
@@ -236,7 +218,6 @@ tr:hover{
     box-shadow:0 10px 20px rgba(0,0,0,.15);
 }
 
-
 .form-control{
     width:100%;
     padding:10px 12px;
@@ -251,8 +232,6 @@ tr:hover{
     border-color:#2563eb;
     box-shadow:0 0 0 3px rgba(37,99,235,.15);
 }
-
-/* RESPONSIVE */
 
 @media(max-width:1100px){
     .dashboard-grid{
@@ -285,47 +264,45 @@ tr:hover{
 
 <nav class="menu">
 
-    {% if request.user.is_superuser or request.user.groups.filter(name='COMPRAS').exists %}
-    <a href="/compras_oil/"
-       class="{% if '/compras_oil/' in request.path %}active{% endif %}">
+    {% if es_compras %}
+    <a href="/compras/"
+       class="{% if '/compras/' in request.path %}active{% endif %}">
         Compras OIL
     </a>
     {% endif %}
 
-    <!-- PAW visible para todos -->
     <a href="/paw/"
        class="{% if '/paw/' in request.path %}active{% endif %}">
         PAW
     </a>
 
-    <!-- OT visible para todos -->
     <a href="/ot/"
        class="{% if '/ot/' in request.path %}active{% endif %}">
         Órdenes de Trabajo
     </a>
 
-    {% if request.user.is_superuser or request.user.groups.filter(name='FINANZAS').exists %}
+    {% if es_finanzas %}
     <a href="/finanzas/"
        class="{% if request.path == '/finanzas/' %}active{% endif %}">
         Finanzas
     </a>
     {% endif %}
 
-    {% if request.user.is_superuser or request.user.groups.filter(name='GERENTE').exists %}
+    {% if es_gerente %}
     <a href="{% url 'finanzas:aprobacion_pagos' %}"
        class="{% if 'aprobacion-pagos' in request.path %}active{% endif %}">
         Aprobación pagos
     </a>
     {% endif %}
 
-    {% if request.user.is_superuser or request.user.groups.filter(name='INVENTARIO').exists %}
+    {% if es_inventario %}
     <a href="/inventario/"
        class="{% if '/inventario/' in request.path %}active{% endif %}">
         Inventario
     </a>
     {% endif %}
 
-    {% if request.user.is_superuser or request.user.groups.filter(name='COMERCIAL').exists %}
+    {% if es_comercial %}
     <a href="/quotes/"
        class="{% if '/quotes/' in request.path and not '/clientes/' in request.path %}active{% endif %}">
         Cotizaciones
@@ -352,10 +329,12 @@ tr:hover{
 
 <div class="topbar">
 <h1>Dashboard</h1>
+
 <div class="user-box">
 Usuario: {{ request.user.username }}
 </div>
-<a href="/" class="btn" style="
+
+<a href="/dashboard/" class="btn" style="
     background:#111827;
     color:#fff;
     border-radius:10px;
@@ -365,7 +344,6 @@ Usuario: {{ request.user.username }}
     🏠 Dashboard
 </a>
 </div>
-
 
 {% block content %}{% endblock %}
 

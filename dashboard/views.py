@@ -49,8 +49,7 @@ def dashboard_home(request):
         if dias < 0:
             semaforo = "rojo"
             texto = "Atrasado"
-            paws_atrasados += 1 
-
+            paws_atrasados += 1
         elif dias <= 3:
             semaforo = "amarillo"
             texto = "Próximo"
@@ -58,17 +57,22 @@ def dashboard_home(request):
         else:
             semaforo = "verde"
             texto = "En tiempo"
-   
+
         paws_entregas.append({
             "paw": paw,
             "dias": dias,
             "semaforo": semaforo,
             "texto": texto,
-            
         })
 
     ultimas_cotizaciones = cotizaciones.order_by("-creado_en")[:5]
     ultimos_paws = paws.order_by("-creado_en")[:5]
+
+    es_compras = request.user.is_superuser or request.user.groups.filter(name="COMPRAS").exists()
+    es_finanzas = request.user.is_superuser or request.user.groups.filter(name="FINANZAS").exists()
+    es_gerente = request.user.is_superuser or request.user.groups.filter(name="GERENTE").exists()
+    es_inventario = request.user.is_superuser or request.user.groups.filter(name="INVENTARIO").exists()
+    es_comercial = request.user.is_superuser or request.user.groups.filter(name="COMERCIAL").exists()
 
     return render(request, "dashboard/index.html", {
         "total_cotizaciones": total_cotizaciones,
@@ -87,6 +91,15 @@ def dashboard_home(request):
 
         "paws_criticos": paws_criticos,
         "paws_entregas": paws_entregas,
+        "paws_atrasados": paws_atrasados,
+        "paws_proximos": paws_proximos,
+
         "ultimas_cotizaciones": ultimas_cotizaciones,
         "ultimos_paws": ultimos_paws,
+
+        "es_compras": es_compras,
+        "es_finanzas": es_finanzas,
+        "es_gerente": es_gerente,
+        "es_inventario": es_inventario,
+        "es_comercial": es_comercial,
     })
