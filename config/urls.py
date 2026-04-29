@@ -1,15 +1,19 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.shortcuts import redirect
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("compras_oil/", include("compras_oil.urls")),
+
+    # raíz
+    path("", lambda request: redirect("/dashboard/")),
+
+    # módulos
+    path("dashboard/", include("dashboard.urls")),
+    path("compras/", include("compras_oil.urls")),
     path("quotes/", include("quotes.urls")),
     path("historial/", include("historial.urls")),
-
-    # ✅ AGREGA ESTO:
     path("item-oil-gas/", include("item_oil_gas.urls")),
-    path("", include("dashboard.urls")),
     path("paw/", include("paw_app.urls")),
     path("ot/", include("workorders.urls")),
     path("bom/", include("bom.urls")),
