@@ -1,0 +1,59 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Clientes{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div>
+            <h3 style="margin:0;">Clientes registrados</h3>
+            <p style="margin-top:6px;color:#64748b;">
+                Maestro de clientes para evitar errores de escritura en cotizaciones.
+            </p>
+        </div>
+
+        <a href="/quotes/clientes/crear/" class="btn">Nuevo cliente</a>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cliente</th>
+                <th>NIT</th>
+                <th>Ciudad</th>
+                <th>Contacto</th>
+                <th>Teléfono</th>
+                <th>Estado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for cliente in clientes %}
+            <tr>
+                <td><strong>{{ cliente.nombre }}</strong></td>
+                <td>{{ cliente.nit|default:"-" }}</td>
+                <td>{{ cliente.ciudad|default:"-" }}</td>
+                <td>{{ cliente.contacto|default:"-" }}</td>
+                <td>{{ cliente.telefono|default:"-" }}</td>
+                <td>
+                    {% if cliente.activo %}
+                        <span class="badge">Activo</span>
+                    {% else %}
+                        <span class="badge">Inactivo</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a class="btn" href="/quotes/clientes/{{ cliente.id }}/editar/">Editar</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">No hay clientes registrados.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

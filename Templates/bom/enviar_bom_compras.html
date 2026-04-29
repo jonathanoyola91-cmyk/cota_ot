@@ -1,0 +1,22 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Enviar BOM a compras{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <h2>Enviar BOM a compras</h2>
+
+    <p>¿Confirmas enviar este BOM a compras/inventario?</p>
+    <p><strong>OT:</strong> #{{ bom.workorder.numero }}</p>
+    <p><strong>Cliente:</strong> {{ bom.workorder.cliente }}</p>
+    <p><strong>Ítems:</strong> {{ bom.items.count }}</p>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+        <button class="btn">Sí, enviar a compras</button>
+        <a class="btn btn-secondary" href="{% url 'bom_detail' bom.id %}">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

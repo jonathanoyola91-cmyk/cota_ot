@@ -1,0 +1,34 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Crear BOM{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <h2>Crear BOM desde OT #{{ ot.numero }}</h2>
+    <p>Cliente: {{ ot.cliente }}</p>
+    <p>PAW: {{ ot.paw.numero_paw }}</p>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <label>Crear desde template</label>
+        <select name="template" class="form-control">
+            <option value="">BOM manual item por item</option>
+            {% for template in templates %}
+                <option value="{{ template.id }}">{{ template.nombre }}</option>
+            {% endfor %}
+        </select>
+
+        <br>
+
+        <label>Comentarios</label>
+        <textarea name="comentarios" class="form-control"></textarea>
+
+        <br>
+
+        <button class="btn">Crear BOM</button>
+    </form>
+</div>
+{% endblock %}

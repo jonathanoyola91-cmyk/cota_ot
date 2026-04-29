@@ -9,4 +9,11 @@ urlpatterns = [
 
     # ✅ AGREGA ESTO:
     path("item-oil-gas/", include("item_oil_gas.urls")),
+    path("", include("dashboard.urls")),
+    path("paw/", include("paw_app.urls")),
+    path("ot/", include("workorders.urls")),
+    path("bom/", include("bom.urls")),
+    path("finanzas/", include("finanzas.urls")),
+    path("facturacion/", include("facturacion.urls")),
+    path("inventario/", include("inventario.urls")),
 ]

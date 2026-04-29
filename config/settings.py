@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "historial",
     "presupuesto.apps.PresupuestoConfig",
     "ventas",
+    "dashboard",
 
 ]
 

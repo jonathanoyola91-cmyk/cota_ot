@@ -1,0 +1,175 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Cliente{% endblock %}
+
+{% block content %}
+
+<style>
+    .client-page {
+        max-width: 980px;
+        margin: 0 auto;
+    }
+
+    .client-panel {
+        background: #fff;
+        border-radius: 18px;
+        padding: 26px;
+        box-shadow: 0 10px 25px rgba(0,0,0,.05);
+    }
+
+    .client-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .client-header h2 {
+        margin: 0;
+        font-size: 24px;
+        color: #0f172a;
+    }
+
+    .client-header p {
+        margin-top: 6px;
+        color: #64748b;
+    }
+
+    .client-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+    }
+
+    .client-field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .client-field label {
+        font-size: 13px;
+        font-weight: 800;
+        color: #334155;
+    }
+
+    .client-field input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        font-size: 14px;
+        color: #0f172a;
+        background: #fff;
+    }
+
+    .client-field input:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37,99,235,.12);
+    }
+
+    .client-active {
+        margin-top: 18px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: fit-content;
+    }
+
+    .client-active label {
+        font-size: 13px;
+        font-weight: 800;
+        color: #334155;
+    }
+
+    .client-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+    }
+
+    @media(max-width: 700px) {
+        .client-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="client-page">
+    <div class="client-panel">
+
+        <div class="client-header">
+            <div>
+                <h2>
+                    {% if modo == "editar" %}
+                        Editar cliente
+                    {% else %}
+                        Nuevo cliente
+                    {% endif %}
+                </h2>
+                <p>Registre la información base para usarla en cotizaciones y PAW.</p>
+            </div>
+
+            <a href="/quotes/clientes/" class="btn btn-secondary">Volver</a>
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="client-grid">
+
+                <div class="client-field">
+                    <label>Nombre cliente</label>
+                    {{ form.nombre }}
+                </div>
+
+                <div class="client-field">
+                    <label>NIT</label>
+                    {{ form.nit }}
+                </div>
+
+                <div class="client-field">
+                    <label>Ciudad</label>
+                    {{ form.ciudad }}
+                </div>
+
+                <div class="client-field">
+                    <label>Contacto</label>
+                    {{ form.contacto }}
+                </div>
+
+                <div class="client-field">
+                    <label>Teléfono</label>
+                    {{ form.telefono }}
+                </div>
+
+                <div class="client-field">
+                    <label>Correo</label>
+                    {{ form.correo }}
+                </div>
+
+            </div>
+
+            <div class="client-active">
+                {{ form.activo }}
+                <label>Cliente activo</label>
+            </div>
+
+            <div class="client-actions">
+                <button class="btn" type="submit">Guardar cliente</button>
+                <a href="/quotes/clientes/" class="btn btn-secondary">Cancelar</a>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+{% endblock %}

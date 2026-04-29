@@ -1,0 +1,165 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Finanzas PAW {{ fin.purchase_request.paw_numero }}{% endblock %}
+{% block page_title %}Finanzas · PAW {{ fin.purchase_request.paw_numero }}{% endblock %}
+
+{% block content %}
+
+<div class="cards">
+    <div class="card">
+        <small>PAW</small>
+        <strong>{{ fin.purchase_request.paw_numero }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Estado Finanzas</small>
+        <strong>{{ fin.estado }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Total líneas</small>
+        <strong>{{ lineas|length }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Nombre PAW</small>
+        <strong style="font-size:16px;">{{ fin.purchase_request.paw_nombre }}</strong>
+    </div>
+</div>
+
+<div class="panel">
+    <h2>Control de pagos</h2>
+    <br>
+
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Proveedor</th>
+                    <th>Valor Unit.</th>
+                    <th>Cant.</th>
+                    <th>Decisión</th>
+                    <th>Condición / Obs. compra</th>
+                    <th>Pagado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for linea in lineas %}
+                <tr>
+                    <td><strong>{{ linea.purchase_line.codigo }}</strong></td>
+
+                    <td style="min-width:260px;">
+                        {{ linea.purchase_line.descripcion }}
+                    </td>
+
+                    <td style="min-width:180px;">
+                        {% if linea.purchase_line.proveedor %}
+                            <a href="{% url 'compras_oil:supplier_detail' linea.purchase_line.proveedor.id %}"
+                                style="font-weight:800;color:#2563eb;text-decoration:none;">
+                                {{ linea.purchase_line.proveedor }}
+                            </a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        $ {{ linea.purchase_line.precio_unitario|default:"0" }}
+                    </td>
+
+                    <td>
+                        {{ linea.purchase_line.cantidad_a_comprar }}
+                    </td>
+
+                    <td>
+                        {% if linea.decision == "APROBADO" %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">🟢 Aprobado</span>
+
+                        {% elif linea.decision == "PROGRAMADO" %}
+                            <span class="badge" style="background:#fef9c3;color:#854d0e;">🟡 Programado</span>
+
+                        {% elif linea.decision == "EN_ESPERA" %}
+                            <span class="badge" style="background:#fde68a;color:#92400e;">🟡 En espera</span>
+
+                        {% elif linea.decision == "RECHAZADO" %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">🔴 Rechazado</span>
+
+                        {% else %}
+                            <span class="badge" style="background:#e5e7eb;color:#374151;">⚪ Pendiente</span>
+                        {% endif %}
+                    </td>
+
+                    <td style="min-width:280px;">
+                        {{ linea.purchase_line.observaciones_compras|default:"-" }}
+                    </td>
+
+                    <td>
+                        {% if linea.pagado %}
+                            <span class="badge" style="background:#dcfce7;color:#166534;">
+                                🟢 Pagado
+                            </span>
+
+                        {% else %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;">
+                                🔴 Pendiente
+                            </span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+    {% if not linea.pagado %}
+
+        {% if linea.decision == "APROBADO" or linea.decision == "PROGRAMADO" %}
+
+            <form method="post" action="{% url 'finanzas:marcar_pagado' linea.id %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">
+                    Marcar pagado
+                </button>
+            </form>
+
+        {% elif linea.decision == "RECHAZADO" %}
+
+            <span class="badge" style="background:#fee2e2;color:#991b1b;">
+                Rechazado
+            </span>
+
+        {% else %}
+
+            <span class="badge" style="background:#e5e7eb;color:#374151;">
+                Pendiente aprobación gerente
+            </span>
+
+        {% endif %}
+
+    {% else %}
+
+        <span class="badge" style="background:#dcfce7;color:#166534;">
+            Pagado
+        </span>
+
+    {% endif %}
+</td>
+                </tr>
+
+                {% empty %}
+                <tr>
+                    <td colspan="9">No hay líneas financieras.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <br>
+
+    <a class="btn btn-secondary" href="{% url 'finanzas:dashboard' %}">
+        Volver
+    </a>
+</div>
+
+{% endblock %}

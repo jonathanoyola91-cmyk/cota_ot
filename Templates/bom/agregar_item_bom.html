@@ -1,0 +1,102 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Agregar ítem BOM{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <div>
+            <h2>Agregar ítem manual al BOM</h2>
+            <p style="color:#64748b;">OT #{{ bom.workorder.numero }} · {{ bom.workorder.cliente }}</p>
+        </div>
+
+        <a class="btn btn-secondary" href="{% url 'bom_detail' bom.id %}">Volver al BOM</a>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="cards">
+            <div class="card">
+                <small>Plano</small>
+                <input class="form-control" type="text" name="plano">
+            </div>
+
+            <div class="card">
+                <small>Código / Parte número</small>
+                <input class="form-control" type="text" name="codigo">
+            </div>
+
+            <div class="card">
+                <small>Descripción</small>
+                <input class="form-control" type="text" name="descripcion" required>
+            </div>
+
+            <div class="card">
+                <small>Unidad</small>
+                <input class="form-control" type="text" name="unidad">
+            </div>
+
+            <div class="card">
+                <small>Cant. estándar</small>
+                <input class="form-control" type="number" step="0.001" name="cantidad_estandar">
+            </div>
+
+            <div class="card">
+                <small>Cant. solicitada</small>
+                <input class="form-control" type="number" step="0.001" name="cantidad_solicitada">
+            </div>
+
+            <div class="card" style="grid-column:span 2;">
+                <small>Observaciones</small>
+                <input class="form-control" type="text" name="observaciones">
+            </div>
+        </div>
+
+        <button class="btn">Agregar ítem</button>
+    </form>
+</div>
+
+<br>
+
+<div class="panel">
+    <h3>Ítems agregados</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Plano</th>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Unidad</th>
+                <th>Cant. estándar</th>
+                <th>Cant. solicitada</th>
+                <th>Observaciones</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for item in bom.items.all %}
+            <tr>
+                <td>{{ item.plano }}</td>
+                <td>{{ item.codigo }}</td>
+                <td>{{ item.descripcion }}</td>
+                <td>{{ item.unidad }}</td>
+                <td>{{ item.cantidad_estandar }}</td>
+                <td>{{ item.cantidad_solicitada }}</td>
+                <td>{{ item.observaciones }}</td>
+                <td>
+                    <a class="btn" href="{% url 'editar_item_bom' item.id %}">Editar</a>
+                    <a class="btn btn-secondary" href="{% url 'eliminar_item_bom' item.id %}">Eliminar</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">Todavía no hay ítems agregados.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

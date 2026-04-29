@@ -1,9 +1,12 @@
 from decimal import Decimal
 from io import BytesIO
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
+from django.views.decorators.http import require_POST
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -13,16 +16,131 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
-from .models import PurchaseRequest
+from core.roles import tiene_rol
+from .forms import SupplierForm
+from .models import PurchaseRequest, Supplier
+
+
+@login_required
+def dashboard(request):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes acceso a Compras.")
+        return redirect("/")
+
+    compras_all = PurchaseRequest.objects.all().order_by("-actualizado_en")
+
+    compras = (
+        PurchaseRequest.objects
+        .exclude(estado="CERRADA")
+        .select_related("bom", "bom__workorder", "creado_por")
+        .annotate(
+            total_lineas=Count("lineas", distinct=True),
+            lineas_diligenciadas=Count(
+                "lineas",
+                filter=(
+                    Q(lineas__proveedor__isnull=False) &
+                    Q(lineas__precio_unitario__isnull=False)
+                ),
+                distinct=True
+            ),
+            lineas_pagadas=Count(
+                "lineas__finance_line",
+                filter=Q(lineas__finance_line__pagado=True),
+                distinct=True
+            )
+        )
+        .order_by("-actualizado_en")
+    )
+
+    for compra in compras:
+        compra.porcentaje_avance = int(
+            (compra.lineas_diligenciadas / compra.total_lineas) * 100
+        ) if compra.total_lineas > 0 else 0
+
+    context = {
+        "compras": compras,
+        "total_solicitudes": compras_all.count(),
+        "total_borrador": compras_all.filter(estado="BORRADOR").count(),
+        "total_revision": compras_all.filter(estado="EN_REVISION").count(),
+        "total_cerrada": compras_all.filter(estado="CERRADA").count(),
+        "total_activas": compras.count(),
+    }
+
+    return render(request, "compras_oil/dashboard.html", context)
+
+
+@login_required
+def compras_dashboard(request):
+    return dashboard(request)
+
+
+@login_required
+def cerrar_solicitud(request, pk):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para cerrar solicitudes.")
+        return redirect("/")
+
+    compra = get_object_or_404(PurchaseRequest, pk=pk)
+
+    if request.method == "POST":
+        compra.estado = "CERRADA"
+        compra.save(update_fields=["estado", "actualizado_en"])
+        messages.success(
+            request,
+            f"Solicitud PAW {compra.paw_numero} cerrada correctamente."
+        )
+
+    return redirect("compras_oil:dashboard")
+
+
+@login_required
+def supplier_detail(request, pk):
+    supplier = get_object_or_404(Supplier, pk=pk)
+
+    return render(request, "compras_oil/supplier_detail.html", {
+        "supplier": supplier,
+    })
+
+
+@login_required
+def supplier_create(request):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para crear proveedores.")
+        return redirect("/")
+
+    next_url = request.GET.get("next")
+
+    if request.method == "POST":
+        form = SupplierForm(request.POST)
+
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Proveedor creado correctamente.")
+
+            if next_url:
+                return redirect(next_url)
+
+            return redirect("compras_oil:dashboard")
+    else:
+        form = SupplierForm()
+
+    return render(request, "compras_oil/supplier_form.html", {
+        "form": form,
+        "next_url": next_url,
+    })
+
 
 @login_required
 def purchase_request_pdf(request, pk: int):
     pr = get_object_or_404(
-        PurchaseRequest.objects.select_related("bom", "bom__workorder").prefetch_related("lineas", "lineas__proveedor"),
+        PurchaseRequest.objects
+        .select_related("bom", "bom__workorder")
+        .prefetch_related("lineas", "lineas__proveedor"),
         pk=pk,
     )
 
     buffer = BytesIO()
+
     try:
         doc = SimpleDocTemplate(
             buffer,
@@ -32,6 +150,7 @@ def purchase_request_pdf(request, pk: int):
             topMargin=36,
             bottomMargin=36,
         )
+
         styles = getSampleStyleSheet()
         story = []
 
@@ -49,11 +168,10 @@ def purchase_request_pdf(request, pk: int):
             "Req.", "Disp.", "A comprar",
             "Proveedor", "P.Unit", "Subtotal"
         ]
-        data = [header]
 
+        data = [header]
         total = Decimal("0")
 
-        # Estilo compacto para celdas largas
         cell_style = styles["Normal"]
         cell_style.fontSize = 8
         cell_style.leading = 9
@@ -64,8 +182,15 @@ def purchase_request_pdf(request, pk: int):
             subtotal = a * p
             total += subtotal
 
-            descripcion = Paragraph((ln.descripcion or "").replace("\n", "<br/>"), cell_style)
-            proveedor = Paragraph((ln.proveedor.nombre if ln.proveedor else ""), cell_style)
+            descripcion = Paragraph(
+                (ln.descripcion or "").replace("\n", "<br/>"),
+                cell_style
+            )
+
+            proveedor = Paragraph(
+                (ln.proveedor.nombre if ln.proveedor else ""),
+                cell_style
+            )
 
             data.append([
                 ln.plano or "",
@@ -80,7 +205,6 @@ def purchase_request_pdf(request, pk: int):
                 f"{subtotal:,.2f}",
             ])
 
-        # Fila TOTAL
         data.append(["", "", "", "", "", "", "", "", "TOTAL", f"{total:,.2f}"])
 
         table = Table(
@@ -90,19 +214,12 @@ def purchase_request_pdf(request, pk: int):
         )
 
         table.setStyle(TableStyle([
-            # Header
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
-
-            # Grid
             ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-
-            # Align números (desde fila 1 para no afectar header)
             ("ALIGN", (4, 1), (-1, -1), "RIGHT"),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-
-            # TOTAL row styling (última fila)
             ("BACKGROUND", (0, -1), (-1, -1), colors.whitesmoke),
             ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
         ]))
@@ -111,17 +228,22 @@ def purchase_request_pdf(request, pk: int):
         doc.build(story)
 
         buffer.seek(0)
+
         resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        resp["Content-Disposition"] = f'attachment; filename="solicitud_compra_{pr.pk}.pdf"'
+        resp["Content-Disposition"] = (
+            f'attachment; filename="solicitud_compra_{pr.pk}.pdf"'
+        )
         return resp
 
     finally:
         buffer.close()
 
+
 @login_required
 def purchase_request_excel(request, pk: int):
     pr = get_object_or_404(
-        PurchaseRequest.objects.select_related("bom", "bom__workorder")
+        PurchaseRequest.objects
+        .select_related("bom", "bom__workorder")
         .prefetch_related("lineas", "lineas__proveedor"),
         pk=pk,
     )
@@ -130,8 +252,8 @@ def purchase_request_excel(request, pk: int):
     ws = wb.active
     ws.title = "Solicitud de Compra"
 
-    # Cabecera
     wo_num = getattr(getattr(pr.bom, "workorder", None), "numero", "-")
+
     ws.append(["Solicitud de Compra"])
     ws.append(["OT", str(wo_num)])
     ws.append(["BOM", str(pr.bom)])
@@ -143,6 +265,7 @@ def purchase_request_excel(request, pk: int):
         "Req.", "Disp.", "A comprar",
         "Proveedor", "P.Unit", "Subtotal"
     ]
+
     ws.append(headers)
 
     total = Decimal("0")
@@ -161,19 +284,21 @@ def purchase_request_excel(request, pk: int):
             float(Decimal(ln.cantidad_requerida or 0)),
             float(Decimal(ln.cantidad_disponible or 0)),
             float(a),
-            (ln.proveedor.nombre if ln.proveedor else ""),
+            ln.proveedor.nombre if ln.proveedor else "",
             float(p),
             float(subtotal),
         ])
 
     ws.append(["", "", "", "", "", "", "", "", "TOTAL", float(total)])
 
-    # Ajustar ancho columnas
     for col in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col)].width = 18
 
     response = HttpResponse(
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        content_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
     )
     response["Content-Disposition"] = (
         f'attachment; filename="solicitud_compra_{pr.pk}.xlsx"'
@@ -182,3 +307,225 @@ def purchase_request_excel(request, pk: int):
     wb.save(response)
     return response
 
+
+@login_required
+def paw_detail(request, pk):
+    compra = get_object_or_404(
+        PurchaseRequest.objects
+        .select_related("bom", "bom__workorder", "creado_por")
+        .prefetch_related("lineas__proveedor"),
+        pk=pk
+    )
+
+    from .forms import PurchaseLineFormSet
+
+    queryset = compra.lineas.all().order_by("id")
+
+    if request.method == "POST":
+        if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+            messages.error(request, "No tienes permiso para editar esta solicitud.")
+            return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+        nuevo_estado = request.POST.get("estado")
+
+        if nuevo_estado in ["BORRADOR", "EN_REVISION", "CERRADA"]:
+            compra.estado = nuevo_estado
+            compra.save(update_fields=["estado", "actualizado_en"])
+
+        formset = PurchaseLineFormSet(request.POST, queryset=queryset)
+
+        if formset.is_valid():
+            formset.save()
+            messages.success(
+                request,
+                "Solicitud de compra actualizada correctamente."
+            )
+            return redirect("compras_oil:paw_detail", pk=compra.pk)
+    else:
+        formset = PurchaseLineFormSet(queryset=queryset)
+
+    total_requerido = Decimal("0")
+    total_a_comprar = Decimal("0")
+
+    for ln in queryset:
+        precio = ln.precio_unitario or Decimal("0")
+        total_requerido += (ln.cantidad_requerida or Decimal("0")) * precio
+        total_a_comprar += (ln.cantidad_a_comprar or Decimal("0")) * precio
+
+    return render(request, "compras_oil/paw_detail.html", {
+        "compra": compra,
+        "lineas": queryset,
+        "formset": formset,
+        "total_requerido": total_requerido,
+        "total_a_comprar": total_a_comprar,
+        "puede_compras": tiene_rol(request.user, ["COMPRAS", "ADMIN"]),
+    })
+
+
+@require_POST
+@login_required
+def enviar_finanzas(request, pk):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para enviar a Finanzas.")
+        return redirect("/")
+
+    from finanzas.models import FinanceApproval
+
+    compra = get_object_or_404(PurchaseRequest, pk=pk)
+
+    if not compra.lineas.filter(tipo_pago="CONTADO").exists():
+        messages.error(
+            request,
+            "No hay líneas de pago contado para enviar a Finanzas."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    paw = compra.bom.workorder.paw
+
+    if paw:
+        paw.estado_operativo = "EN_FINANZAS"
+        paw.save(update_fields=["estado_operativo"])
+
+    FinanceApproval.objects.get_or_create(
+        purchase_request=compra,
+        defaults={
+            "estado": FinanceApproval.Estado.PENDIENTE,
+            "enviado_por": request.user,
+        },
+    )
+
+    messages.success(request, "PAW enviado a Finanzas correctamente.")
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+
+@require_POST
+@login_required
+def enviar_aprobacion(request, pk):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para enviar a Aprobación.")
+        return redirect("/")
+
+    from aprobacion.models import PurchaseApproval
+    from aprobacion.admin import sync_purchase_approval_lines
+
+    compra = get_object_or_404(PurchaseRequest, pk=pk)
+
+    if not compra.lineas.filter(tipo_pago="CREDITO").exists():
+        messages.error(
+            request,
+            "No hay líneas de crédito para enviar a Aprobación."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    paw = compra.bom.workorder.paw
+
+    if paw:
+        paw.estado_operativo = "EN_APROBACION"
+        paw.save(update_fields=["estado_operativo"])
+
+    aprobacion, created = PurchaseApproval.objects.get_or_create(
+        purchase_request=compra,
+        defaults={
+            "estado": PurchaseApproval.Estado.PENDIENTE,
+            "enviado_por": request.user,
+        },
+    )
+
+    sync_purchase_approval_lines(aprobacion, refresh_pending_only=True)
+    aprobacion.recalcular_estado()
+    aprobacion.save()
+
+    messages.success(
+        request,
+        "PAW enviado a Aprobación de Compras correctamente."
+    )
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+
+@require_POST
+@login_required
+def enviar_inventario(request, pk):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para enviar a Inventario.")
+        return redirect("/")
+
+    from inventario.models import InventoryReception, InventoryReceptionLine
+
+    compra = get_object_or_404(
+        PurchaseRequest.objects.prefetch_related("lineas"),
+        pk=pk,
+    )
+
+    paw = compra.bom.workorder.paw
+
+    if paw:
+        paw.estado_operativo = "MATERIAL_RECIBIDO"
+        paw.save(update_fields=["estado_operativo"])
+
+    recepcion, _ = InventoryReception.objects.get_or_create(
+        purchase_request=compra,
+        defaults={"creado_por": request.user},
+    )
+
+    for ln in compra.lineas.all():
+        InventoryReceptionLine.objects.get_or_create(
+            recepcion=recepcion,
+            purchase_line=ln,
+            defaults={
+                "cantidad_esperada": ln.cantidad_a_comprar or 0,
+                "cantidad_recibida": 0,
+                "estado": "PENDIENTE",
+            },
+        )
+
+    messages.success(request, "PAW enviado a Inventario correctamente.")
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+
+@require_POST
+@login_required
+def generar_entrega_taller(request, pk):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para generar entrega a taller.")
+        return redirect("/")
+
+    from inventario.models import WorkshopDelivery, WorkshopDeliveryLine
+
+    compra = get_object_or_404(
+        PurchaseRequest.objects.prefetch_related("lineas"),
+        pk=pk,
+    )
+
+    paw = compra.bom.workorder.paw
+
+    if paw:
+        paw.estado_operativo = "ENTREGADO_TALLER"
+        paw.save(update_fields=["estado_operativo"])
+
+    entrega, _ = WorkshopDelivery.objects.get_or_create(
+        purchase_request=compra,
+        defaults={"creado_por": request.user},
+    )
+
+    creadas = 0
+
+    for ln in compra.lineas.all():
+        _, created = WorkshopDeliveryLine.objects.get_or_create(
+            delivery=entrega,
+            purchase_line=ln,
+            defaults={
+                "codigo": ln.codigo or "",
+                "descripcion": ln.descripcion or "",
+                "unidad": ln.unidad or "",
+                "cantidad_requerida": ln.cantidad_requerida or 0,
+            },
+        )
+
+        if created:
+            creadas += 1
+
+    messages.success(
+        request,
+        f"Entrega a Taller generada correctamente. Líneas nuevas: {creadas}."
+    )
+    return redirect("compras_oil:paw_detail", pk=compra.pk)

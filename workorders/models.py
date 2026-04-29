@@ -110,6 +110,7 @@ class WorkOrder(models.Model):
         default=Visibility.RESTRINGIDA
     )
 
+    fecha_entrega = models.DateField(null=True, blank=True)
     iniciado_en = models.DateTimeField(null=True, blank=True)
     terminado_en = models.DateTimeField(null=True, blank=True)
 

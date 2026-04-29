@@ -1,0 +1,49 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Proveedor{% endblock %}
+{% block page_title %}Proveedor · {{ supplier.nombre }}{% endblock %}
+
+{% block content %}
+
+<div class="panel" style="max-width:900px;margin:auto;">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:20px;">
+        <div>
+            <h2 style="margin:0;">{{ supplier.nombre }}</h2>
+            <p style="margin-top:6px;color:#64748b;">Información registrada del proveedor</p>
+        </div>
+
+        <a class="btn btn-secondary" href="javascript:history.back()">Volver</a>
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <small>Contacto</small>
+            <strong>{{ supplier.contacto|default:"-" }}</strong>
+        </div>
+
+        <div class="card">
+            <small>Teléfono</small>
+            <strong>{{ supplier.telefono|default:"-" }}</strong>
+        </div>
+
+        <div class="card">
+            <small>Email</small>
+            <strong>{{ supplier.email|default:"-" }}</strong>
+        </div>
+
+        <div class="card">
+            <small>NIT</small>
+            <strong>{{ supplier.nit|default:"-" }}</strong>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-top:20px;background:#f8fafc;">
+        <p><strong>Banco:</strong> {{ supplier.banco|default:"-" }}</p>
+        <p><strong>Cuenta bancaria:</strong> {{ supplier.cuenta_bancaria|default:"-" }}</p>
+        <p><strong>Tipo cuenta:</strong> {{ supplier.tipo_cuenta|default:"-" }}</p>
+    </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,241 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Cotizaciones{% endblock %}
+
+{% block content %}
+
+<style>
+    .kpi-card strong { font-size: 24px; }
+
+    .quote-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    .quote-panel-header h3 { margin: 0; }
+
+    .quote-panel-header p {
+        margin-top: 6px;
+        color: #64748b;
+    }
+
+    .status,
+    .paw-badge {
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        display: inline-block;
+        white-space: nowrap;
+    }
+
+    .eval { background: #fef3c7; color: #92400e; }
+    .adj { background: #dcfce7; color: #166534; }
+    .cerr { background: #e5e7eb; color: #374151; }
+
+    .paw-ok {
+        background: #e0e7ff;
+        color: #3730a3;
+    }
+
+    .no-paw {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .quote-table-wrap { overflow-x: auto; }
+
+    .quote-table th { white-space: nowrap; }
+
+    .quote-table td {
+        vertical-align: middle;
+    }
+
+    .quote-number {
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .quote-name {
+        min-width: 180px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .quote-client { min-width: 140px; }
+
+    .quote-value {
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .quote-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        white-space: nowrap;
+    }
+
+    .btn-small {
+        padding: 8px 11px;
+        font-size: 12px;
+    }
+
+    .empty-row {
+        text-align: center;
+        color: #64748b;
+        padding: 24px;
+    }
+</style>
+
+<div class="cards">
+
+    <div class="card kpi-card">
+        <small>Total cotizaciones</small>
+        <strong>{{ total }}</strong>
+    </div>
+
+    <div class="card kpi-card">
+        <small>En evaluación</small>
+        <strong>{{ evaluacion }}</strong>
+    </div>
+
+    <div class="card kpi-card">
+        <small>Adjudicadas</small>
+        <strong>{{ adjudicadas }}</strong>
+    </div>
+
+    <div class="card kpi-card">
+        <small>Cerradas</small>
+        <strong>{{ cerradas }}</strong>
+    </div>
+
+    <div class="card kpi-card">
+        <small>Con PAW</small>
+        <strong>{{ con_paw }}</strong>
+    </div>
+
+    <div class="card kpi-card">
+        <small>Sin PAW</small>
+        <strong>{{ sin_paw }}</strong>
+    </div>
+
+    <div class="card kpi-card">
+        <small>Valor adjudicado</small>
+        <strong>$ {{ valor_adjudicado }}</strong>
+    </div>
+
+</div>
+
+<div class="panel">
+
+    <div class="quote-panel-header">
+        <div>
+            <h3>Listado de Cotizaciones</h3>
+            <p>Control comercial, estado de adjudicación y generación de PAW.</p>
+        </div>
+
+        <a href="/quotes/crear/" class="btn">
+            Nueva Cotización
+        </a>
+    </div>
+
+    <div class="quote-table-wrap">
+        <table class="quote-table">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Nombre</th>
+                    <th>Cliente</th>
+                    <th>Valor</th>
+                    <th>Estado</th>
+                    <th>PAW</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for c in cotizaciones %}
+                <tr>
+                    <td>
+                        <span class="quote-number">{{ c.numero_cotizacion }}</span>
+                    </td>
+
+                    <td class="quote-name">
+                        {{ c.nombre_cotizacion|default:"Sin nombre" }}
+                    </td>
+
+                    <td class="quote-client">
+                        {{ c.cliente|default:"-" }}
+                    </td>
+
+                    <td class="quote-value">
+                        $ {{ c.valor }}
+                    </td>
+
+                    <td>
+                        {% if c.estado == "EVALUACION" %}
+                            <span class="status eval">En evaluación</span>
+                        {% elif c.estado == "ADJUDICADA" %}
+                            <span class="status adj">Adjudicada</span>
+                        {% else %}
+                            <span class="status cerr">Cerrada</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if c.paws.exists %}
+                            <span class="paw-badge paw-ok">PAW creado</span>
+                        {% else %}
+                            <span class="paw-badge no-paw">Sin PAW</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <div class="quote-actions">
+                            <a class="btn btn-small" href="/quotes/{{ c.id }}/">
+                                Ver
+                            </a>
+
+                            <a class="btn btn-secondary btn-small" href="/quotes/{{ c.id }}/editar/">
+                                Editar
+                            </a>
+
+                            {% if c.estado == "ADJUDICADA" %}
+
+                                {% if c.paws.exists %}
+                                    <a class="btn btn-small" href="/paw/{{ c.paws.first.id }}/">
+                                        Ver PAW
+                                    </a>
+                               {% else %}
+                                    <a class="btn btn-small" href="/paw/crear/{{ c.id }}/">
+                                        Generar PAW
+                                    </a>
+                                {% endif %}
+
+                            {% else %}
+                                <span class="badge-soft">No adjudicada</span>
+                            {% endif %}
+
+                            
+                        </div>
+                    </td>
+                </tr>
+
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="empty-row">
+                        No hay cotizaciones registradas.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+{% endblock %}

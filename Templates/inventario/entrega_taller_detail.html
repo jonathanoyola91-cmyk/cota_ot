@@ -1,0 +1,54 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Entrega a Taller{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h2>Entrega a taller · PAW {{ entrega.purchase_request.paw_numero }}</h2>
+    <p>{{ entrega.purchase_request.paw_nombre }}</p>
+
+    <br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Unidad</th>
+                <th>Cantidad requerida</th>
+                <th>Cantidad entregada</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for linea in entrega.lineas.all %}
+            <tr>
+                <td>{{ linea.codigo }}</td>
+                <td>{{ linea.descripcion }}</td>
+                <td>{{ linea.unidad }}</td>
+                <td>{{ linea.cantidad_requerida }}</td>
+                <td>{{ linea.cantidad_entregada|default:"Pendiente físico" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No hay líneas de entrega.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+        <label><strong>Comentarios para entrega</strong></label>
+        <textarea class="form-control" name="comentarios" rows="4">{{ entrega.comentarios }}</textarea>
+
+        <br>
+
+        <button class="btn" type="submit">Guardar comentarios</button>
+        <a href="/admin/inventario/workshopdelivery/{{ entrega.id }}/change/" class="btn">
+            Abrir en Admin / Imprimir PDF
+        </a>
+        <a href="/inventario/" class="btn btn-secondary">Volver</a>
+    </form>
+</div>
+
+{% endblock %}

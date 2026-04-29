@@ -1,0 +1,65 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Recepción Inventario{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h2>Recepción inventario · PAW {{ recepcion.purchase_request.paw_numero }}</h2>
+    <p>{{ recepcion.purchase_request.paw_nombre }}</p>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Esperada</th>
+                    <th>Recibida</th>
+                    <th>Fecha llegada</th>
+                    <th>Estado</th>
+                    <th>Observación</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for linea in recepcion.lineas.all %}
+                <tr>
+                    <td>{{ linea.purchase_line.codigo }}</td>
+                    <td>{{ linea.purchase_line.descripcion }}</td>
+                    <td>{{ linea.cantidad_esperada }}</td>
+                    <td>
+                        <input class="form-control" type="number" step="0.001"
+                               name="cantidad_recibida_{{ linea.id }}"
+                               value="{{ linea.cantidad_recibida }}">
+                    </td>
+                    <td>
+                        <input class="form-control" type="date"
+                               name="fecha_llegada_{{ linea.id }}"
+                               value="{{ linea.fecha_llegada|date:'Y-m-d' }}">
+                    </td>
+                    <td>
+                        <span class="badge">{{ linea.estado }}</span>
+                    </td>
+                    <td>
+                        <input class="form-control" type="text"
+                               name="observacion_{{ linea.id }}"
+                               value="{{ linea.observacion_inventario }}">
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7">No hay líneas para recibir.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <br>
+
+        <button class="btn" type="submit">Guardar recepción</button>
+        <a href="/inventario/" class="btn btn-secondary">Volver</a>
+    </form>
+</div>
+
+{% endblock %}

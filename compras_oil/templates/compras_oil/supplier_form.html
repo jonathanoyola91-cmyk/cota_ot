@@ -1,0 +1,120 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Nuevo Proveedor{% endblock %}
+{% block page_title %}Crear proveedor{% endblock %}
+
+{% block content %}
+
+<div class="panel" style="max-width:900px;margin:auto;">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:20px;">
+        <div>
+            <h2 style="margin:0;">Nuevo proveedor</h2>
+            <p style="margin-top:6px;color:#64748b;">
+                Registre la información del proveedor para usarlo en compras.
+            </p>
+        </div>
+
+        <a class="btn btn-secondary" href="{{ next_url|default:'javascript:history.back()' }}">
+            Volver
+        </a>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;">
+
+            <div>
+                <label>Nombre</label>
+                {{ form.nombre }}
+            </div>
+
+            <div>
+                <label>Contacto</label>
+                {{ form.contacto }}
+            </div>
+
+            <div>
+                <label>Teléfono</label>
+                {{ form.telefono }}
+            </div>
+
+            <div>
+                <label>Email</label>
+                {{ form.email }}
+            </div>
+
+            <div>
+                <label>NIT</label>
+                {{ form.nit }}
+            </div>
+
+            <div>
+                <label>Banco</label>
+                {{ form.banco }}
+            </div>
+
+            <div>
+                <label>Cuenta bancaria</label>
+                {{ form.cuenta_bancaria }}
+            </div>
+
+            <div>
+                <label>Tipo cuenta</label>
+                {{ form.tipo_cuenta }}
+            </div>
+
+        </div>
+
+        {% if form.errors %}
+            <div style="margin-top:18px;background:#fee2e2;color:#991b1b;padding:12px;border-radius:10px;">
+                {{ form.errors }}
+            </div>
+        {% endif %}
+
+        <div style="margin-top:24px;display:flex;gap:10px;">
+            <button class="btn" type="submit">
+                Guardar proveedor
+            </button>
+
+            <a class="btn btn-secondary" href="{{ next_url|default:'javascript:history.back()' }}">
+                Cancelar
+            </a>
+        </div>
+
+    </form>
+
+</div>
+
+<style>
+    label {
+        display:block;
+        font-size:13px;
+        font-weight:800;
+        color:#334155;
+        margin-bottom:6px;
+    }
+
+    .form-control {
+        width:100%;
+        padding:10px 12px;
+        border:1px solid #cbd5e1;
+        border-radius:10px;
+        font-size:14px;
+    }
+
+    .form-control:focus {
+        outline:none;
+        border-color:#2563eb;
+        box-shadow:0 0 0 3px rgba(37,99,235,.15);
+    }
+
+    @media(max-width:768px) {
+        form > div {
+            grid-template-columns:1fr !important;
+        }
+    }
+</style>
+
+{% endblock %}

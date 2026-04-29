@@ -1,0 +1,80 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}OT #{{ ot.numero }}{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h2>OT #{{ ot.numero }}</h2>
+    <p style="color:#64748b;">Orden de trabajo creada desde PAW</p>
+
+    <br>
+
+    <div class="cards">
+        <div class="card">
+            <small>Título</small>
+            <strong style="font-size:18px;">{{ ot.titulo }}</strong>
+        </div>
+
+        <div class="card">
+            <small>Cliente</small>
+            <strong style="font-size:18px;">{{ ot.cliente|default:"-" }}</strong>
+        </div>
+
+        <div class="card">
+            <small>PAW origen</small>
+            <strong style="font-size:18px;">
+                {% if ot.paw %}
+                    <a href="{% url 'paw_detail' ot.paw.id %}">{{ ot.paw.numero_paw }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </strong>
+        </div>
+
+        <div class="card">
+            <small>Estado</small>
+            <strong style="font-size:18px;">{{ ot.estado }}</strong>
+        </div>
+    </div>
+
+    <br>
+
+    <h3>Detalle operativo</h3>
+
+    <table>
+        <tr>
+            <th>Descripción</th>
+            <td>{{ ot.descripcion }}</td>
+        </tr>
+        <tr>
+            <th>Ubicación / Campo</th>
+            <td>{{ ot.ubicacion|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Prioridad</th>
+            <td>{{ ot.prioridad }}</td>
+        </tr>
+        <tr>
+            <th>Etapa taller</th>
+            <td>{{ ot.etapa_taller|default:"Pendiente" }}</td>
+        </tr>
+        <tr>
+            <th>Creado por</th>
+            <td>{{ ot.creado_por.username }}</td>
+        </tr>
+        <tr>
+            <th>Fecha creación</th>
+            <td>{{ ot.creado_en|date:"d/m/Y H:i" }}</td>
+        </tr>
+    </table>
+
+    <br>
+
+    <a class="btn btn-secondary" href="{% url 'ot_list' %}">Volver a OT</a>
+    {% if ot.paw %}
+        <a class="btn" href="{% url 'paw_detail' ot.paw.id %}">Volver al PAW</a>
+    {% endif %}
+</div>
+
+{% endblock %}

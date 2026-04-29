@@ -1,0 +1,131 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Factura PAW {{ factura.numero_paw }}{% endblock %}
+{% block page_title %}Factura · PAW {{ factura.numero_paw }}{% endblock %}
+
+{% block content %}
+
+<div class="cards">
+    <div class="card">
+        <small>PAW</small>
+        <strong>{{ factura.numero_paw }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Cliente</small>
+        <strong>{{ factura.cliente }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Factura</small>
+        <strong>{{ factura.numero_factura|default:"Sin número" }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Estado</small>
+        <strong>{{ factura.estado }}</strong>
+    </div>
+</div>
+
+<div class="panel">
+    <h2>Editar facturación</h2>
+    <p style="color:#64748b;">
+        Complete la información de factura, vencimiento, radicación y tipo de pago.
+    </p>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="cards" style="grid-template-columns:repeat(3,1fr); gap:18px;">
+
+            <div class="card">
+                <small>Número factura</small>
+                {{ form.numero_factura }}
+            </div>
+
+            <div class="card">
+                <small>Precio</small>
+                {{ form.precio }}
+            </div>
+
+            <div class="card">
+                <small>Fecha vencimiento</small>
+                {{ form.fecha_vencimiento }}
+            </div>
+
+            <div class="card">
+                <small>Tipo pago</small>
+                {{ form.tipo_pago }}
+            </div>
+
+            <div class="card">
+                <small>Estado</small>
+                {{ form.estado }}
+            </div>
+
+            <div class="card">
+                <small>Número servicio</small>
+                {{ form.numero_servicio }}
+            </div>
+
+            <div class="card">
+                <small>Lugar entrega</small>
+                {{ form.lugar_entrega }}
+            </div>
+
+            <div class="card">
+                <small>Lugar servicio</small>
+                {{ form.lugar_servicio }}
+            </div>
+
+        </div>
+
+        <button class="btn" type="submit">Guardar cambios</button>
+
+        <a class="btn btn-secondary" href="{% url 'facturacion:dashboard' %}">
+            Volver
+        </a>
+
+        <a class="btn btn-secondary" href="{% url 'facturacion:radicar' factura.id %}">
+            Radicar factura
+        </a>
+    </form>
+</div>
+
+<br>
+
+<div class="panel">
+    <h2>Información del PAW</h2>
+    <br>
+
+    <table>
+        <tr>
+            <th>Nombre PAW</th>
+            <td>{{ factura.nombre_paw }}</td>
+        </tr>
+        <tr>
+            <th>Cliente</th>
+            <td>{{ factura.cliente }}</td>
+        </tr>
+        <tr>
+            <th>Campo</th>
+            <td>{{ factura.campo }}</td>
+        </tr>
+        <tr>
+            <th>Fecha radicación</th>
+            <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
+        </tr>
+        <tr>
+            <th>Creado</th>
+            <td>{{ factura.creado_en|date:"d/m/Y H:i" }}</td>
+        </tr>
+        <tr>
+            <th>Actualizado</th>
+            <td>{{ factura.actualizado_en|date:"d/m/Y H:i" }}</td>
+        </tr>
+    </table>
+</div>
+
+{% endblock %}

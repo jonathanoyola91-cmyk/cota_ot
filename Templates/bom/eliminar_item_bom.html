@@ -1,0 +1,36 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Eliminar ítem BOM{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <h2>Eliminar ítem BOM</h2>
+
+    <p>¿Seguro que deseas eliminar este ítem?</p>
+
+    <br>
+
+    <table>
+        <tr>
+            <th>Código</th>
+            <td>{{ item.codigo }}</td>
+        </tr>
+        <tr>
+            <th>Descripción</th>
+            <td>{{ item.descripcion }}</td>
+        </tr>
+        <tr>
+            <th>Cantidad solicitada</th>
+            <td>{{ item.cantidad_solicitada }}</td>
+        </tr>
+    </table>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+        <button class="btn" style="background:#dc2626;">Sí, eliminar</button>
+        <a class="btn btn-secondary" href="{% url 'agregar_item_bom' bom.id %}">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

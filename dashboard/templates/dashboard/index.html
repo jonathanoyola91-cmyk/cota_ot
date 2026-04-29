@@ -1,0 +1,732 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Dashboard General{% endblock %}
+{% block page_title %}Dashboard General{% endblock %}
+
+{% block content %}
+
+<style>
+    :root {
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --border-soft: #e5e7eb;
+        --blue: #2563eb;
+        --green: #16a34a;
+        --red: #dc2626;
+        --yellow: #f59e0b;
+        --purple: #7c3aed;
+    }
+
+    .dashboard-executive {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+    }
+
+    .alert-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+    }
+
+    .alert-card {
+        border-radius: 18px;
+        padding: 18px;
+        color: #fff;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, .12);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 92px;
+    }
+
+    .filter-card {
+        cursor: pointer;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+    .filter-card:hover {
+        transform: translateY(-3px);
+    }
+
+    .active-filter {
+        outline: 3px solid rgba(255,255,255,.9);
+        box-shadow: 0 0 0 4px rgba(37,99,235,.25);
+    }
+
+    .alert-card .info small {
+        display: block;
+        font-size: 13px;
+        opacity: .9;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .alert-card .info strong {
+        font-size: 30px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .alert-icon {
+        font-size: 34px;
+    }
+
+    .alert-danger { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .alert-warning { background: linear-gradient(135deg, #f59e0b, #b45309); }
+    .alert-info { background: linear-gradient(135deg, #2563eb, #1e40af); }
+
+    .filter-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: -8px;
+    }
+
+    .btn-clear-filter {
+        border: 0;
+        background: #0f172a;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .kpi-groups {
+        display: grid;
+        grid-template-columns: 1.1fr 1.4fr .8fr;
+        gap: 16px;
+    }
+
+    .kpi-section {
+        background: #fff;
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, .06);
+        border: 1px solid #eef2f7;
+    }
+
+    .kpi-section-title {
+        font-size: 14px;
+        font-weight: 900;
+        color: var(--text-main);
+        margin-bottom: 14px;
+    }
+
+    .kpi-mini-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+        gap: 10px;
+    }
+
+    .kpi-card {
+        background: #f8fafc;
+        border-radius: 14px;
+        padding: 13px;
+        border-left: 4px solid #cbd5e1;
+        min-height: 82px;
+    }
+
+    .kpi-card small {
+        display: block;
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 800;
+        margin-bottom: 8px;
+    }
+
+    .kpi-card strong {
+        display: block;
+        font-size: 23px;
+        font-weight: 900;
+        color: var(--text-main);
+        line-height: 1.1;
+        word-break: break-word;
+    }
+
+    .kpi-blue { border-left-color: var(--blue); }
+    .kpi-green { border-left-color: var(--green); }
+    .kpi-red { border-left-color: var(--red); }
+    .kpi-yellow { border-left-color: var(--yellow); }
+    .kpi-purple { border-left-color: var(--purple); }
+    .kpi-gray { border-left-color: #64748b; }
+
+    .dashboard-body {
+        display: grid;
+        grid-template-columns: 1.6fr .75fr;
+        gap: 18px;
+        align-items: start;
+    }
+
+    .panel-pro {
+        background: #fff;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, .06);
+        border: 1px solid #eef2f7;
+    }
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .panel-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 900;
+        color: var(--text-main);
+    }
+
+    .panel-subtitle {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 700;
+    }
+
+    .table-wrap {
+        overflow-x: auto;
+    }
+
+    .table-pro {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 780px;
+    }
+
+    .table-pro thead th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 12px;
+        text-align: left;
+        padding: 13px 12px;
+        border-bottom: 1px solid var(--border-soft);
+        font-weight: 900;
+    }
+
+    .table-pro tbody td {
+        padding: 13px 12px;
+        border-bottom: 1px solid #eef2f7;
+        font-size: 14px;
+        color: #0f172a;
+    }
+
+    .table-pro tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .row-danger {
+        background: #fff7f7;
+    }
+
+    .row-warning {
+        background: #fffbeb;
+    }
+
+    .paw-number {
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .days-danger {
+        font-weight: 900;
+        color: #b91c1c;
+    }
+
+    .days-warning {
+        font-weight: 900;
+        color: #b45309;
+    }
+
+    .days-ok {
+        font-weight: 900;
+        color: #15803d;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .pill-red { background:#fee2e2; color:#991b1b; }
+    .pill-yellow { background:#fef3c7; color:#92400e; }
+    .pill-blue { background:#dbeafe; color:#1d4ed8; }
+    .pill-purple { background:#ede9fe; color:#5b21b6; }
+    .pill-green { background:#dcfce7; color:#166534; }
+    .pill-gray { background:#e5e7eb; color:#374151; }
+
+    .btn-pro {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #2563eb;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+        text-decoration: none;
+        font-weight: 900;
+        box-shadow: 0 6px 12px rgba(37, 99, 235, .22);
+    }
+
+    .btn-pro:hover {
+        background: #1d4ed8;
+        color: #fff;
+    }
+
+    .side-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .task-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .task-card {
+        background: #f8fafc;
+        border-radius: 14px;
+        padding: 13px;
+        border-left: 4px solid #cbd5e1;
+    }
+
+    .task-card strong {
+        display: block;
+        font-size: 14px;
+        color: var(--text-main);
+        margin-bottom: 5px;
+    }
+
+    .task-card span {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 700;
+    }
+
+    .task-red { border-left-color: var(--red); }
+    .task-yellow { border-left-color: var(--yellow); }
+    .task-blue { border-left-color: var(--blue); }
+    .task-green { border-left-color: var(--green); }
+
+    .empty-state {
+        background: #f8fafc;
+        border-radius: 14px;
+        padding: 16px;
+        color: var(--text-muted);
+        font-weight: 700;
+        text-align: center;
+    }
+
+    @media(max-width: 1200px) {
+        .kpi-groups {
+            grid-template-columns: 1fr;
+        }
+
+        .dashboard-body {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="dashboard-executive">
+
+    <!-- ALERTAS CLICKEABLES -->
+    <div class="alert-grid">
+
+        <div class="alert-card alert-danger filter-card" data-filter="rojo">
+            <div class="info">
+                <small>PAW atrasados</small>
+                <strong>{{ paws_atrasados }}</strong>
+            </div>
+            <div class="alert-icon">⚠️</div>
+        </div>
+
+        <div class="alert-card alert-warning filter-card" data-filter="finanzas">
+            <div class="info">
+                <small>En finanzas</small>
+                <strong>{{ paw_finanzas }}</strong>
+            </div>
+            <div class="alert-icon">💰</div>
+        </div>
+
+        <div class="alert-card alert-info filter-card" data-filter="amarillo">
+            <div class="info">
+                <small>Próximos a vencer</small>
+                <strong>{{ paws_proximos }}</strong>
+            </div>
+            <div class="alert-icon">⌛</div>
+        </div>
+
+    </div>
+
+    <div class="filter-actions">
+        <button type="button" class="btn-clear-filter filter-card" data-filter="todos">
+            Ver todos
+        </button>
+    </div>
+
+    <!-- KPIS -->
+    <div class="kpi-groups">
+
+        <div class="kpi-section">
+            <div class="kpi-section-title">🟢 Comercial</div>
+
+            <div class="kpi-mini-grid">
+                <div class="kpi-card kpi-gray">
+                    <small>Cotizaciones</small>
+                    <strong>{{ total_cotizaciones }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-yellow">
+                    <small>Evaluación</small>
+                    <strong>{{ cotizaciones_evaluacion }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-green">
+                    <small>Adjudicadas</small>
+                    <strong>{{ cotizaciones_adjudicadas }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-green">
+                    <small>Valor adjudicado</small>
+                    <strong>$ {{ valor_adjudicado }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="kpi-section">
+            <div class="kpi-section-title">🔵 Operación PAW</div>
+
+            <div class="kpi-mini-grid">
+                <div class="kpi-card kpi-blue">
+                    <small>PAW creados</small>
+                    <strong>{{ total_paws }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-red">
+                    <small>Compras</small>
+                    <strong>{{ paw_compras }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-purple">
+                    <small>Aprobación</small>
+                    <strong>{{ paw_aprobacion }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-blue">
+                    <small>Material</small>
+                    <strong>{{ paw_material_recibido }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-blue">
+                    <small>Taller</small>
+                    <strong>{{ paw_taller }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-green">
+                    <small>Producto listo</small>
+                    <strong>{{ producto_listo }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="kpi-section">
+            <div class="kpi-section-title">🟡 Finanzas</div>
+
+            <div class="kpi-mini-grid">
+                <div class="kpi-card kpi-yellow">
+                    <small>En finanzas</small>
+                    <strong>{{ paw_finanzas }}</strong>
+                </div>
+
+                <div class="kpi-card kpi-red">
+                    <small>Pendiente facturar</small>
+                    <strong>{{ pendientes_facturar }}</strong>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="dashboard-body">
+
+        <!-- CONTROL DE ENTREGAS -->
+        <div class="panel-pro">
+            <div class="panel-header">
+                <div>
+                    <h3 id="filter-title">Control de entregas</h3>
+                    <div class="panel-subtitle" id="filter-subtitle">
+                        Prioridad por fecha de entrega y estado operativo
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table-pro">
+                    <thead>
+                        <tr>
+                            <th>PAW</th>
+                            <th>Cliente</th>
+                            <th>Fecha entrega</th>
+                            <th>Días</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for item in paws_entregas %}
+                        <tr
+                            class="paw-row {% if item.semaforo == 'rojo' %}row-danger{% elif item.semaforo == 'amarillo' %}row-warning{% endif %}"
+                            data-estado="{{ item.semaforo }}"
+                            data-operativo="{{ item.paw.estado_operativo }}"
+                        >
+                            <td>
+                                <span class="paw-number">{{ item.paw.numero_paw }}</span>
+                            </td>
+
+                            <td>{{ item.paw.cliente }}</td>
+
+                            <td>{{ item.paw.fecha_entrega|date:"d/m/Y" }}</td>
+
+                            <td>
+                                {% if item.dias < 0 %}
+                                    <span class="days-danger">{{ item.dias }}</span>
+                                {% elif item.dias == 0 %}
+                                    <span class="days-warning">Hoy</span>
+                                {% else %}
+                                    <span class="days-ok">{{ item.dias }}</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                {% if item.semaforo == "rojo" %}
+                                    <span class="status-pill pill-red">Atrasado</span>
+                                {% elif item.semaforo == "amarillo" %}
+                                    <span class="status-pill pill-yellow">Próximo</span>
+                                {% else %}
+                                    <span class="status-pill pill-green">En tiempo</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                <a class="btn-pro" href="/paw/{{ item.paw.id }}/">Abrir</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">Sin entregas registradas</div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                        <tr id="no-filter-results" style="display:none;">
+                            <td colspan="6">
+                                <div class="empty-state">No hay registros para este filtro.</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PANEL DERECHO -->
+        <div class="side-stack">
+
+            <div class="panel-pro">
+                <div class="panel-header">
+                    <div>
+                        <h3>Prioridades</h3>
+                        <div class="panel-subtitle">Qué revisar primero</div>
+                    </div>
+                </div>
+
+                <div class="task-list">
+
+                    {% if paws_atrasados > 0 %}
+                    <div class="task-card task-red">
+                        <strong>PAW atrasados</strong>
+                        <span>{{ paws_atrasados }} requieren revisión inmediata.</span>
+                    </div>
+                    {% endif %}
+
+                    {% if paw_finanzas > 0 %}
+                    <div class="task-card task-yellow">
+                        <strong>Pagos por aprobar</strong>
+                        <span>{{ paw_finanzas }} PAW están detenidos en finanzas.</span>
+                    </div>
+                    {% endif %}
+
+                    {% if pendientes_facturar > 0 %}
+                    <div class="task-card task-green">
+                        <strong>Pendiente facturar</strong>
+                        <span>{{ pendientes_facturar }} productos listos requieren facturación.</span>
+                    </div>
+                    {% endif %}
+
+                    {% if paw_compras > 0 %}
+                    <div class="task-card task-blue">
+                        <strong>Compras pendientes</strong>
+                        <span>{{ paw_compras }} PAW requieren gestión de compras.</span>
+                    </div>
+                    {% endif %}
+
+                    {% if paws_atrasados == 0 and paw_finanzas == 0 and pendientes_facturar == 0 and paw_compras == 0 %}
+                    <div class="empty-state">
+                        Sin alertas críticas activas.
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <div class="panel-pro">
+                <div class="panel-header">
+                    <div>
+                        <h3>Semáforo operativo</h3>
+                        <div class="panel-subtitle">PAW con acción pendiente</div>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="table-pro" style="min-width: 420px;">
+                        <thead>
+                            <tr>
+                                <th>PAW</th>
+                                <th>Estado</th>
+                                <th>Ver</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {% for paw in paws_criticos %}
+                            <tr>
+                                <td>
+                                    <span class="paw-number">{{ paw.numero_paw }}</span>
+                                </td>
+
+                                <td>
+                                    {% if paw.estado_operativo == "EN_COMPRAS" %}
+                                        <span class="status-pill pill-red">Compras</span>
+                                    {% elif paw.estado_operativo == "EN_FINANZAS" %}
+                                        <span class="status-pill pill-yellow">Finanzas</span>
+                                    {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
+                                        <span class="status-pill pill-blue">Taller</span>
+                                    {% elif paw.estado_operativo == "EN_APROBACION" %}
+                                        <span class="status-pill pill-purple">Aprobación</span>
+                                    {% else %}
+                                        <span class="status-pill pill-gray">{{ paw.estado_operativo }}</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    <a class="btn-pro" href="/paw/{{ paw.id }}/">Ver</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3">
+                                    <div class="empty-state">Sin PAW críticos</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const filterButtons = document.querySelectorAll(".filter-card");
+    const rows = document.querySelectorAll(".paw-row");
+    const title = document.getElementById("filter-title");
+    const subtitle = document.getElementById("filter-subtitle");
+    const noResults = document.getElementById("no-filter-results");
+
+    function applyFilter(filter) {
+        let visibleCount = 0;
+
+        filterButtons.forEach(button => {
+            button.classList.remove("active-filter");
+            if (button.dataset.filter === filter) {
+                button.classList.add("active-filter");
+            }
+        });
+
+        rows.forEach(row => {
+            const estado = row.dataset.estado;
+            const operativo = row.dataset.operativo;
+
+            let show = false;
+
+            if (filter === "todos") {
+                show = true;
+            }
+
+            if (filter === "rojo" && estado === "rojo") {
+                show = true;
+            }
+
+            if (filter === "amarillo" && estado === "amarillo") {
+                show = true;
+            }
+
+            if (filter === "finanzas" && operativo === "EN_FINANZAS") {
+                show = true;
+            }
+
+            row.style.display = show ? "" : "none";
+
+            if (show) {
+                visibleCount++;
+            }
+        });
+
+        if (noResults) {
+            noResults.style.display = visibleCount === 0 ? "" : "none";
+        }
+
+        if (title && subtitle) {
+            if (filter === "rojo") {
+                title.innerText = "Control de entregas · PAW atrasados";
+                subtitle.innerText = "Mostrando únicamente entregas vencidas.";
+            } else if (filter === "amarillo") {
+                title.innerText = "Control de entregas · Próximos a vencer";
+                subtitle.innerText = "Mostrando únicamente entregas próximas.";
+            } else if (filter === "finanzas") {
+                title.innerText = "Control de entregas · En finanzas";
+                subtitle.innerText = "Mostrando PAW detenidos o pendientes en finanzas.";
+            } else {
+                title.innerText = "Control de entregas";
+                subtitle.innerText = "Prioridad por fecha de entrega y estado operativo.";
+            }
+        }
+    }
+
+    filterButtons.forEach(button => {
+        button.addEventListener("click", function () {
+            applyFilter(this.dataset.filter);
+        });
+    });
+});
+</script>
+
+{% endblock %}

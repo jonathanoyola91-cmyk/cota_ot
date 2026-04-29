@@ -2,6 +2,20 @@
 from django.conf import settings
 from django.db import models
 
+class EstadoOperativo(models.TextChoices):
+    PAW_CREADO = "PAW_CREADO", "PAW creado"
+    OT_CREADA = "OT_CREADA", "OT creada"
+    BOM_CREADO = "BOM_CREADO", "BOM creado"
+    EN_COMPRAS = "EN_COMPRAS", "En compras"
+    EN_FINANZAS = "EN_FINANZAS", "En finanzas"
+    EN_APROBACION = "EN_APROBACION", "En aprobación"
+    PAGO_OK = "PAGO_OK", "Pago OK"
+    MATERIAL_RECIBIDO = "MATERIAL_RECIBIDO", "Material recibido"
+    ENTREGADO_TALLER = "ENTREGADO_TALLER", "Entregado a taller"
+    PRODUCTO_OK = "PRODUCTO_OK", "Producto OK"
+    EN_FACTURACION = "EN_FACTURACION", "En facturación"
+    FACTURADO = "FACTURADO", "Facturado"
+    RADICADO = "RADICADO", "Radicado"
 
 class Paw(models.Model):
     numero_paw = models.CharField(
@@ -17,7 +31,7 @@ class Paw(models.Model):
         blank=True,
     )
 
-    cotizacion = models.ForeignKey(
+    cotizacion = models.OneToOneField(
         "quotes.Quotation",
         on_delete=models.PROTECT,
         null=True,
@@ -30,6 +44,12 @@ class Paw(models.Model):
 
     fecha_entrega = models.DateField(null=True, blank=True)
     fecha_salida = models.DateField(null=True, blank=True)
+
+    estado_operativo = models.CharField(
+        max_length=30,
+        choices=EstadoOperativo.choices,
+        default=EstadoOperativo.PAW_CREADO
+    )
 
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,

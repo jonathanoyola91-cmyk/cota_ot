@@ -1,0 +1,23 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Crear PAW{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h2>Crear PAW desde Cotización</h2>
+    <br>
+
+    <p><strong>Cotización:</strong> {{ cotizacion.numero_cotizacion }}</p>
+    <p><strong>Cliente:</strong> {{ cotizacion.cliente }}</p>
+    <p><strong>Nombre:</strong> {{ cotizacion.nombre_cotizacion }}</p>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+        <button class="btn">Crear PAW</button>
+    </form>
+</div>
+
+{% endblock %}

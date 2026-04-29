@@ -1,0 +1,705 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}PAW {{ paw.numero_paw }}{% endblock %}
+
+{% block content %}
+
+<style>
+    .paw-wrapper { display:flex; flex-direction:column; gap:18px; }
+
+    .paw-header {
+        background:linear-gradient(135deg,#ffffff,#f8fafc);
+        border:1px solid #e5e7eb;
+        border-radius:18px;
+        padding:20px;
+        box-shadow:0 8px 24px rgba(15,23,42,.06);
+    }
+
+    .paw-header-top {
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:16px;
+        flex-wrap:wrap;
+    }
+
+    .paw-title h2 { margin:0; font-size:24px; color:#0f172a; }
+    .paw-title p { margin:6px 0 0; color:#64748b; font-size:14px; }
+
+    .paw-status-pill {
+        background:#dbeafe;
+        color:#1d4ed8;
+        border-radius:999px;
+        padding:8px 14px;
+        font-size:13px;
+        font-weight:700;
+    }
+
+    .progress-card {
+        background:#ffffff;
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:16px;
+    }
+
+    .progress-title {
+        font-size:13px;
+        color:#64748b;
+        font-weight:600;
+        margin-bottom:12px;
+    }
+
+    .progress-grid {
+        display:grid;
+        grid-template-columns:repeat(8,1fr);
+        gap:8px;
+    }
+
+    .step-pill {
+        text-align:center;
+        border-radius:999px;
+        padding:8px 6px;
+        font-size:12px;
+        font-weight:800;
+        border:1px solid transparent;
+        white-space:nowrap;
+    }
+
+    .step-ok {
+        background:#dcfce7;
+        color:#166534;
+        border-color:#bbf7d0;
+    }
+
+    .step-pending {
+        background:#f1f5f9;
+        color:#64748b;
+        border-color:#e2e8f0;
+    }
+
+    .summary-grid {
+        display:grid;
+        grid-template-columns:repeat(4,1fr);
+        gap:14px;
+    }
+
+    .summary-card {
+        background:#ffffff;
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:16px;
+        box-shadow:0 6px 18px rgba(15,23,42,.04);
+    }
+
+    .summary-card small {
+        display:block;
+        color:#64748b;
+        font-size:12px;
+        margin-bottom:6px;
+        font-weight:600;
+    }
+
+    .summary-card strong {
+        display:block;
+        color:#0f172a;
+        font-size:16px;
+    }
+
+    .section-card {
+        background:#ffffff;
+        border:1px solid #e5e7eb;
+        border-radius:18px;
+        padding:18px;
+        box-shadow:0 8px 24px rgba(15,23,42,.05);
+    }
+
+    .section-title {
+        margin:0 0 14px;
+        font-size:18px;
+        color:#0f172a;
+    }
+
+    .quote-grid {
+        display:grid;
+        grid-template-columns:repeat(3,1fr);
+        gap:12px;
+    }
+
+    .quote-item {
+        background:#f8fafc;
+        border:1px solid #e5e7eb;
+        border-radius:14px;
+        padding:14px;
+    }
+
+    .quote-item small {
+        display:block;
+        color:#64748b;
+        font-size:12px;
+        margin-bottom:6px;
+        font-weight:600;
+    }
+
+    .quote-item strong,
+    .quote-item span {
+        color:#0f172a;
+        font-size:14px;
+        font-weight:700;
+    }
+
+    .workflow-grid {
+        display:grid;
+        grid-template-columns:repeat(7,minmax(150px,1fr));
+        gap:12px;
+    }
+
+    .workflow-card {
+        background:#ffffff;
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:14px;
+        min-height:128px;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+        box-shadow:0 6px 18px rgba(15,23,42,.04);
+    }
+
+    .workflow-card.done {
+        border-color:#bbf7d0;
+        background:#f0fdf4;
+    }
+
+    .workflow-card.pending {
+        border-color:#e5e7eb;
+        background:#ffffff;
+    }
+
+    .workflow-card small {
+        color:#64748b;
+        font-size:12px;
+        font-weight:700;
+    }
+
+    .workflow-card strong {
+        display:block;
+        margin-top:6px;
+        color:#0f172a;
+        font-size:14px;
+        line-height:1.3;
+    }
+
+    .workflow-actions { margin-top:12px; }
+
+    .workflow-actions .btn {
+        display:inline-block;
+        padding:8px 11px;
+        border-radius:10px;
+        font-size:12px;
+        font-weight:800;
+        text-decoration:none;
+    }
+
+    .badge-soft {
+        display:inline-block;
+        background:#e2e8f0;
+        color:#334155;
+        padding:7px 10px;
+        border-radius:999px;
+        font-size:12px;
+        font-weight:700;
+    }
+
+    .finance-alert {
+        border-left:6px solid #dc2626;
+    }
+
+    .finance-alert h3 {
+        margin-bottom:8px;
+    }
+
+    .finance-alert p {
+        color:#64748b;
+        margin-bottom:16px;
+    }
+
+    .finance-table-wrap {
+        overflow-x:auto;
+    }
+
+    .finance-badge {
+        display:inline-block;
+        padding:6px 10px;
+        border-radius:999px;
+        font-size:12px;
+        font-weight:800;
+        white-space:nowrap;
+    }
+
+    .finance-ok { background:#dcfce7; color:#166534; }
+    .finance-warn { background:#fef3c7; color:#92400e; }
+    .finance-red { background:#fee2e2; color:#991b1b; }
+    .finance-gray { background:#e5e7eb; color:#374151; }
+
+    .bottom-actions {
+        display:flex;
+        justify-content:flex-start;
+        margin-top:4px;
+    }
+
+    @media (max-width:1200px) {
+        .progress-grid { grid-template-columns:repeat(4,1fr); }
+        .summary-grid,
+        .quote-grid { grid-template-columns:repeat(2,1fr); }
+        .workflow-grid { grid-template-columns:repeat(2,1fr); }
+    }
+
+    @media (max-width:700px) {
+        .summary-grid,
+        .quote-grid,
+        .workflow-grid { grid-template-columns:1fr; }
+
+        .progress-grid { grid-template-columns:repeat(2,1fr); }
+    }
+</style>
+
+<div class="paw-wrapper">
+
+    <div class="paw-header">
+        <div class="paw-header-top">
+            <div class="paw-title">
+                <h2>PAW {{ paw.numero_paw }}</h2>
+                <p>
+                    {{ paw.cliente|default:"Cliente pendiente" }}
+                    ·
+                    {{ paw.campo|default:"Campo pendiente" }}
+                    ·
+                    Entrega: {{ paw.fecha_entrega|default:"Pendiente" }}
+                </p>
+            </div>
+
+            <div class="paw-status-pill">
+                Estado operativo: {{ paw.estado_operativo|default:"En proceso" }}
+            </div>
+        </div>
+    </div>
+
+    <div class="progress-card">
+        <div class="progress-title">Progreso general del PAW</div>
+
+        <div class="progress-grid">
+
+            <div class="step-pill step-ok">1 PAW</div>
+
+            <div class="step-pill {% if paw.ots.exists %}step-ok{% else %}step-pending{% endif %}">
+                2 OT
+            </div>
+
+            {% with ot=paw.ots.first %}
+                <div class="step-pill {% if ot and ot.bom %}step-ok{% else %}step-pending{% endif %}">
+                    3 BOM
+                </div>
+            {% endwith %}
+
+            <div class="step-pill {% if paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                4 Compras
+            </div>
+
+            <div class="step-pill {% if paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                5 Finanzas
+            </div>
+
+            <div class="step-pill {% if paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                6 Inventario/Taller
+            </div>
+
+            <div class="step-pill {% if paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                7 Producto listo
+            </div>
+
+            <div class="step-pill {% if paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                8 Factura
+            </div>
+
+        </div>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <small>Nombre PAW</small>
+            <strong>{{ paw.nombre_paw|default:"Sin nombre" }}</strong>
+        </div>
+
+        <div class="summary-card">
+            <small>Cliente</small>
+            <strong>{{ paw.cliente|default:"-" }}</strong>
+        </div>
+
+        <div class="summary-card">
+            <small>Campo</small>
+            <strong>{{ paw.campo|default:"-" }}</strong>
+        </div>
+
+        <div class="summary-card">
+            <small>Fecha entrega</small>
+            <strong>{{ paw.fecha_entrega|default:"Pendiente" }}</strong>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Información de cotización</h3>
+
+        <div class="quote-grid">
+
+            <div class="quote-item">
+                <small>Número cotización</small>
+                {% if paw.cotizacion %}
+                    <strong>
+                        <a href="/quotes/{{ paw.cotizacion.id }}/">
+                            {{ paw.cotizacion.numero_cotizacion }}
+                        </a>
+                    </strong>
+                {% else %}
+                    <span>Sin cotización</span>
+                {% endif %}
+            </div>
+
+            <div class="quote-item">
+                <small>Nombre cotización</small>
+                <span>{{ paw.cotizacion.nombre_cotizacion|default:"-" }}</span>
+            </div>
+
+            <div class="quote-item">
+                <small>Valor</small>
+                <span>
+                    {% if paw.cotizacion %}
+                        $ {{ paw.cotizacion.valor }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="quote-item">
+                <small>Estado cotización</small>
+                <span>{{ paw.cotizacion.estado|default:"-" }}</span>
+            </div>
+
+            <div class="quote-item">
+                <small>Fecha inicio PAW</small>
+                <span>{{ paw.creado_en|date:"d/m/Y H:i" }}</span>
+            </div>
+
+            <div class="quote-item">
+                <small>Creado por</small>
+                <span>{{ paw.creado_por.username }}</span>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Flujo operativo</h3>
+
+        <div class="workflow-grid">
+
+            <div class="workflow-card done">
+                <div>
+                    <small>Etapa 1</small>
+                    <strong>PAW creado ✅</strong>
+                </div>
+            </div>
+
+            <div class="workflow-card {% if paw.ots.exists %}done{% else %}pending{% endif %}">
+                <div>
+                    <small>Etapa 2</small>
+
+                    {% if paw.ots.exists %}
+                        <strong>OT creada ✅</strong>
+                    {% else %}
+                        <strong>OT pendiente</strong>
+                    {% endif %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% if paw.ots.exists %}
+                        {% for ot in paw.ots.all %}
+                            <a class="btn" href="{% url 'ot_detail' ot.numero %}">
+                                Ver OT #{{ ot.numero }}
+                            </a>
+                        {% endfor %}
+                    {% else %}
+                        <a class="btn" href="{% url 'crear_ot_desde_paw' paw.id %}">
+                            Crear OT
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="workflow-card {% with ot=paw.ots.first %}{% if ot and ot.bom %}done{% else %}pending{% endif %}{% endwith %}">
+                <div>
+                    <small>Etapa 3</small>
+
+                    {% with ot=paw.ots.first %}
+                        {% if ot and ot.bom %}
+                            <strong>BOM creada ✅</strong>
+                        {% elif ot %}
+                            <strong>BOM pendiente</strong>
+                        {% else %}
+                            <strong>Primero cree la OT</strong>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% with ot=paw.ots.first %}
+                        {% if ot and ot.bom %}
+                            <a class="btn" href="{% url 'bom_detail' ot.bom.id %}">
+                                Ver BOM
+                            </a>
+                        {% elif ot %}
+                            <a class="btn" href="{% url 'crear_bom_desde_ot' ot.numero %}">
+                                Crear BOM
+                            </a>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+
+            <div class="workflow-card {% if paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
+                <div>
+                    <small>Etapa 4</small>
+
+                    {% with ot=paw.ots.first %}
+                        {% if ot and ot.bom and ot.bom.estado == "SOLICITUD" %}
+                            <strong>Compras enviada ✅</strong>
+                        {% elif ot and ot.bom %}
+                            <strong>Pendiente enviar</strong>
+                        {% else %}
+                            <strong>Compras pendiente</strong>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% with ot=paw.ots.first %}
+                        {% if ot and ot.bom and ot.bom.estado == "SOLICITUD" %}
+                            <a class="btn" href="{% url 'bom_detail' ot.bom.id %}">
+                                Ver solicitud
+                            </a>
+                        {% elif ot and ot.bom %}
+                            <a class="btn" href="{% url 'bom_detail' ot.bom.id %}">
+                                Revisar BOM
+                            </a>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+
+            <div class="workflow-card {% if paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
+                <div>
+                    <small>Etapa 5</small>
+
+                    {% if paw.estado_operativo == "EN_FINANZAS" %}
+                        <strong>En Finanzas ⚠️</strong>
+                    {% elif paw.estado_operativo == "PAGO_OK" or paw.estado_operativo == "MATERIAL_RECIBIDO" or paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
+                        <strong>Finanzas OK ✅</strong>
+                    {% else %}
+                        <strong>Finanzas pendiente</strong>
+                    {% endif %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% if paw.estado_operativo == "EN_FINANZAS" %}
+                        {% with ot=paw.ots.first %}
+                            {% if ot and ot.bom and ot.bom.compra and ot.bom.compra.finance_approval %}
+                                <a class="btn" href="{% url 'finanzas:detalle' ot.bom.compra.finance_approval.id %}">
+                                    Ver Finanzas
+                                </a>
+                            {% else %}
+                                <span class="badge-soft">Revisar finanzas</span>
+                            {% endif %}
+                        {% endwith %}
+                    {% elif paw.estado_operativo == "PAGO_OK" or paw.estado_operativo == "MATERIAL_RECIBIDO" or paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
+                        <span class="badge-soft">Pago OK</span>
+                    {% else %}
+                        <span class="badge-soft">Pendiente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="workflow-card {% if paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
+                <div>
+                    <small>Etapa 6</small>
+
+                    {% if paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
+                        <strong>Ensamble disponible ✅</strong>
+                    {% else %}
+                        <strong>Ensamble pendiente</strong>
+                    {% endif %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% if paw.estado_operativo == "ENTREGADO_TALLER" %}
+                        <a class="btn btn-secondary" href="{% url 'registrar_ensamble' paw.id %}">
+                            Registrar ensamble
+                        </a>
+                    {% elif paw.estado_operativo == "PRODUCTO_OK" %}
+                        <span class="badge-soft">Ensamble finalizado</span>
+                    {% else %}
+                        <span class="badge-soft">Pendiente entrega a taller</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="workflow-card {% if paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
+                <div>
+                    <small>Etapa Final</small>
+
+                    {% if paw.estado_operativo == "PRODUCTO_OK" %}
+                        <strong>Producto listo ✅</strong>
+                    {% else %}
+                        <strong>Producto pendiente</strong>
+                    {% endif %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% if paw.estado_operativo == "PRODUCTO_OK" %}
+                        <span class="badge-soft">Listo para facturación</span>
+                    {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
+                        <a class="btn" href="{% url 'marcar_producto_ok' paw.id %}">
+                            Marcar producto listo
+                        </a>
+                    {% else %}
+                        <span class="badge-soft">Pendiente ensamble</span>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    {% if paw.estado_operativo == "EN_FINANZAS" %}
+        {% with ot=paw.ots.first %}
+            {% if ot and ot.bom and ot.bom.compra and ot.bom.compra.finance_approval %}
+
+                <div class="section-card finance-alert">
+                    <h3>⚠️ PAW detenido en Finanzas</h3>
+                    <p>
+                        Estos ítems están pendientes de decisión financiera o pago.
+                        Revise el detalle para identificar exactamente qué está frenando el proceso.
+                    </p>
+
+                    <div class="finance-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descripción</th>
+                                    <th>Proveedor</th>
+                                    <th>Cantidad</th>
+                                    <th>Valor Unit.</th>
+                                    <th>Decisión</th>
+                                    <th>Pago</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {% for linea in ot.bom.compra.finance_approval.lineas.all %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ linea.purchase_line.codigo|default:"-" }}</strong>
+                                    </td>
+
+                                    <td style="min-width:260px;">
+                                        {{ linea.purchase_line.descripcion|default:"-" }}
+                                    </td>
+
+                                    <td style="min-width:160px;">
+                                        {{ linea.purchase_line.proveedor|default:"-" }}
+                                    </td>
+
+                                    <td>
+                                        {{ linea.purchase_line.cantidad_a_comprar|default:"0" }}
+                                    </td>
+
+                                    <td>
+                                        $ {{ linea.purchase_line.precio_unitario|default:"0" }}
+                                    </td>
+
+                                    <td>
+                                        {% if linea.decision == "APROBADO" %}
+                                            <span class="finance-badge finance-ok">Aprobado</span>
+                                        {% elif linea.decision == "PROGRAMADO" %}
+                                            <span class="finance-badge finance-warn">Programado</span>
+                                        {% elif linea.decision == "EN_ESPERA" %}
+                                            <span class="finance-badge finance-warn">En espera</span>
+                                        {% elif linea.decision == "RECHAZADO" %}
+                                            <span class="finance-badge finance-red">Rechazado</span>
+                                        {% else %}
+                                            <span class="finance-badge finance-gray">Pendiente</span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% if linea.pagado %}
+                                            <span class="finance-badge finance-ok">Pagado</span>
+                                        {% else %}
+                                            <span class="finance-badge finance-red">Pendiente</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7">
+                                        No hay líneas financieras registradas para este PAW.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <br>
+
+                    <a class="btn" href="{% url 'finanzas:detalle' ot.bom.compra.finance_approval.id %}">
+                        🔎 Ir a Finanzas
+                    </a>
+                </div>
+
+            {% endif %}
+        {% endwith %}
+    {% endif %}
+
+    <div class="section-card">
+        <h3 class="section-title">Facturación</h3>
+
+        {% if paw.factura %}
+            <p>Este PAW ya tiene factura asociada.</p>
+            <br>
+            <a class="btn" href="{% url 'facturacion:detalle' paw.factura.id %}">
+                Ver factura
+            </a>
+        {% else %}
+            <p>Este PAW aún está pendiente por facturar.</p>
+            <br>
+
+            {% if perms.facturacion.add_factura %}
+                <a class="btn" href="{% url 'facturacion:crear_desde_paw' paw.id %}">
+                    Enviar a facturación
+                </a>
+            {% else %}
+                <span class="badge-soft">Solo Comercial</span>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <div class="bottom-actions">
+        <a class="btn btn-secondary" href="{% url 'paw_list' %}">
+            Volver al listado
+        </a>
+    </div>
+
+</div>
+
+{% endblock %}

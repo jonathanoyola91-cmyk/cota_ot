@@ -1,0 +1,50 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Órdenes de Trabajo{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h3>Órdenes de Trabajo</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>Título</th>
+                <th>Cliente</th>
+                <th>PAW</th>
+                <th>Estado</th>
+                <th>Creado por</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ot in ots %}
+            <tr>
+                <td><strong>#{{ ot.numero }}</strong></td>
+                <td>{{ ot.titulo }}</td>
+                <td>{{ ot.cliente }}</td>
+                <td>
+                    {% if ot.paw %}
+                        <a href="{% url 'paw_detail' ot.paw.id %}">{{ ot.paw.numero_paw }}</a>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td><span class="badge">{{ ot.estado }}</span></td>
+                <td>{{ ot.creado_por.username }}</td>
+                <td>
+                    <a class="btn" href="{% url 'ot_detail' ot.numero %}">Ver</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">No hay órdenes de trabajo creadas.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

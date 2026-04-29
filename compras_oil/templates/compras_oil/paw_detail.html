@@ -1,0 +1,201 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}PAW #{{ compra.paw_numero }}{% endblock %}
+{% block page_title %}Compras · PAW #{{ compra.paw_numero }}{% endblock %}
+
+{% block content %}
+
+<div class="cards">
+    <div class="card">
+        <small>Estado</small>
+
+        {% if puede_compras %}
+            <select name="estado" form="purchase-lines-form"
+                    style="margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid #cbd5e1;font-weight:800;">
+                <option value="BORRADOR" {% if compra.estado == "BORRADOR" %}selected{% endif %}>Borrador</option>
+                <option value="EN_REVISION" {% if compra.estado == "EN_REVISION" %}selected{% endif %}>En revisión</option>
+                <option value="CERRADA" {% if compra.estado == "CERRADA" %}selected{% endif %}>Cerrada</option>
+            </select>
+        {% else %}
+            <strong>{{ compra.estado }}</strong>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <small>Tipo pago</small>
+        <strong>{{ compra.tipo_pago|default:"-" }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Total líneas</small>
+        <strong>{{ lineas|length }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Total compra</small>
+        <strong style="font-size:20px;">$ {{ total_a_comprar|floatformat:0 }}</strong>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin-top:0;">Información General</h2>
+            <p><strong>PAW:</strong> {{ compra.paw_numero }}</p>
+            <p><strong>Nombre:</strong> {{ compra.paw_nombre }}</p>
+            <p><strong>BOM:</strong> {{ compra.bom }}</p>
+            <p><strong>Actualizado:</strong> {{ compra.actualizado_en|date:"d/m/Y H:i" }}</p>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-content:flex-start;">
+            <a class="btn" href="{% url 'compras_oil:purchase_request_pdf' compra.pk %}">PDF</a>
+            <a class="btn btn-secondary" href="{% url 'compras_oil:purchase_request_excel' compra.pk %}">Excel</a>
+            <a class="btn btn-secondary" href="{% url 'compras_oil:dashboard' %}">Volver</a>
+        </div>
+    </div>
+
+    {% if puede_compras %}
+        <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb;">
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <form method="post" action="{% url 'compras_oil:enviar_finanzas' compra.pk %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">Enviar Finanzas</button>
+            </form>
+
+            <form method="post" action="{% url 'compras_oil:enviar_aprobacion' compra.pk %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">Enviar Aprobación</button>
+            </form>
+
+            <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">Enviar Inventario</button>
+            </form>
+
+            <form method="post" action="{% url 'compras_oil:generar_entrega_taller' compra.pk %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">Entrega Taller</button>
+            </form>
+        </div>
+    {% endif %}
+</div>
+
+<form method="post" id="purchase-lines-form">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;">
+            <h2 style="margin:0;">Líneas de Compra</h2>
+
+            {% if puede_compras %}
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <a class="btn" href="{% url 'compras_oil:supplier_create' %}?next={{ request.path }}">
+                        + Crear proveedor
+                    </a>
+
+                    <button class="btn" type="submit">
+                        Guardar cambios
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+
+        <br>
+
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Req.</th>
+                        <th>Disp.</th>
+                        <th>A Comprar</th>
+                        <th>Proveedor</th>
+                        <th>P.Unit</th>
+                        <th>Tipo Pago</th>
+                        <th>Condición / Obs. de compra</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for form in formset %}
+                    <tr>
+                        {{ form.id }}
+
+                        <td><strong>{{ form.instance.codigo }}</strong></td>
+
+                        <td style="min-width:240px;">
+                            {{ form.instance.descripcion }}
+                        </td>
+
+                        <td>{{ form.instance.cantidad_requerida }}</td>
+
+                        <td style="min-width:100px;">
+                            {% if puede_compras %}
+                                {{ form.cantidad_disponible }}
+                            {% else %}
+                                {{ form.instance.cantidad_disponible }}
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <strong>{{ form.instance.cantidad_a_comprar }}</strong>
+                        </td>
+
+                        <td style="min-width:180px;">
+                            {% if puede_compras %}
+                                {{ form.proveedor }}
+                            {% else %}
+                                {{ form.instance.proveedor|default:"-" }}
+                            {% endif %}
+                        </td>
+
+                        <td style="min-width:120px;">
+                            {% if puede_compras %}
+                                {{ form.precio_unitario }}
+                            {% else %}
+                                $ {{ form.instance.precio_unitario|default:"0" }}
+                            {% endif %}
+                        </td>
+
+                        <td style="min-width:140px;">
+                            {% if puede_compras %}
+                                {{ form.tipo_pago }}
+                            {% else %}
+                                {{ form.instance.tipo_pago|default:"-" }}
+                            {% endif %}
+                        </td>
+
+                        <td style="min-width:300px;">
+                            {% if puede_compras %}
+                                {{ form.observaciones_compras }}
+                            {% else %}
+                                {{ form.instance.observaciones_compras|default:"-" }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <br>
+
+        <div class="cards">
+            <div class="card">
+                <small>Total requerido</small>
+                <strong>$ {{ total_requerido|floatformat:0 }}</strong>
+            </div>
+
+            <div class="card">
+                <small>Total compra real</small>
+                <strong>$ {{ total_a_comprar|floatformat:0 }}</strong>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% endblock %}

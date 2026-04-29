@@ -1,0 +1,216 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Listado PAW{% endblock %}
+
+{% block content %}
+
+<style>
+    .paw-table-wrap {
+        overflow-x: auto;
+    }
+
+    .paw-status {
+        display: inline-block;
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .status-paw {
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+    .status-ot {
+        background: #e0f2fe;
+        color: #0369a1;
+    }
+
+    .status-bom {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .status-compras {
+        background: #ede9fe;
+        color: #5b21b6;
+    }
+
+    .status-finanzas {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .status-taller {
+        background: #e0e7ff;
+        color: #3730a3;
+    }
+
+    .status-producto {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-factura {
+        background: #bbf7d0;
+        color: #14532d;
+    }
+
+    .mini-progress {
+        display: flex;
+        gap: 4px;
+        min-width: 170px;
+    }
+
+    .mini-step {
+        height: 8px;
+        flex: 1;
+        border-radius: 999px;
+        background: #e5e7eb;
+    }
+
+    .mini-step.done {
+        background: #22c55e;
+    }
+
+    .paw-main {
+        font-weight: 800;
+        color: #0f172a;
+    }
+
+    .paw-name {
+        min-width: 180px;
+        font-weight: 600;
+    }
+
+    .action-cell {
+        white-space: nowrap;
+    }
+</style>
+
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+        <div>
+            <h3 style="margin:0;">PAW creados</h3>
+            <p style="margin:6px 0 0;color:#64748b;">
+                Seguimiento general del estado operativo sin entrar PAW por PAW.
+            </p>
+        </div>
+    </div>
+
+    <div class="paw-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Nombre</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Cotización</th>
+                    <th>Fecha entrega</th>
+                    <th>Estado PAW</th>
+                    <th>Avance</th>
+                    <th>Creado por</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for paw in paws %}
+                <tr>
+                    <td>
+                        <span class="paw-main">{{ paw.numero_paw }}</span>
+                    </td>
+
+                    <td class="paw-name">
+                        {{ paw.nombre_paw|default:"Sin nombre" }}
+                    </td>
+
+                    <td>{{ paw.cliente|default:"-" }}</td>
+
+                    <td>{{ paw.campo|default:"-" }}</td>
+
+                    <td>
+                        {% if paw.cotizacion %}
+                            {{ paw.cotizacion.numero_cotizacion }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>{{ paw.fecha_entrega|default:"Pendiente" }}</td>
+
+                    <td>
+                        {% with ot=paw.ots.first %}
+                            {% if paw.factura %}
+                                <span class="paw-status status-factura">Facturado</span>
+
+                            {% elif paw.estado_operativo == "PRODUCTO_OK" %}
+                                <span class="paw-status status-producto">Producto listo</span>
+
+                            {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
+                                <span class="paw-status status-taller">En taller</span>
+
+                            {% elif paw.estado_operativo == "PAGO_OK" %}
+                                <span class="paw-status status-finanzas">Pago aprobado</span>
+
+                            {% elif paw.estado_operativo == "EN_FINANZAS" %}
+                                <span class="paw-status status-finanzas">En finanzas</span>
+
+                            {% elif paw.estado_operativo == "EN_COMPRAS" %}
+                                <span class="paw-status status-compras">En compras</span>
+
+                            {% elif ot and ot.bom %}
+                                <span class="paw-status status-bom">BOM creada</span>
+
+                            {% elif paw.ots.exists %}
+                                <span class="paw-status status-ot">OT creada</span>
+
+                            {% else %}
+                                <span class="paw-status status-paw">PAW creado</span>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+
+                    <td>
+                        {% with ot=paw.ots.first %}
+                            <div class="mini-progress" title="PAW · OT · BOM · Compras · Finanzas · Taller · Producto · Factura">
+                                <span class="mini-step done"></span>
+
+                                <span class="mini-step {% if paw.ots.exists %}done{% endif %}"></span>
+
+                                <span class="mini-step {% if ot and ot.bom %}done{% endif %}"></span>
+
+                                <span class="mini-step {% if paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+
+                                <span class="mini-step {% if paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+
+                                <span class="mini-step {% if paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+
+                                <span class="mini-step {% if paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+
+                                <span class="mini-step {% if paw.factura %}done{% endif %}"></span>
+                            </div>
+                        {% endwith %}
+                    </td>
+
+                    <td>{{ paw.creado_por.username }}</td>
+
+                    <td class="action-cell">
+                        <a class="btn" href="{% url 'paw_detail' paw.id %}">Ver</a>
+                    </td>
+                </tr>
+
+                {% empty %}
+                <tr>
+                    <td colspan="10">No hay PAW creados.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

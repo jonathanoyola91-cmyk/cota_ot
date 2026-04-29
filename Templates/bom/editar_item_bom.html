@@ -1,0 +1,56 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Editar ítem BOM{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <h2>Editar ítem BOM</h2>
+    <p style="color:#64748b;">OT #{{ bom.workorder.numero }}</p>
+
+    <br>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="cards" style="grid-template-columns:repeat(3,1fr); gap:18px;">
+            <div class="card">
+                <small>Plano</small>
+                <input class="form-control" type="text" name="plano" value="{{ item.plano }}">
+            </div>
+
+            <div class="card">
+                <small>Código / Parte número</small>
+                <input class="form-control" type="text" name="codigo" value="{{ item.codigo }}">
+            </div>
+
+            <div class="card">
+                <small>Descripción</small>
+                <input class="form-control" type="text" name="descripcion" value="{{ item.descripcion }}" required>
+            </div>
+
+            <div class="card">
+                <small>Unidad</small>
+                <input class="form-control" type="text" name="unidad" value="{{ item.unidad }}">
+            </div>
+
+            <div class="card">
+                <small>Cant. estándar</small>
+                <input class="form-control" type="number" step="0.001" name="cantidad_estandar" value="{{ item.cantidad_estandar }}">
+            </div>
+
+            <div class="card">
+                <small>Cant. solicitada</small>
+                <input class="form-control" type="number" step="0.001" name="cantidad_solicitada" value="{{ item.cantidad_solicitada }}">
+            </div>
+
+            <div class="card" style="grid-column:span 3;">
+                <small>Observaciones</small>
+                <input class="form-control" type="text" name="observaciones" value="{{ item.observaciones }}">
+            </div>
+        </div>
+
+        <button class="btn">Guardar cambios</button>
+        <a class="btn btn-secondary" href="{% url 'agregar_item_bom' bom.id %}">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

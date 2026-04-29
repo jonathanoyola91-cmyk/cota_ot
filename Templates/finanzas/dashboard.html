@@ -1,0 +1,48 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Finanzas{% endblock %}
+{% block page_title %}Finanzas · Solicitudes{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h2>Solicitudes en Finanzas</h2>
+    <br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>PAW</th>
+                <th>Estado</th>
+                <th>Enviado por</th>
+                <th>Actualizado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>
+                    <strong>{{ item.purchase_request.paw_numero }}</strong><br>
+                    {{ item.purchase_request.paw_nombre }}
+                </td>
+                <td><span class="badge">{{ item.estado }}</span></td>
+                <td>{{ item.enviado_por|default:"-" }}</td>
+                <td>{{ item.actualizado_en|date:"d/m/Y H:i" }}</td>
+                <td>
+                    <a class="btn" href="{% url 'finanzas:detalle' item.id %}">
+                        Abrir
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">No hay solicitudes en finanzas.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

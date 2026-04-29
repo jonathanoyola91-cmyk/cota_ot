@@ -1,0 +1,226 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}
+    {% if modo == "editar" %}Editar Cotización{% else %}Nueva Cotización{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .quote-page {
+        max-width: 1180px;
+        margin: 0 auto;
+    }
+
+    .quote-panel {
+        background: #fff;
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 10px 25px rgba(0,0,0,.05);
+    }
+
+    .quote-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 22px;
+    }
+
+    .quote-header h2 {
+        margin: 0;
+        font-size: 24px;
+        color: #0f172a;
+    }
+
+    .quote-header p {
+        margin-top: 6px;
+        color: #64748b;
+    }
+
+    .quote-top-grid {
+        display: grid;
+        grid-template-columns: 1.2fr .8fr .8fr;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .quote-mini-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 16px;
+    }
+
+    .quote-mini-card small {
+        display: block;
+        color: #64748b;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .quote-mini-card strong {
+        font-size: 22px;
+        color: #0f172a;
+    }
+
+    .quote-mini-card select {
+        width: 100%;
+        max-width: 220px;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #fff;
+    }
+
+    .quote-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px 20px;
+    }
+
+    .quote-field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .quote-field.full {
+        grid-column: 1 / -1;
+    }
+
+    .quote-field label {
+        font-size: 13px;
+        font-weight: 800;
+        color: #334155;
+    }
+
+    .quote-field input,
+    .quote-field select,
+    .quote-field textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        font-size: 14px;
+        background: #fff;
+        color: #0f172a;
+    }
+
+    .quote-field textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    .quote-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+    }
+
+    @media(max-width: 900px) {
+        .quote-top-grid,
+        .quote-form-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="quote-page">
+    <div class="quote-panel">
+
+        <div class="quote-header">
+            <div>
+                <h2>
+                    {% if modo == "editar" %}
+                        Editar Cotización {{ cotizacion.numero_cotizacion }}
+                    {% else %}
+                        Crear Cotización
+                    {% endif %}
+                </h2>
+                <p>Número automático: <strong>{{ numero_preview }}</strong></p>
+            </div>
+
+            <a href="/quotes/" class="btn btn-secondary">Volver</a>
+        </div>
+
+        <form method="post">
+            {% if form.errors %}
+                <div style="background:#fee2e2;color:#991b1b;padding:14px;border-radius:12px;margin-bottom:16px;">
+                     <strong>Hay errores en el formulario:</strong>
+                     {{ form.errors }}
+                </div>
+            {% endif %}
+
+            {% csrf_token %}
+
+            <div class="quote-top-grid">
+                <div class="quote-mini-card">
+                    <small>Número de cotización</small>
+                    <strong>{{ numero_preview }}</strong>
+                </div>
+
+                <div class="quote-mini-card">
+                    <small>Estado</small>
+                    {{ form.estado }}
+                </div>
+
+                <div class="quote-mini-card">
+                    <small>Empresa</small>
+                    {{ form.empresa }}
+                </div>
+            </div>
+
+            <div class="quote-form-grid">
+            
+               <div class="quote-field full">
+                    <label>Nombre cotización</label>
+                    {{ form.nombre_cotizacion }}
+               </div>
+
+                <div class="quote-field">
+                    <label>Cliente registrado</label>
+                    {{ form.cliente_registrado }}
+                    <small style="color:#64748b;">
+                        Seleccione el cliente previamente creado.
+                    </small>
+                </div>
+
+                
+
+                <div class="quote-field">
+                    <label>Campo</label>
+                    {{ form.campo }}
+                </div>
+
+                <div class="quote-field">
+                    <label>Fecha cotización</label>
+                    {{ form.fecha_cotizacion }}
+                </div>
+
+                <div class="quote-field">
+                    <label>Valor</label>
+                    {{ form.valor }}
+                </div>
+
+                <div class="quote-field full">
+                    <label>Observaciones</label>
+                    {{ form.observaciones }}
+                </div>
+
+            </div>
+
+            <div class="quote-actions">
+                <button class="btn" type="submit">
+                    {% if modo == "editar" %}Guardar cambios{% else %}Crear cotización{% endif %}
+                </button>
+
+                <a href="/quotes/" class="btn btn-secondary">Cancelar</a>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+{% endblock %}

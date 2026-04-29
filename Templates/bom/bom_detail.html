@@ -1,0 +1,60 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}BOM OT #{{ bom.workorder.numero }}{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <h2>BOM OT #{{ bom.workorder.numero }}</h2>
+    <p>Estado: <strong>{{ bom.estado }}</strong></p>
+    <p>Template: {{ bom.template|default:"Manual" }}</p>
+
+    <br>
+
+<a class="btn" href="{% url 'agregar_item_bom' bom.id %}">Agregar ítem manual</a>
+<br><br>
+
+{% if bom.estado == "BORRADOR" %}
+<form method="post" action="{% url 'enviar_bom_compras' bom.id %}" style="display:inline;">
+    {% csrf_token %}
+    <button class="btn">Enviar a compras</button>
+</form>
+{% else %}
+<span class="badge">Enviado a compras ✅</span>
+{% endif %}
+<br><br>
+    <table>
+        <thead>
+            <tr>
+                <th>Plano</th>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Unidad</th>
+                <th>Cant. estándar</th>
+                <th>Cant. solicitada</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in bom.items.all %}
+            <tr>
+                <td>{{ item.plano }}</td>
+                <td>{{ item.codigo }}</td>
+                <td>{{ item.descripcion }}</td>
+                <td>{{ item.unidad }}</td>
+                <td>{{ item.cantidad_estandar }}</td>
+                <td>{{ item.cantidad_solicitada }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6">BOM manual vacío. Luego agregamos creación item por item.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <br>
+
+    {% if bom.workorder.paw %}
+        <a class="btn btn-secondary" href="{% url 'paw_detail' bom.workorder.paw.id %}">Volver al PAW</a>
+    {% endif %}
+</div>
+{% endblock %}

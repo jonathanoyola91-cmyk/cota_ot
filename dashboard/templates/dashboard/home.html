@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>{% block title %}Impetus Control{% endblock %}</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    font-family:Arial, Helvetica, sans-serif;
+    background:#eef2f6;
+    color:#1e293b;
+}
+
+.layout{
+    display:flex;
+    min-height:100vh;
+}
+
+/* SIDEBAR */
+
+.sidebar{
+    width:250px;
+    background:#0f172a;
+    padding:24px 16px;
+}
+
+.brand{
+    color:#fbbf24;
+    font-size:24px;
+    font-weight:700;
+    margin-bottom:30px;
+}
+
+.menu a{
+    display:block;
+    color:#cbd5e1;
+    text-decoration:none;
+    padding:12px 14px;
+    border-radius:10px;
+    margin-bottom:8px;
+    transition:.2s;
+    font-size:14px;
+}
+
+.menu a:hover,
+.menu a.active{
+    background:#1d4ed8;
+    color:#fff;
+}
+
+/* MAIN */
+
+.main{
+    flex:1;
+    padding:24px;
+}
+
+/* TOPBAR */
+
+.topbar{
+    background:#fff;
+    border-radius:16px;
+    padding:18px 24px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:24px;
+    box-shadow:0 10px 25px rgba(0,0,0,.05);
+}
+
+.topbar h1{
+    font-size:24px;
+}
+
+.user-box{
+    font-size:14px;
+    color:#64748b;
+}
+
+/* QUICK CARDS */
+
+.dashboard-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:18px;
+    margin-bottom:28px;
+}
+
+.quick-card{
+    background:#fff;
+    padding:22px;
+    border-radius:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.05);
+    transition:.2s;
+    text-decoration:none;
+    color:#111827;
+}
+
+.quick-card:hover{
+    transform:translateY(-4px);
+}
+
+.quick-card small{
+    color:#64748b;
+    display:block;
+    margin-bottom:8px;
+}
+
+.quick-card strong{
+    font-size:18px;
+}
+
+/* PANEL */
+
+.panel{
+    background:#fff;
+    padding:24px;
+    border-radius:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.05);
+}
+
+.panel h3{
+    margin-bottom:16px;
+}
+
+.panel p{
+    color:#64748b;
+    line-height:1.6;
+}
+
+/* COMPONENTES GENERALES */
+
+.cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:18px;
+    margin-bottom:24px;
+}
+
+.card{
+    background:#ffffff;
+    border-radius:16px;
+    padding:20px;
+    box-shadow:0 10px 25px rgba(0,0,0,.05);
+}
+
+.card small{
+    display:block;
+    color:#64748b;
+    margin-bottom:8px;
+    font-size:13px;
+}
+
+.card strong{
+    font-size:22px;
+    color:#0f172a;
+}
+
+/* TABLAS */
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+    border-radius:14px;
+    overflow:hidden;
+}
+
+th{
+    background:#f8fafc;
+    color:#475569;
+    text-align:left;
+    padding:14px;
+    font-size:13px;
+    border-bottom:1px solid #e2e8f0;
+}
+
+td{
+    padding:14px;
+    border-bottom:1px solid #edf2f7;
+    font-size:14px;
+}
+
+tr:hover{
+    background:#f8fafc;
+}
+
+/* BOTONES */
+
+.btn{
+    display:inline-block;
+    background:#2563eb;
+    color:#fff;
+    text-decoration:none;
+    padding:10px 14px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:600;
+    border:none;
+    cursor:pointer;
+}
+
+.btn:hover{
+    background:#1d4ed8;
+}
+
+.btn-secondary{
+    background:#64748b;
+}
+
+.btn-secondary:hover{
+    background:#475569;
+}
+
+/* TOAST */
+
+.toast-wrap{
+    position:fixed;
+    top:18px;
+    right:20px;
+    z-index:9999;
+}
+
+.toast{
+    background:#16a34a;
+    color:#fff;
+    padding:12px 16px;
+    border-radius:10px;
+    margin-bottom:10px;
+    box-shadow:0 10px 20px rgba(0,0,0,.15);
+}
+
+
+.form-control{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    font-size:14px;
+    background:#fff;
+}
+
+.form-control:focus{
+    outline:none;
+    border-color:#2563eb;
+    box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+/* RESPONSIVE */
+
+@media(max-width:1100px){
+    .dashboard-grid{
+        grid-template-columns:repeat(2,1fr);
+    }
+}
+
+@media(max-width:800px){
+    .layout{
+        flex-direction:column;
+    }
+
+    .sidebar{
+        width:100%;
+    }
+
+    .dashboard-grid{
+        grid-template-columns:1fr;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="layout">
+
+<aside class="sidebar">
+<div class="brand">IMPETUS CONTROL</div>
+
+<nav class="menu">
+
+    {% if request.user.is_superuser or request.user.groups.filter(name='COMPRAS').exists %}
+    <a href="/compras_oil/"
+       class="{% if '/compras_oil/' in request.path %}active{% endif %}">
+        Compras OIL
+    </a>
+    {% endif %}
+
+    <!-- PAW visible para todos -->
+    <a href="/paw/"
+       class="{% if '/paw/' in request.path %}active{% endif %}">
+        PAW
+    </a>
+
+    <!-- OT visible para todos -->
+    <a href="/ot/"
+       class="{% if '/ot/' in request.path %}active{% endif %}">
+        Órdenes de Trabajo
+    </a>
+
+    {% if request.user.is_superuser or request.user.groups.filter(name='FINANZAS').exists %}
+    <a href="/finanzas/"
+       class="{% if request.path == '/finanzas/' %}active{% endif %}">
+        Finanzas
+    </a>
+    {% endif %}
+
+    {% if request.user.is_superuser or request.user.groups.filter(name='GERENTE').exists %}
+    <a href="{% url 'finanzas:aprobacion_pagos' %}"
+       class="{% if 'aprobacion-pagos' in request.path %}active{% endif %}">
+        Aprobación pagos
+    </a>
+    {% endif %}
+
+    {% if request.user.is_superuser or request.user.groups.filter(name='INVENTARIO').exists %}
+    <a href="/inventario/"
+       class="{% if '/inventario/' in request.path %}active{% endif %}">
+        Inventario
+    </a>
+    {% endif %}
+
+    {% if request.user.is_superuser or request.user.groups.filter(name='COMERCIAL').exists %}
+    <a href="/quotes/"
+       class="{% if '/quotes/' in request.path and not '/clientes/' in request.path %}active{% endif %}">
+        Cotizaciones
+    </a>
+
+    <a href="/quotes/clientes/"
+       class="{% if '/clientes/' in request.path %}active{% endif %}">
+        Clientes
+    </a>
+    {% endif %}
+
+    {% if request.user.is_superuser %}
+    <a href="/admin/"
+       class="{% if '/admin/' in request.path %}active{% endif %}">
+        Admin Django
+    </a>
+    {% endif %}
+
+</nav>
+
+</aside>
+
+<main class="main">
+
+<div class="topbar">
+<h1>Dashboard</h1>
+<div class="user-box">
+Usuario: {{ request.user.username }}
+</div>
+<a href="/" class="btn" style="
+    background:#111827;
+    color:#fff;
+    border-radius:10px;
+    padding:6px 12px;
+    font-weight:600;
+">
+    🏠 Dashboard
+</a>
+</div>
+
+
+{% block content %}{% endblock %}
+
+</main>
+</div>
+
+</body>
+</html>

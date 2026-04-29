@@ -1,0 +1,81 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Inventario{% endblock %}
+
+{% block content %}
+
+<div class="cards">
+    <div class="card"><small>Recepciones</small><strong>{{ total_recepciones }}</strong></div>
+    <div class="card"><small>Entregas a taller</small><strong>{{ total_entregas }}</strong></div>
+    <div class="card"><small>Líneas pendientes</small><strong>{{ lineas_pendientes }}</strong></div>
+    <div class="card"><small>Líneas listas</small><strong>{{ lineas_listas }}</strong></div>
+</div>
+
+<div class="panel">
+    <h3>Recepciones de inventario</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>PAW</th>
+                <th>Nombre</th>
+                <th>Líneas</th>
+                <th>Actualizado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in recepciones %}
+            <tr>
+                <td><strong>{{ r.purchase_request.paw_numero }}</strong></td>
+                <td>{{ r.purchase_request.paw_nombre }}</td>
+                <td>{{ r.lineas.count }}</td>
+                <td>{{ r.actualizado_en|date:"d/m/Y H:i" }}</td>
+                <td>
+                    <a class="btn" href="{% url 'inventario:recepcion_detail' r.id %}">
+                        Recibir
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No hay recepciones pendientes.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<br>
+
+<div class="panel">
+    <h3>Entregas a taller</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>PAW</th>
+                <th>Nombre</th>
+                <th>Líneas</th>
+                <th>Actualizado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in entregas %}
+            <tr>
+                <td><strong>{{ e.purchase_request.paw_numero }}</strong></td>
+                <td>{{ e.purchase_request.paw_nombre }}</td>
+                <td>{{ e.lineas.count }}</td>
+                <td>{{ e.actualizado_en|date:"d/m/Y H:i" }}</td>
+                <td>
+                    <a class="btn" href="{% url 'inventario:entrega_taller_detail' e.id %}">
+                        Ver entrega
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No hay entregas a taller generadas.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

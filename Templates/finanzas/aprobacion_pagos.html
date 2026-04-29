@@ -1,0 +1,114 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Aprobación de Pagos{% endblock %}
+{% block page_title %}Gerencia · Aprobación de Pagos{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+
+    <h2 style="margin-top:0;">Aprobación de pagos</h2>
+    <p style="color:#64748b;margin-top:4px;">
+        El gerente aprueba, programa, deja en espera o rechaza pagos antes de que finanzas pueda marcarlos como pagados.
+    </p>
+
+    <br>
+
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Proveedor</th>
+                    <th>Valor</th>
+                    <th>Condición</th>
+                    <th>Decisión</th>
+                    <th>Fecha programada</th>
+                    <th>Nota gerente</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for linea in lineas %}
+                <tr>
+                    <form method="post" action="{% url 'finanzas:aprobar_linea_pago' linea.id %}">
+                        {% csrf_token %}
+
+                        <td>
+                            <strong>{{ linea.approval.purchase_request.paw_numero }}</strong>
+                        </td>
+
+                        <td>
+                            <strong>{{ linea.purchase_line.codigo }}</strong>
+                        </td>
+
+                        <td style="min-width:260px;">
+                            {{ linea.purchase_line.descripcion }}
+                        </td>
+
+                        <td style="min-width:180px;">
+                            {% if linea.purchase_line.proveedor %}
+                                <a href="{% url 'compras_oil:supplier_detail' linea.purchase_line.proveedor.id %}"
+                                   style="font-weight:800;color:#2563eb;text-decoration:none;">
+                                    {{ linea.purchase_line.proveedor }}
+                                </a>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            $ {{ linea.purchase_line.precio_unitario|default:"0" }}
+                        </td>
+
+                        <td style="min-width:220px;">
+                            {{ linea.purchase_line.observaciones_compras|default:"-" }}
+                        </td>
+
+                        <td>
+                            <select name="decision" style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
+                                <option value="PENDIENTE" {% if linea.decision == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
+                                <option value="APROBADO" {% if linea.decision == "APROBADO" %}selected{% endif %}>Aprobado para pagar</option>
+                                <option value="PROGRAMADO" {% if linea.decision == "PROGRAMADO" %}selected{% endif %}>Programado</option>
+                                <option value="EN_ESPERA" {% if linea.decision == "EN_ESPERA" %}selected{% endif %}>En espera</option>
+                                <option value="RECHAZADO" {% if linea.decision == "RECHAZADO" %}selected{% endif %}>Rechazado</option>
+                            </select>
+                        </td>
+
+                        <td>
+                            <input type="date"
+                                   name="scheduled_date"
+                                   value="{{ linea.scheduled_date|date:'Y-m-d' }}"
+                                   style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
+                        </td>
+
+                        <td>
+                            <textarea name="nota_admin"
+                                      rows="2"
+                                      style="min-width:220px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">{{ linea.nota_admin }}</textarea>
+                        </td>
+
+                        <td>
+                            <button class="btn" type="submit">
+                                Guardar
+                            </button>
+                        </td>
+                    </form>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        No hay pagos pendientes de aprobación.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+{% endblock %}

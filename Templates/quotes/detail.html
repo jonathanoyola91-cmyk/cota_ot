@@ -1,0 +1,93 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Cotización {{ cotizacion.numero_cotizacion }}{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+
+<div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:20px;">
+    
+    <div>
+        <h2 style="margin:0;">
+            Cotización {{ cotizacion.numero_cotizacion }}
+        </h2>
+
+        <p style="margin-top:8px;color:#64748b;">
+            {{ cotizacion.nombre_cotizacion }}
+        </p>
+    </div>
+
+    <div>
+        {% if cotizacion.estado == "ADJUDICADA" %}
+            <span class="badge" style="background:#dcfce7;color:#166534;">
+                ADJUDICADA
+            </span>
+        {% elif cotizacion.estado == "EVALUACION" %}
+            <span class="badge" style="background:#fef3c7;color:#92400e;">
+                EN EVALUACIÓN
+            </span>
+        {% else %}
+            <span class="badge">
+                {{ cotizacion.estado }}
+            </span>
+        {% endif %}
+    </div>
+
+</div>
+
+<div class="cards">
+
+    <div class="card">
+        <small>Cliente</small>
+        <strong>{{ cotizacion.cliente }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Campo</small>
+        <strong>{{ cotizacion.campo|default:"-" }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Empresa</small>
+        <strong>{{ cotizacion.empresa }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Valor</small>
+        <strong>$ {{ cotizacion.valor }}</strong>
+    </div>
+
+</div>
+
+<div class="panel" style="margin-top:20px;">
+
+<h3>Observaciones</h3>
+
+<p>
+{{ cotizacion.observaciones|default:"Sin observaciones registradas." }}
+</p>
+
+</div>
+
+<div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
+
+<a href="/quotes/" class="btn btn-secondary">
+Volver
+</a>
+
+<a href="/quotes/{{ cotizacion.id }}/editar/" class="btn">
+    Editar cotización
+</a>
+
+{% if cotizacion.estado == "ADJUDICADA" %}
+<a href="/paw/crear/{{ cotizacion.id }}/" class="btn">
+Generar PAW
+</a>
+{% endif %}
+
+</div>
+
+</div>
+
+{% endblock %}

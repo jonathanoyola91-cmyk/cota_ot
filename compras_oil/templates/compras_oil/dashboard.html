@@ -1,0 +1,463 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Compras OIL{% endblock %}
+{% block page_title %}Compras OIL · Solicitudes PAW{% endblock %}
+
+{% block content %}
+
+<style>
+    .purchase-dashboard {
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+    }
+
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+    }
+
+    .kpi-card {
+        background: #fff;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 24px rgba(15,23,42,.06);
+        border-left: 5px solid #cbd5e1;
+    }
+
+    .kpi-card small {
+        color: #64748b;
+        font-weight: 800;
+        font-size: 12px;
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .kpi-card strong {
+        font-size: 28px;
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .kpi-blue { border-left-color:#2563eb; }
+    .kpi-yellow { border-left-color:#f59e0b; }
+    .kpi-green { border-left-color:#16a34a; }
+    .kpi-gray { border-left-color:#64748b; }
+
+    .panel-pro {
+        background: #fff;
+        border-radius: 18px;
+        padding: 20px;
+        box-shadow: 0 10px 24px rgba(15,23,42,.06);
+    }
+
+    .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .panel-head h2 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .panel-head p {
+        margin: 6px 0 0;
+        color: #64748b;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .table-wrap {
+        overflow-x: auto;
+    }
+
+    .table-pro {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 8px;
+        min-width: 1050px;
+    }
+
+    .table-pro th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 12px;
+        text-align: left;
+        padding: 14px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        font-weight: 900;
+        letter-spacing: .35px;
+        text-transform: uppercase;
+    }
+
+    .table-pro tbody tr {
+        background: #fff;
+        box-shadow: 0 2px 10px rgba(15,23,42,.035);
+    }
+
+    .table-pro td {
+        padding: 18px 16px;
+        border-top: 1px solid #eef2f7;
+        border-bottom: 1px solid #eef2f7;
+        font-size: 14px;
+        vertical-align: middle;
+        color: #0f172a;
+    }
+
+    .table-pro td:first-child {
+        border-left: 1px solid #eef2f7;
+        border-radius: 14px 0 0 14px;
+    }
+
+    .table-pro td:last-child {
+        border-right: 1px solid #eef2f7;
+        border-radius: 0 14px 14px 0;
+    }
+
+    .table-pro tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .paw-number {
+        display: block;
+        font-size: 15px;
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .paw-label {
+        display: block;
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 700;
+        margin-top: 3px;
+    }
+
+    .nombre-paw {
+        font-size: 14px;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1.35;
+        min-width: 230px;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 900;
+        background: #e5e7eb;
+        color: #374151;
+        white-space: nowrap;
+    }
+
+    .badge-borrador {
+        background: #f1f5f9;
+        color: #334155;
+    }
+
+    .badge-revision {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .badge-completo {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .progress-box {
+        min-width: 230px;
+        max-width: 280px;
+    }
+
+    .progress-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+
+    .progress-main {
+        font-size: 13px;
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .progress-sub {
+        font-size: 11px;
+        font-weight: 800;
+        color: #64748b;
+    }
+
+    .progress-percent {
+        font-size: 13px;
+        font-weight: 900;
+        color: #2563eb;
+        background: #eff6ff;
+        padding: 4px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .progress-track {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        border-radius: 999px;
+    }
+
+    .progress-low { background:#dc2626; }
+    .progress-mid { background:#f59e0b; }
+    .progress-high { background:#16a34a; }
+
+    .muted-text {
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .btn-small {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 9px 14px;
+        border-radius: 12px;
+        border: 0;
+        background: #2563eb;
+        color: #fff;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 6px 12px rgba(37,99,235,.18);
+    }
+
+    .btn-small:hover {
+        background: #1d4ed8;
+        color: #fff;
+    }
+
+    .btn-close {
+        background: #16a34a;
+    }
+
+    .btn-close:hover {
+        background: #15803d;
+    }
+
+    .btn-disabled {
+        background: #e2e8f0;
+        color: #475569;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    .empty-state {
+        padding: 22px;
+        text-align: center;
+        color: #64748b;
+        font-weight: 800;
+        background: #f8fafc;
+        border-radius: 14px;
+    }
+
+    @media(max-width: 900px) {
+        .panel-pro {
+            padding: 16px;
+        }
+
+        .kpi-card strong {
+            font-size: 24px;
+        }
+    }
+</style>
+
+<div class="purchase-dashboard">
+
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-blue">
+            <small>Solicitudes activas</small>
+            <strong>{{ total_activas|default:0 }}</strong>
+        </div>
+
+        <div class="kpi-card kpi-gray">
+            <small>Borrador</small>
+            <strong>{{ total_borrador|default:0 }}</strong>
+        </div>
+
+        <div class="kpi-card kpi-yellow">
+            <small>En revisión</small>
+            <strong>{{ total_revision|default:0 }}</strong>
+        </div>
+
+        <div class="kpi-card kpi-green">
+            <small>Cerradas</small>
+            <strong>{{ total_cerrada|default:0 }}</strong>
+        </div>
+    </div>
+
+    <div class="panel-pro">
+
+        <div class="panel-head">
+            <div>
+                <h2>Solicitudes activas</h2>
+                <p>Solo se muestran PAW abiertos. Las solicitudes cerradas quedan fuera del listado operativo.</p>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="table-pro">
+                <thead>
+                    <tr>
+                        <th>PAW</th>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th>Avance</th>
+                        <th>Tipo pago</th>
+                        <th>Creado por</th>
+                        <th>Actualizado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for compra in compras %}
+                    <tr>
+                        <td>
+                            <span class="paw-number">{{ compra.paw_numero }}</span>
+                            <span class="paw-label">Solicitud de compra</span>
+                        </td>
+
+                        <td>
+                            <div class="nombre-paw">
+                                {{ compra.paw_nombre }}
+                            </div>
+                        </td>
+
+                        <td>
+                            {% if compra.estado == "BORRADOR" %}
+                                <span class="badge badge-borrador">Borrador</span>
+                            {% elif compra.estado == "EN_REVISION" %}
+                                <span class="badge badge-revision">En revisión</span>
+                            {% elif compra.estado == "CERRADA" %}
+                                <span class="badge badge-completo">Cerrada</span>
+                            {% else %}
+                                <span class="badge">{{ compra.estado }}</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <div class="progress-box">
+                                <div class="progress-top">
+                                    <div>
+                                        <div class="progress-main">
+                                            {{ compra.lineas_diligenciadas|default:0 }}/{{ compra.total_lineas|default:0 }} ítems
+                                        </div>
+                                        <div class="progress-sub">
+                                            diligenciados
+                                        </div>
+                                    </div>
+
+                                    <span class="progress-percent">
+                                        {{ compra.porcentaje_avance|default:0 }}%
+                                    </span>
+                                </div>
+
+                                <div class="progress-track">
+                                    <div
+                                        class="progress-fill
+                                            {% if compra.porcentaje_avance < 40 %}
+                                                progress-low
+                                            {% elif compra.porcentaje_avance < 80 %}
+                                                progress-mid
+                                            {% else %}
+                                                progress-high
+                                            {% endif %}
+                                        "
+                                        style="width:{{ compra.porcentaje_avance|default:0 }}%;">
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td>
+                            {% if compra.tipo_pago %}
+                                <span class="muted-text">{{ compra.tipo_pago }}</span>
+                            {% else %}
+                                <span class="muted-text">-</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <span class="muted-text">{{ compra.creado_por|default:"-" }}</span>
+                        </td>
+
+                        <td>
+                            <span class="muted-text">{{ compra.actualizado_en|date:"d/m/Y H:i" }}</span>
+                        </td>
+
+                        <td>
+                            <div class="actions">
+                                <a class="btn-small" href="{% url 'compras_oil:paw_detail' compra.pk %}">
+                                    Abrir
+                                </a>
+
+                                {% if compra.total_lineas > 0 and compra.lineas_diligenciadas == compra.total_lineas and compra.lineas_pagadas == compra.total_lineas %}
+                                    <form method="post" action="{% url 'compras_oil:cerrar_solicitud' compra.pk %}"
+                                          onsubmit="return confirm('¿Cerrar esta solicitud de compra?');">
+                                        {% csrf_token %}
+                                        <button class="btn-small btn-close" type="submit">
+                                            Cerrar
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <span class="btn-small btn-disabled">
+                                        Incompleta
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                No hay solicitudes activas de compra.
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

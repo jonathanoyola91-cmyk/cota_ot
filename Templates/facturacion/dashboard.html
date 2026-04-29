@@ -1,0 +1,51 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Facturación{% endblock %}
+{% block page_title %}Facturación{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+    <h2>Facturas / PAW en facturación</h2>
+    <br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>Campo</th>
+                <th>Factura</th>
+                <th>Precio</th>
+                <th>Radicación</th>
+                <th>Estado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for factura in facturas %}
+            <tr>
+                <td><strong>{{ factura.numero_paw }}</strong></td>
+                <td>{{ factura.cliente }}</td>
+                <td>{{ factura.campo }}</td>
+                <td>{{ factura.numero_factura|default:"Sin número" }}</td>
+                <td>$ {{ factura.precio|default:"0" }}</td>
+                <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
+                <td><span class="badge">{{ factura.estado }}</span></td>
+                <td>
+                    <a class="btn" href="{% url 'facturacion:detalle' factura.id %}">
+                        Abrir
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8">No hay facturas registradas.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
