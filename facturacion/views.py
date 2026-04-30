@@ -113,3 +113,18 @@ def radicar_factura(request, pk):
 
     messages.success(request, "Factura radicada correctamente.")
     return redirect("facturacion:detalle", pk=factura.pk)
+
+@login_required
+def marcar_pagada(request, pk):
+    if not tiene_rol(request.user, ["FINANZAS", "GERENTE", "ADMIN"]):
+        messages.error(request, "Solo Finanzas puede marcar facturas como pagadas.")
+        return redirect("facturacion:detalle", pk=pk)
+
+    factura = get_object_or_404(Factura, pk=pk)
+
+    factura.estado = "pagada"
+    factura.fecha_pago = timezone.now().date()
+    factura.save(update_fields=["estado", "fecha_pago", "actualizado_en"])
+
+    messages.success(request, "Factura marcada como pagada correctamente.")
+    return redirect("facturacion:detalle", pk=factura.pk)

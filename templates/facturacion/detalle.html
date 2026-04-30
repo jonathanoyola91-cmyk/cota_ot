@@ -52,8 +52,23 @@
 
             <div class="card">
                 <small>Fecha vencimiento</small>
-                {{ form.fecha_vencimiento }}
+                <input 
+                    type="date" 
+                    name="fecha_vencimiento" 
+                    value="{{ factura.fecha_vencimiento|date:'Y-m-d' }}" 
+                    class="form-control"
+                >
             </div>
+            
+            <div class="card">
+                <small>IVA (19%)</small>
+                <strong>$ {{ factura.iva|floatformat:0 }}</strong>
+            </div>
+
+            <div class="card">
+                <small>Total con IVA</small>
+                <strong>$ {{ factura.total_con_iva|floatformat:0 }}</strong>
+            </div>   
 
             <div class="card">
                 <small>Tipo pago</small>
@@ -90,6 +105,12 @@
 
         <a class="btn btn-secondary" href="{% url 'facturacion:radicar' factura.id %}">
             Radicar factura
+        </a>
+
+        <a class="btn" style="background:#16a34a;color:white;"
+           href="{% url 'facturacion:marcar_pagada' factura.id %}"
+           onclick="return confirm('¿Marcar esta factura como pagada?');">
+            Marcar como pagada
         </a>
     </form>
 </div>
