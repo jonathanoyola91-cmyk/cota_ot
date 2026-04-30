@@ -20,7 +20,7 @@ def obtener_bom_seguro(ot):
 
 @login_required
 def dashboard(request):
-    ots = WorkOrder.objects.select_related("paw").order_by("-id")
+    ots = WorkOrder.objects.select_related("paw").order_by("-numero")
 
     pendientes_bom = []
     bom_borrador = []
