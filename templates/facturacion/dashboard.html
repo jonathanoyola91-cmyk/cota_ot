@@ -1,4 +1,5 @@
 {% extends "dashboard/home.html" %}
+{% load humanize %}
 
 {% block title %}Facturación{% endblock %}
 {% block page_title %}Facturación{% endblock %}
@@ -87,25 +88,25 @@
     <div class="facturacion-kpi-grid">
         <div class="facturacion-kpi oilgas">
             <small>IVA mes actual</small>
-            <strong>$ {{ analisis_og.iva_mes|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_og.iva_mes|default:0|floatformat:0|intcomma }}</strong>
             <span>{{ analisis_og.cantidad }} factura(s) OG registradas</span>
         </div>
 
         <div class="facturacion-kpi oilgas">
             <small>IVA cuatrimestre actual</small>
-            <strong>$ {{ analisis_og.iva_cuatrimestre|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_og.iva_cuatrimestre|default:0|floatformat:0|intcomma }}</strong>
             <span>Ene-Abr, May-Ago o Sep-Dic según fecha actual</span>
         </div>
 
         <div class="facturacion-kpi oilgas">
             <small>IVA acumulado año</small>
-            <strong>$ {{ analisis_og.iva_anio|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_og.iva_anio|default:0|floatformat:0|intcomma }}</strong>
             <span>Según fecha de radicación</span>
         </div>
 
         <div class="facturacion-kpi oilgas">
             <small>Total facturado año con IVA</small>
-            <strong>$ {{ analisis_og.total_anio|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_og.total_anio|default:0|floatformat:0|intcomma }}</strong>
             <span>Subtotal + IVA</span>
         </div>
     </div>
@@ -114,25 +115,25 @@
     <div class="facturacion-kpi-grid">
         <div class="facturacion-kpi impetus">
             <small>IVA mes actual</small>
-            <strong>$ {{ analisis_imp.iva_mes|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_imp.iva_mes|default:0|floatformat:0|intcomma }}</strong>
             <span>{{ analisis_imp.cantidad }} factura(s) IMP registradas</span>
         </div>
 
         <div class="facturacion-kpi impetus">
             <small>IVA cuatrimestre actual</small>
-            <strong>$ {{ analisis_imp.iva_cuatrimestre|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_imp.iva_cuatrimestre|default:0|floatformat:0|intcomma }}</strong>
             <span>Ene-Abr, May-Ago o Sep-Dic según fecha actual</span>
         </div>
 
         <div class="facturacion-kpi impetus">
             <small>IVA acumulado año</small>
-            <strong>$ {{ analisis_imp.iva_anio|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_imp.iva_anio|default:0|floatformat:0|intcomma }}</strong>
             <span>Según fecha de radicación</span>
         </div>
 
         <div class="facturacion-kpi impetus">
             <small>Total facturado año con IVA</small>
-            <strong>$ {{ analisis_imp.total_anio|floatformat:0 }}</strong>
+            <strong>$ {{ analisis_imp.total_anio|default:0|floatformat:0|intcomma }}</strong>
             <span>Subtotal + IVA</span>
         </div>
     </div>
@@ -170,9 +171,9 @@
                     <td>{{ factura.cliente }}</td>
                     <td>{{ factura.campo }}</td>
                     <td>{{ factura.numero_factura|default:"Sin número" }}</td>
-                    <td>$ {{ factura.precio|default:"0" }}</td>
-                    <td>$ {{ factura.iva|floatformat:0 }}</td>
-                    <td>$ {{ factura.total_con_iva|floatformat:0 }}</td>
+                    <td>$ {{ factura.precio|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.iva|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.total_con_iva|default:0|floatformat:0|intcomma }}</td>
 
                     <td>
                         {% if factura.dias_para_vencer is not None %}
