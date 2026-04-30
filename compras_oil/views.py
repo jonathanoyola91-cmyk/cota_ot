@@ -34,19 +34,28 @@ def dashboard(request):
         .exclude(estado="CERRADA")
         .select_related("bom", "bom__workorder", "creado_por")
         .annotate(
-            total_lineas=Count("lineas", distinct=True),
+            # Solo se contabilizan líneas reales: cantidad requerida mayor a cero.
+            total_lineas=Count(
+                "lineas",
+                filter=Q(lineas__cantidad_requerida__gt=0),
+                distinct=True,
+            ),
             lineas_diligenciadas=Count(
                 "lineas",
                 filter=(
+                    Q(lineas__cantidad_requerida__gt=0) &
                     Q(lineas__proveedor__isnull=False) &
                     Q(lineas__precio_unitario__isnull=False)
                 ),
-                distinct=True
+                distinct=True,
             ),
             lineas_pagadas=Count(
                 "lineas__finance_line",
-                filter=Q(lineas__finance_line__pagado=True),
-                distinct=True
+                filter=(
+                    Q(lineas__cantidad_requerida__gt=0) &
+                    Q(lineas__finance_line__pagado=True)
+                ),
+                distinct=True,
             )
         )
         .order_by("-actualizado_en")
@@ -319,7 +328,7 @@ def paw_detail(request, pk):
 
     from .forms import PurchaseLineFormSet
 
-    queryset = compra.lineas.filter(cantidad_a_comprar__gt=0).order_by("id")
+    queryset = compra.lineas.filter(cantidad_requerida__gt=0).order_by("id")
 
     if request.method == "POST":
         if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
@@ -489,7 +498,7 @@ def enviar_inventario(request, pk):
         )
 
     messages.success(request, "PAW enviado a Inventario correctamente.")
-    return redirect("compras_oil:paw_detail", pk=compra.pk)
+    return redirect("inventario:recepcion_detail", pk=recepcion.pk)
 
 @require_POST
 @login_required
@@ -544,4 +553,4 @@ def generar_entrega_taller(request, pk):
         request,
         f"Entrega a Taller generada correctamente. Líneas nuevas: {creadas}."
     )
-    return redirect("compras_oil:paw_detail", pk=compra.pk)
+    return redirect("inventario:entrega_taller_detail", pk=entrega.pk)

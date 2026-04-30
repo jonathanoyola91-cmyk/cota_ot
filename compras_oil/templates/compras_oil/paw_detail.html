@@ -58,26 +58,39 @@
         <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb;">
 
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <form method="post" action="{% url 'compras_oil:enviar_finanzas' compra.pk %}">
-                {% csrf_token %}
-                <button class="btn" type="submit">Enviar Finanzas</button>
-            </form>
 
-            <form method="post" action="{% url 'compras_oil:enviar_aprobacion' compra.pk %}">
-                {% csrf_token %}
-                <button class="btn" type="submit">Enviar Aprobación</button>
-            </form>
+    <form method="post" action="{% url 'compras_oil:enviar_finanzas' compra.pk %}">
+        {% csrf_token %}
+        <button class="btn" type="submit">Enviar Finanzas</button>
+    </form>
 
-            <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
-                {% csrf_token %}
-                <button class="btn" type="submit">Enviar Inventario</button>
-            </form>
+    <form method="post" action="{% url 'compras_oil:enviar_aprobacion' compra.pk %}">
+        {% csrf_token %}
+        <button class="btn" type="submit">Enviar Aprobación</button>
+    </form>
 
-            <form method="post" action="{% url 'compras_oil:generar_entrega_taller' compra.pk %}">
-                {% csrf_token %}
-                <button class="btn" type="submit">Entrega Taller</button>
-            </form>
-        </div>
+    <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
+        {% csrf_token %}
+        <button class="btn" type="submit">Enviar Inventario</button>
+    </form>
+
+    <form method="post" action="{% url 'compras_oil:generar_entrega_taller' compra.pk %}">
+        {% csrf_token %}
+        <button class="btn" type="submit">Entrega Taller</button>
+    </form>
+
+    <!-- ✅ Accesos directos al módulo de inventario sin desplazarse -->
+    <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-success" type="submit">Recibir</button>
+    </form>
+
+    <form method="post" action="{% url 'compras_oil:generar_entrega_taller' compra.pk %}">
+        {% csrf_token %}
+        <button class="btn btn-secondary" type="submit">Ver entrega</button>
+    </form>
+
+    </div>
     {% endif %}
 </div>
 
