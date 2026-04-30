@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 
+from core.roles import tiene_rol
 from workorders.models import WorkOrder
 from bom.models import Bom
 from compras_oil.models import PurchaseRequest
@@ -18,8 +19,20 @@ def obtener_bom_seguro(ot):
         return None
 
 
+def puede_editar_taller(user):
+    """
+    Permite edición del módulo taller solo a usuarios aprobados
+    por el administrador mediante grupo/rol TALLER o ADMIN.
+
+    Los demás usuarios autenticados pueden visualizar el dashboard,
+    pero no pueden ejecutar acciones que modifiquen el flujo.
+    """
+    return tiene_rol(user, ["TALLER", "ADMIN"])
+
+
 @login_required
 def dashboard(request):
+    # Todos los usuarios autenticados pueden visualizar el módulo Taller.
     ots = WorkOrder.objects.select_related("paw").order_by("-numero")
 
     pendientes_bom = []
@@ -58,11 +71,15 @@ def dashboard(request):
                 req = Decimal(linea.cantidad_requerida or 0)
                 ent = Decimal(linea.cantidad_entregada or 0)
 
+                # No contar líneas sin cantidad requerida.
+                if req <= 0:
+                    continue
+
                 total_req += req
                 total_ent += min(ent, req)
 
                 total_lineas += 1
-                if req > 0 and ent >= req:
+                if ent >= req:
                     entregadas += 1
 
             if total_req > 0:
@@ -101,12 +118,22 @@ def dashboard(request):
         "total_esperando_material": len(esperando_material),
         "total_material_parcial": len(material_parcial),
         "total_material_entregado": len(material_entregado),
+
+        # Úsalo en el template para mostrar/ocultar botones de edición.
+        "puede_editar_taller": puede_editar_taller(request.user),
     })
 
 
 @require_POST
 @login_required
 def confirmar_ensamble_ok(request, ot_id):
+    if not puede_editar_taller(request.user):
+        messages.error(
+            request,
+            "No tienes permiso para modificar Taller. Solo usuarios del grupo TALLER o ADMIN pueden confirmar ensamble."
+        )
+        return redirect("taller:dashboard")
+
     ot = get_object_or_404(
         WorkOrder.objects.select_related("paw"),
         numero=ot_id
@@ -142,6 +169,9 @@ def confirmar_ensamble_ok(request, ot_id):
         req = Decimal(linea.cantidad_requerida or 0)
         ent = Decimal(linea.cantidad_entregada or 0)
 
+        if req <= 0:
+            continue
+
         total_requerido += req
         total_entregado += min(ent, req)
 
@@ -154,7 +184,7 @@ def confirmar_ensamble_ok(request, ot_id):
         return redirect("taller:dashboard")
 
     if ot.paw:
-        ot.paw.estado_operativo = "ENSAMBLE_OK"
+        ot.paw.estado_operativo = "PRODUCTO_OK"
         ot.paw.save(update_fields=["estado_operativo"])
 
     messages.success(request, "Ensamble confirmado OK. El PAW fue actualizado correctamente.")
