@@ -9,6 +9,69 @@ from .models import Factura
 from .forms import FacturaForm
 
 
+def _sumar_valores_facturas(queryset):
+    """
+    Suma valores financieros usando las propiedades del modelo Factura:
+    - iva
+    - total_con_iva
+    """
+    subtotal = 0
+    iva = 0
+    total = 0
+
+    for factura in queryset:
+        if factura.precio:
+            subtotal += factura.precio
+            iva += factura.iva
+            total += factura.total_con_iva
+
+    return subtotal, iva, total
+
+
+def _analisis_empresa(facturas, prefijo):
+    """
+    Calcula análisis financiero por empresa según prefijo de número de factura.
+    Ejemplos:
+    - OG  -> Oil Gas
+    - IMP -> Impetus
+    """
+    hoy = timezone.now().date()
+    inicio_mes = hoy.replace(day=1)
+    inicio_anio = hoy.replace(month=1, day=1)
+
+    # Cuatrimestres calendario:
+    # Ene-Abr, May-Ago, Sep-Dic
+    if hoy.month <= 4:
+        inicio_cuatrimestre = hoy.replace(month=1, day=1)
+    elif hoy.month <= 8:
+        inicio_cuatrimestre = hoy.replace(month=5, day=1)
+    else:
+        inicio_cuatrimestre = hoy.replace(month=9, day=1)
+
+    qs_empresa = facturas.filter(numero_factura__icontains=prefijo)
+
+    qs_mes = qs_empresa.filter(fecha_radicacion__gte=inicio_mes)
+    qs_cuatrimestre = qs_empresa.filter(fecha_radicacion__gte=inicio_cuatrimestre)
+    qs_anio = qs_empresa.filter(fecha_radicacion__gte=inicio_anio)
+
+    subtotal_mes, iva_mes, total_mes = _sumar_valores_facturas(qs_mes)
+    subtotal_cuatrimestre, iva_cuatrimestre, total_cuatrimestre = _sumar_valores_facturas(qs_cuatrimestre)
+    subtotal_anio, iva_anio, total_anio = _sumar_valores_facturas(qs_anio)
+
+    return {
+        "subtotal_mes": subtotal_mes,
+        "iva_mes": iva_mes,
+        "total_mes": total_mes,
+        "subtotal_cuatrimestre": subtotal_cuatrimestre,
+        "iva_cuatrimestre": iva_cuatrimestre,
+        "total_cuatrimestre": total_cuatrimestre,
+        "subtotal_anio": subtotal_anio,
+        "iva_anio": iva_anio,
+        "total_anio": total_anio,
+        "cantidad": qs_empresa.count(),
+    }
+
+
 @login_required
 def dashboard_facturacion(request):
     if not tiene_rol(request.user, ["COMERCIAL", "FINANZAS", "GERENTE", "ADMIN"]):
@@ -17,8 +80,13 @@ def dashboard_facturacion(request):
 
     facturas = Factura.objects.select_related("paw").order_by("-actualizado_en")
 
+    analisis_og = _analisis_empresa(facturas, "OG")
+    analisis_imp = _analisis_empresa(facturas, "IMP")
+
     return render(request, "facturacion/dashboard.html", {
-        "facturas": facturas
+        "facturas": facturas,
+        "analisis_og": analisis_og,
+        "analisis_imp": analisis_imp,
     })
 
 
@@ -73,6 +141,8 @@ def detalle_factura(request, pk):
                 factura.paw.estado_operativo = "RADICADO"
             elif factura.estado == "vencida":
                 factura.paw.estado_operativo = "RADICADO"
+            elif factura.estado == "pagada":
+                factura.paw.estado_operativo = "FACTURADO"
             else:
                 factura.paw.estado_operativo = "EN_FACTURACION"
 
@@ -113,6 +183,7 @@ def radicar_factura(request, pk):
 
     messages.success(request, "Factura radicada correctamente.")
     return redirect("facturacion:detalle", pk=factura.pk)
+
 
 @login_required
 def marcar_pagada(request, pk):

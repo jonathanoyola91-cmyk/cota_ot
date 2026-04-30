@@ -5,95 +5,234 @@
 
 {% block content %}
 
+<style>
+    .facturacion-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+    }
+
+    .facturacion-kpi {
+        background: #fff;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 8px 20px rgba(15,23,42,.06);
+        border-left: 5px solid #2563eb;
+    }
+
+    .facturacion-kpi.impetus {
+        border-left-color: #16a34a;
+    }
+
+    .facturacion-kpi.oilgas {
+        border-left-color: #0f172a;
+    }
+
+    .facturacion-kpi small {
+        display: block;
+        color: #64748b;
+        font-weight: 800;
+        font-size: 12px;
+        margin-bottom: 7px;
+    }
+
+    .facturacion-kpi strong {
+        display: block;
+        color: #0f172a;
+        font-size: 22px;
+        font-weight: 900;
+    }
+
+    .facturacion-kpi span {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+        margin-top: 4px;
+        font-weight: 700;
+    }
+
+    .section-title {
+        margin: 0 0 12px 0;
+        font-size: 18px;
+        font-weight: 900;
+        color: #0f172a;
+    }
+
+    .table-wrap {
+        overflow-x: auto;
+    }
+
+    .badge-soft {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+</style>
+
+<div class="panel">
+
+    <h2>Panel IVA y facturación por empresa</h2>
+    <p style="color:#64748b;font-weight:700;margin-top:6px;">
+        Análisis separado por prefijo del número de factura: OG para Oil Gas e IMP para Impetus.
+    </p>
+
+    <br>
+
+    <h3 class="section-title">Oil Gas · Facturas OG</h3>
+    <div class="facturacion-kpi-grid">
+        <div class="facturacion-kpi oilgas">
+            <small>IVA mes actual</small>
+            <strong>$ {{ analisis_og.iva_mes|floatformat:0 }}</strong>
+            <span>{{ analisis_og.cantidad }} factura(s) OG registradas</span>
+        </div>
+
+        <div class="facturacion-kpi oilgas">
+            <small>IVA cuatrimestre actual</small>
+            <strong>$ {{ analisis_og.iva_cuatrimestre|floatformat:0 }}</strong>
+            <span>Ene-Abr, May-Ago o Sep-Dic según fecha actual</span>
+        </div>
+
+        <div class="facturacion-kpi oilgas">
+            <small>IVA acumulado año</small>
+            <strong>$ {{ analisis_og.iva_anio|floatformat:0 }}</strong>
+            <span>Según fecha de radicación</span>
+        </div>
+
+        <div class="facturacion-kpi oilgas">
+            <small>Total facturado año con IVA</small>
+            <strong>$ {{ analisis_og.total_anio|floatformat:0 }}</strong>
+            <span>Subtotal + IVA</span>
+        </div>
+    </div>
+
+    <h3 class="section-title">Impetus · Facturas IMP</h3>
+    <div class="facturacion-kpi-grid">
+        <div class="facturacion-kpi impetus">
+            <small>IVA mes actual</small>
+            <strong>$ {{ analisis_imp.iva_mes|floatformat:0 }}</strong>
+            <span>{{ analisis_imp.cantidad }} factura(s) IMP registradas</span>
+        </div>
+
+        <div class="facturacion-kpi impetus">
+            <small>IVA cuatrimestre actual</small>
+            <strong>$ {{ analisis_imp.iva_cuatrimestre|floatformat:0 }}</strong>
+            <span>Ene-Abr, May-Ago o Sep-Dic según fecha actual</span>
+        </div>
+
+        <div class="facturacion-kpi impetus">
+            <small>IVA acumulado año</small>
+            <strong>$ {{ analisis_imp.iva_anio|floatformat:0 }}</strong>
+            <span>Según fecha de radicación</span>
+        </div>
+
+        <div class="facturacion-kpi impetus">
+            <small>Total facturado año con IVA</small>
+            <strong>$ {{ analisis_imp.total_anio|floatformat:0 }}</strong>
+            <span>Subtotal + IVA</span>
+        </div>
+    </div>
+
+</div>
+
+<br>
+
 <div class="panel">
     <h2>Facturas / PAW en facturación</h2>
     <br>
 
-    <table>
-        <thead>
-            <tr>
-                <th>PAW</th>
-                <th>Cliente</th>
-                <th>Campo</th>
-                <th>Factura</th>
-                <th>Precio</th>
-                <th>IVA 19%</th>
-                <th>Total</th>
-                <th>Vencimiento</th>
-                <th>Radicación</th>
-                <th>Estado</th>
-                <th>Acción</th>
-            </tr>
-        </thead>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Factura</th>
+                    <th>Precio</th>
+                    <th>IVA 19%</th>
+                    <th>Total</th>
+                    <th>Vencimiento</th>
+                    <th>Radicación</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
 
-        <tbody>
-            {% for factura in facturas %}
-            <tr>
-                <td><strong>{{ factura.numero_paw }}</strong></td>
-                <td>{{ factura.cliente }}</td>
-                <td>{{ factura.campo }}</td>
-                <td>{{ factura.numero_factura|default:"Sin número" }}</td>
-                <td>$ {{ factura.precio|default:"0" }}</td>
-                <td>$ {{ factura.iva|floatformat:0 }}</td>
-                <td>$ {{ factura.total_con_iva|floatformat:0 }}</td>
-                <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
-                <td>
-                    {% if factura.estado == "pagada" %}
-                        <span class="badge" style="background:#16a34a;color:white;">Pagada</span>
-                    {% elif factura.estado == "vencida" %}
-                        <span class="badge" style="background:#dc2626;color:white;">Vencida</span>
-                    {% elif factura.estado == "facturado" %}
-                        <span class="badge" style="background:#2563eb;color:white;">Facturado</span>
-                    {% elif factura.estado == "radicacion" %}
-                        <span class="badge" style="background:#334155;color:white;">
-                            Radicada
-                        </span>
+            <tbody>
+                {% for factura in facturas %}
+                <tr>
+                    <td><strong>{{ factura.numero_paw }}</strong></td>
+                    <td>{{ factura.cliente }}</td>
+                    <td>{{ factura.campo }}</td>
+                    <td>{{ factura.numero_factura|default:"Sin número" }}</td>
+                    <td>$ {{ factura.precio|default:"0" }}</td>
+                    <td>$ {{ factura.iva|floatformat:0 }}</td>
+                    <td>$ {{ factura.total_con_iva|floatformat:0 }}</td>
 
-                    {% else %}
-                        <span class="badge">{{ factura.estado }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if factura.dias_para_vencer is not None %}
-        
-                        {% if factura.dias_para_vencer < 0 %}
-                            <span class="badge" style="background:#dc2626;color:white;">
-                                Vencida
-                            </span>
-                        {% elif factura.dias_para_vencer == 0 %}
-                            <span class="badge" style="background:#f97316;color:white;">
-                                Hoy vence
-                            </span>
+                    <td>
+                        {% if factura.dias_para_vencer is not None %}
 
-                        {% elif factura.dias_para_vencer <= 5 %}
-                           <span class="badge" style="background:#f59e0b;color:white;">
-                               {{ factura.dias_para_vencer }} días
-                            </span>
+                            {% if factura.dias_para_vencer < 0 %}
+                                <span class="badge-soft" style="background:#dc2626;color:white;">
+                                    Vencida
+                                </span>
+
+                            {% elif factura.dias_para_vencer == 0 %}
+                                <span class="badge-soft" style="background:#f97316;color:white;">
+                                    Hoy vence
+                                </span>
+
+                            {% elif factura.dias_para_vencer <= 5 %}
+                                <span class="badge-soft" style="background:#f59e0b;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+
+                            {% else %}
+                                <span class="badge-soft" style="background:#16a34a;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% endif %}
 
                         {% else %}
-                          <span class="badge" style="background:#16a34a;color:white;">
-                              {{ factura.dias_para_vencer }} días
-                            </span>
-
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">-</span>
                         {% endif %}
+                    </td>
 
-                    {% else %}
-                        <span class="badge">-</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <a class="btn" href="{% url 'facturacion:detalle' factura.id %}">
-                        Abrir
-                    </a>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="8">No hay facturas registradas.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
+
+                    <td>
+                        {% if factura.estado == "pagada" %}
+                            <span class="badge-soft" style="background:#16a34a;color:white;">Pagada</span>
+                        {% elif factura.estado == "vencida" %}
+                            <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                        {% elif factura.estado == "facturado" %}
+                            <span class="badge-soft" style="background:#2563eb;color:white;">Facturado</span>
+                        {% elif factura.estado == "radicacion" %}
+                            <span class="badge-soft" style="background:#334155;color:white;">Radicada</span>
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">{{ factura.estado }}</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <a class="btn" href="{% url 'facturacion:detalle' factura.id %}">
+                            Abrir
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">No hay facturas registradas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 {% endblock %}
