@@ -28,6 +28,8 @@ def dashboard_home(request):
     producto_listo = paws.filter(estado_operativo="PRODUCTO_OK").count()
     pendientes_facturar = paws.filter(estado_operativo="PRODUCTO_OK").count()
     paws_pendientes_facturar = paws.filter(estado_operativo="PRODUCTO_OK").order_by("-actualizado_en")[:5]
+    bloqueos_finanzas = paws.filter(estado_operativo__in=["EN_FINANZAS", "EN_APROBACION"]).order_by("-actualizado_en")[:5]
+    bloqueos_facturacion = paws.filter(estado_operativo="PRODUCTO_OK").order_by("-actualizado_en")[:5]
 
     paws_criticos = paws.filter(
         estado_operativo__in=[
@@ -89,6 +91,8 @@ def dashboard_home(request):
         "paw_taller": paw_taller,
         "producto_listo": producto_listo,
         "pendientes_facturar": pendientes_facturar,
+        "bloqueos_finanzas": bloqueos_finanzas,
+        "bloqueos_facturacion": bloqueos_facturacion,
 
         "paws_criticos": paws_criticos,
         "paws_entregas": paws_entregas,
