@@ -1,13 +1,15 @@
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, get_object_or_404, redirect
+from datetime import date
+
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from core.roles import tiene_rol
 from paw_app.models import Paw
-from .models import Factura
 from .forms import FacturaForm
-from datetime import date
+from .models import Factura
 
 
 def _sumar_valores_facturas(queryset):
@@ -32,11 +34,30 @@ def _sumar_valores_facturas(queryset):
 def _get_rango_cuatrimestre(cuatrimestre, year):
     if cuatrimestre == 1:
         return date(year, 1, 1), date(year, 4, 30)
-    elif cuatrimestre == 2:
+    if cuatrimestre == 2:
         return date(year, 5, 1), date(year, 8, 31)
-    elif cuatrimestre == 3:
+    if cuatrimestre == 3:
         return date(year, 9, 1), date(year, 12, 31)
     return None, None
+
+
+def _get_cuatrimestre_actual(hoy):
+    if hoy.month <= 4:
+        return hoy.replace(month=1, day=1)
+    if hoy.month <= 8:
+        return hoy.replace(month=5, day=1)
+    return hoy.replace(month=9, day=1)
+
+
+def _normalizar_cuatrimestre(valor):
+    try:
+        cuatrimestre = int(valor)
+    except (TypeError, ValueError):
+        return None
+
+    if cuatrimestre in (1, 2, 3):
+        return cuatrimestre
+    return None
 
 
 def _analisis_empresa(facturas, prefijo, cuatrimestre=None):
@@ -46,21 +67,17 @@ def _analisis_empresa(facturas, prefijo, cuatrimestre=None):
 
     qs_empresa = facturas.filter(numero_factura__icontains=prefijo)
 
-    # 🔥 FILTRO DINÁMICO
+    # IMPORTANTE:
+    # Los cortes de IVA se calculan con fecha_radicacion, no con creado_en.
+    # Así se pueden corregir facturas históricas cargadas en producción.
+    cuatrimestre = _normalizar_cuatrimestre(cuatrimestre)
     if cuatrimestre:
-        inicio_c, fin_c = _get_rango_cuatrimestre(int(cuatrimestre), hoy.year)
+        inicio_c, fin_c = _get_rango_cuatrimestre(cuatrimestre, hoy.year)
         qs_cuatrimestre = qs_empresa.filter(
             fecha_radicacion__range=(inicio_c, fin_c)
         )
     else:
-        # comportamiento actual
-        if hoy.month <= 4:
-            inicio_cuatrimestre = hoy.replace(month=1, day=1)
-        elif hoy.month <= 8:
-            inicio_cuatrimestre = hoy.replace(month=5, day=1)
-        else:
-            inicio_cuatrimestre = hoy.replace(month=9, day=1)
-
+        inicio_cuatrimestre = _get_cuatrimestre_actual(hoy)
         qs_cuatrimestre = qs_empresa.filter(
             fecha_radicacion__gte=inicio_cuatrimestre
         )
@@ -94,7 +111,7 @@ def dashboard_facturacion(request):
 
     facturas = Factura.objects.select_related("paw").order_by("-actualizado_en")
 
-    cuatrimestre = request.GET.get("cuatrimestre")
+    cuatrimestre = _normalizar_cuatrimestre(request.GET.get("cuatrimestre"))
 
     analisis_og = _analisis_empresa(facturas, "OG", cuatrimestre)
     analisis_imp = _analisis_empresa(facturas, "IMP", cuatrimestre)
@@ -103,6 +120,7 @@ def dashboard_facturacion(request):
         "facturas": facturas,
         "analisis_og": analisis_og,
         "analisis_imp": analisis_imp,
+        "cuatrimestre_selected": cuatrimestre,
     })
 
 
@@ -150,6 +168,18 @@ def detalle_factura(request, pk):
 
         if form.is_valid():
             factura = form.save(commit=False)
+
+            # Campo temporal/manual para poner al día información histórica.
+            # Aunque el campo no esté en FacturaForm, se guarda desde el input del template.
+            fecha_radicacion_post = request.POST.get("fecha_radicacion")
+            if fecha_radicacion_post:
+                fecha_radicacion = parse_date(fecha_radicacion_post)
+                if not fecha_radicacion:
+                    messages.error(request, "La fecha de radicación no tiene un formato válido.")
+                    return redirect("facturacion:detalle", pk=pk)
+                factura.fecha_radicacion = fecha_radicacion
+            elif "fecha_radicacion" in request.POST:
+                factura.fecha_radicacion = None
 
             if factura.estado == "facturado":
                 factura.paw.estado_operativo = "FACTURADO"

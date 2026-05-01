@@ -31,6 +31,7 @@
     <h2>Editar facturación</h2>
     <p style="color:#64748b;">
         Complete la información de factura, vencimiento, radicación y tipo de pago.
+        La fecha de radicación se usa para ubicar el IVA en el mes/cuatrimestre correcto.
     </p>
 
     <br>
@@ -52,14 +53,27 @@
 
             <div class="card">
                 <small>Fecha vencimiento</small>
-                <input 
-                    type="date" 
-                    name="fecha_vencimiento" 
-                    value="{{ factura.fecha_vencimiento|date:'Y-m-d' }}" 
+                <input
+                    type="date"
+                    name="fecha_vencimiento"
+                    value="{{ factura.fecha_vencimiento|date:'Y-m-d' }}"
                     class="form-control"
                 >
             </div>
-            
+
+            <div class="card">
+                <small>Fecha radicación</small>
+                <input
+                    type="date"
+                    name="fecha_radicacion"
+                    value="{{ factura.fecha_radicacion|date:'Y-m-d' }}"
+                    class="form-control"
+                >
+                <small style="display:block; margin-top:6px; color:#64748b;">
+                    Use esta fecha para corregir facturas históricas y cortes de IVA.
+                </small>
+            </div>
+
             <div class="card">
                 <small>IVA (19%)</small>
                 <strong>$ {{ factura.iva|floatformat:0 }}</strong>
@@ -68,7 +82,7 @@
             <div class="card">
                 <small>Total con IVA</small>
                 <strong>$ {{ factura.total_con_iva|floatformat:0 }}</strong>
-            </div>   
+            </div>
 
             <div class="card">
                 <small>Tipo pago</small>
@@ -103,7 +117,8 @@
             Volver
         </a>
 
-        <a class="btn btn-secondary" href="{% url 'facturacion:radicar' factura.id %}">
+        <a class="btn btn-secondary" href="{% url 'facturacion:radicar' factura.id %}"
+           onclick="return confirm('Esta acción pondrá la fecha de radicación con la fecha de hoy. Para facturas históricas, use el campo Fecha radicación y luego Guardar cambios. ¿Desea continuar?');">
             Radicar factura
         </a>
 

@@ -62,13 +62,53 @@ def _aprobacion_aprobada(compra):
     return any(_estado_es_aprobado(aprob) for aprob in approvals)
 
 
-def _tiene_recepcion(compra):
+def _recepcion_creada(compra):
     try:
         from inventario.models import InventoryReception
     except Exception:
         return False
 
     return InventoryReception.objects.filter(purchase_request=compra).exists()
+
+
+def _recepcion_completa(compra):
+    """
+    La recepción solo se considera completa cuando existe recepción
+    y todas sus líneas reales tienen cantidad recibida completa.
+    Esto evita entregar a taller o cerrar compra solo por haber creado
+    el registro de recepción.
+    """
+    try:
+        from inventario.models import InventoryReception
+    except Exception:
+        return False
+
+    recepcion = (
+        InventoryReception.objects
+        .filter(purchase_request=compra)
+        .prefetch_related("lineas")
+        .first()
+    )
+
+    if not recepcion:
+        return False
+
+    lineas = list(recepcion.lineas.all())
+
+    if not lineas:
+        return False
+
+    for linea in lineas:
+        esperada = Decimal(linea.cantidad_esperada or 0)
+        recibida = Decimal(linea.cantidad_recibida or 0)
+
+        if esperada > 0 and recibida < esperada:
+            return False
+
+        if str(getattr(linea, "estado", "")).upper() == "PENDIENTE":
+            return False
+
+    return True
 
 
 def _tiene_entrega_taller(compra):
@@ -156,10 +196,10 @@ def cerrar_solicitud(request, pk):
         messages.info(request, "Esta compra ya se encuentra cerrada.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if not _tiene_recepcion(compra):
+    if not _recepcion_completa(compra):
         messages.error(
             request,
-            "No puedes cerrar la compra. Primero debes registrar la recepción del material."
+            "No puedes cerrar la compra. Primero debes completar la recepción del material."
         )
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
@@ -451,13 +491,15 @@ def paw_detail(request, pk):
     flujo_tiene_credito = _tiene_lineas_credito(compra)
     flujo_finanzas_ok = (not flujo_tiene_contado) or _finanzas_aprobado(compra)
     flujo_aprobacion_ok = _aprobacion_aprobada(compra)
-    flujo_recepcion_ok = _tiene_recepcion(compra)
+    flujo_recepcion_creada = _recepcion_creada(compra)
+    flujo_recepcion_ok = _recepcion_completa(compra)
     flujo_entrega_ok = _tiene_entrega_taller(compra)
 
     puede_enviar_finanzas = flujo_tiene_contado and compra.estado != "CERRADA"
     puede_enviar_aprobacion = flujo_tiene_credito and flujo_finanzas_ok and compra.estado != "CERRADA"
-    puede_enviar_inventario = flujo_aprobacion_ok and compra.estado != "CERRADA"
-    puede_entregar_taller = flujo_recepcion_ok and compra.estado != "CERRADA"
+    puede_enviar_inventario = flujo_aprobacion_ok and not flujo_recepcion_creada and compra.estado != "CERRADA"
+    puede_registrar_recepcion = flujo_aprobacion_ok and flujo_recepcion_creada and not flujo_recepcion_ok and compra.estado != "CERRADA"
+    puede_entregar_taller = flujo_recepcion_ok and not flujo_entrega_ok and compra.estado != "CERRADA"
     puede_cerrar_compra = flujo_recepcion_ok and flujo_entrega_ok and compra.estado != "CERRADA"
 
     siguiente_paso = "Diligenciar líneas de compra"
@@ -467,8 +509,10 @@ def paw_detail(request, pk):
         siguiente_paso = "Enviar a finanzas y esperar aprobación/pago"
     elif flujo_tiene_credito and not flujo_aprobacion_ok:
         siguiente_paso = "Enviar a aprobación gerencia"
+    elif not flujo_recepcion_creada:
+        siguiente_paso = "Enviar a inventario"
     elif not flujo_recepcion_ok:
-        siguiente_paso = "Enviar a inventario y registrar recepción de material"
+        siguiente_paso = "Registrar recepción de material"
     elif not flujo_entrega_ok:
         siguiente_paso = "Entregar material a taller"
     else:
@@ -486,11 +530,13 @@ def paw_detail(request, pk):
         "flujo_tiene_credito": flujo_tiene_credito,
         "flujo_finanzas_ok": flujo_finanzas_ok,
         "flujo_aprobacion_ok": flujo_aprobacion_ok,
+        "flujo_recepcion_creada": flujo_recepcion_creada,
         "flujo_recepcion_ok": flujo_recepcion_ok,
         "flujo_entrega_ok": flujo_entrega_ok,
         "puede_enviar_finanzas": puede_enviar_finanzas,
         "puede_enviar_aprobacion": puede_enviar_aprobacion,
         "puede_enviar_inventario": puede_enviar_inventario,
+        "puede_registrar_recepcion": puede_registrar_recepcion,
         "puede_entregar_taller": puede_entregar_taller,
         "puede_cerrar_compra": puede_cerrar_compra,
         "siguiente_paso": siguiente_paso,
@@ -676,10 +722,10 @@ def generar_entrega_taller(request, pk):
         messages.error(request, "No puedes modificar una compra cerrada.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if not _tiene_recepcion(compra):
+    if not _recepcion_completa(compra):
         messages.error(
             request,
-            "No puedes entregar a taller. Primero debes registrar la recepción del material."
+            "No puedes entregar a taller. Primero debes completar la recepción del material."
         )
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 

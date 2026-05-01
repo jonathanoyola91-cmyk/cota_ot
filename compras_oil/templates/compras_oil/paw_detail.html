@@ -186,23 +186,13 @@
             </div>
         </div>
 
-        {% if compra.estado == "CERRADA" %}
-            <div class="current-step-box" style="background:#ecfdf5;border-color:#bbf7d0;color:#166534;">
+        <div class="current-step-box">
+            {% if compra.estado == "CERRADA" %}
                 ✅ Compra cerrada. El proceso de compras ya fue finalizado.
-            </div>
-        {% elif compra.estado == "BORRADOR" %}
-            <div class="current-step-box">
-                👉 Siguiente paso: diligenciar líneas y enviar a finanzas si hay contado, o a aprobación gerencia si todo es crédito.
-            </div>
-        {% elif compra.estado == "EN_REVISION" %}
-            <div class="current-step-box">
-                👉 Siguiente paso: enviar a inventario. Después registra recepción y entrega a taller.
-            </div>
-        {% else %}
-            <div class="current-step-box">
-                👉 Revisa el estado actual y continúa con el siguiente paso permitido.
-            </div>
-        {% endif %}
+            {% else %}
+                👉 Siguiente paso: {{ siguiente_paso }}.
+            {% endif %}
+        </div>
 
         {% if compra.estado == "BORRADOR" %}
             <div class="flow-warning">
@@ -214,56 +204,62 @@
 
             <form method="post" action="{% url 'compras_oil:enviar_finanzas' compra.pk %}">
                 {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'BORRADOR' %}step-active{% elif compra.estado == 'CERRADA' %}step-done{% else %}step-done{% endif %}"
+                <button class="flow-btn {% if flujo_tiene_contado and flujo_finanzas_ok %}step-done{% elif puede_enviar_finanzas %}step-active{% else %}step-pending{% endif %}"
                         type="submit"
-                        {% if compra.estado == "CERRADA" %}disabled{% endif %}>
-                    {% if compra.estado == "BORRADOR" %}🔵{% else %}✅{% endif %} 1. Enviar a finanzas
+                        {% if not puede_enviar_finanzas %}disabled{% endif %}>
+                    {% if flujo_tiene_contado and flujo_finanzas_ok %}✅{% elif puede_enviar_finanzas %}🔵{% else %}⚪{% endif %}
+                    1. Enviar a finanzas
                 </button>
             </form>
 
             <form method="post" action="{% url 'compras_oil:enviar_aprobacion' compra.pk %}">
                 {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'BORRADOR' %}step-active{% elif compra.estado == 'CERRADA' %}step-done{% else %}step-done{% endif %}"
+                <button class="flow-btn {% if flujo_aprobacion_ok %}step-done{% elif puede_enviar_aprobacion %}step-active{% else %}step-pending{% endif %}"
                         type="submit"
-                        {% if compra.estado == "CERRADA" %}disabled{% endif %}>
-                    {% if compra.estado == "BORRADOR" %}🔵{% else %}✅{% endif %} 2. Enviar a aprobación gerencia
+                        {% if not puede_enviar_aprobacion %}disabled{% endif %}>
+                    {% if flujo_aprobacion_ok %}✅{% elif puede_enviar_aprobacion %}🔵{% else %}⚪{% endif %}
+                    2. Enviar a aprobación gerencia
                 </button>
             </form>
 
             <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
                 {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'EN_REVISION' %}step-active{% elif compra.estado == 'CERRADA' %}step-done{% else %}step-pending{% endif %}"
+                <button class="flow-btn {% if flujo_recepcion_creada %}step-done{% elif puede_enviar_inventario %}step-active{% else %}step-pending{% endif %}"
                         type="submit"
-                        {% if compra.estado == "BORRADOR" or compra.estado == "CERRADA" %}disabled{% endif %}>
-                    {% if compra.estado == "EN_REVISION" %}🔵{% elif compra.estado == "CERRADA" %}✅{% else %}⚪{% endif %} 3. Enviar a inventario
+                        {% if not puede_enviar_inventario %}disabled{% endif %}>
+                    {% if flujo_recepcion_creada %}✅{% elif puede_enviar_inventario %}🔵{% else %}⚪{% endif %}
+                    3. Enviar a inventario
                 </button>
             </form>
 
             <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
                 {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'EN_REVISION' %}step-active{% elif compra.estado == 'CERRADA' %}step-done{% else %}step-pending{% endif %}"
+                <button class="flow-btn {% if flujo_recepcion_ok %}step-done{% elif puede_registrar_recepcion %}step-active{% else %}step-pending{% endif %}"
                         type="submit"
-                        {% if compra.estado == "BORRADOR" or compra.estado == "CERRADA" %}disabled{% endif %}>
-                    {% if compra.estado == "EN_REVISION" %}🔵{% elif compra.estado == "CERRADA" %}✅{% else %}⚪{% endif %} 4. Registrar recepción
+                        {% if not puede_registrar_recepcion %}disabled{% endif %}>
+                    {% if flujo_recepcion_ok %}✅{% elif puede_registrar_recepcion %}🔵{% else %}⚪{% endif %}
+                    4. Registrar recepción
                 </button>
             </form>
 
             <form method="post" action="{% url 'compras_oil:generar_entrega_taller' compra.pk %}">
                 {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'EN_REVISION' %}step-active{% elif compra.estado == 'CERRADA' %}step-done{% else %}step-pending{% endif %}"
+                <button class="flow-btn {% if flujo_entrega_ok %}step-done{% elif puede_entregar_taller %}step-active{% else %}step-pending{% endif %}"
                         type="submit"
-                        {% if compra.estado == "BORRADOR" or compra.estado == "CERRADA" %}disabled{% endif %}>
-                    {% if compra.estado == "EN_REVISION" %}🔵{% elif compra.estado == "CERRADA" %}✅{% else %}⚪{% endif %} 5. Entregar material a taller
+                        {% if not puede_entregar_taller %}disabled{% endif %}>
+                    {% if flujo_entrega_ok %}✅{% elif puede_entregar_taller %}🔵{% else %}⚪{% endif %}
+                    5. Entregar material a taller
                 </button>
             </form>
 
             <form method="post" action="{% url 'compras_oil:cerrar_solicitud' compra.pk %}"
-                  onsubmit="return confirm('¿Confirmas que deseas cerrar esta compra? Esta acción debe hacerse solo cuando el material ya fue recibido y entregado a taller.');">
+                  {% if puede_cerrar_compra %}onsubmit="return confirm('¿Confirmas que deseas cerrar esta compra? Esta acción debe hacerse solo cuando el material ya fue recibido y entregado a taller.');"{% endif %}>
                 {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'CERRADA' %}step-done{% elif compra.estado == 'EN_REVISION' %}step-final{% else %}step-pending{% endif %}"
+                <button class="flow-btn {% if compra.estado == 'CERRADA' %}step-done{% elif puede_cerrar_compra %}step-final{% else %}step-pending{% endif %}"
                         type="submit"
-                        {% if compra.estado == "BORRADOR" or compra.estado == "CERRADA" %}disabled{% endif %}>
-                    {% if compra.estado == "CERRADA" %}✅{% elif compra.estado == "EN_REVISION" %}🔒{% else %}⚪{% endif %} 6. Cerrar compra
+                        {% if not puede_cerrar_compra %}disabled{% endif %}>
+                    {% if compra.estado == "CERRADA" %}✅{% elif puede_cerrar_compra %}🔒{% else %}⚪{% endif %}
+                    6. Cerrar compra
                 </button>
             </form>
 
