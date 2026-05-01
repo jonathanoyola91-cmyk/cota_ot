@@ -3,11 +3,6 @@ from django.db import models
 from django.contrib.auth.models import Group
 
 
-# =========================
-# QuerySet y Manager de ACTIVOS
-# (NO afecta objects)
-# =========================
-
 class WorkOrderQuerySet(models.QuerySet):
     def activos(self):
         return self.exclude(estado=WorkOrder.Status.TERMINADA)
@@ -28,10 +23,6 @@ class WorkOrderActiveManager(models.Manager):
     def finalizadas(self):
         return super().get_queryset().filter(estado__in=self.FINAL_STATES)
 
-
-# =========================
-# MODELO WORKORDER
-# =========================
 
 class WorkOrder(models.Model):
 
@@ -62,17 +53,8 @@ class WorkOrder(models.Model):
     serial = models.CharField(max_length=80, blank=True)
     ubicacion = models.CharField(max_length=120, blank=True)
 
-    prioridad = models.CharField(
-        max_length=10,
-        choices=Priority.choices,
-        default=Priority.MEDIA
-    )
-
-    estado = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.NUEVA
-    )
+    prioridad = models.CharField(max_length=10, choices=Priority.choices, default=Priority.MEDIA)
+    estado = models.CharField(max_length=20, choices=Status.choices, default=Status.NUEVA)
 
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -129,22 +111,25 @@ class WorkOrder(models.Model):
 
     comentario_taller = models.TextField(blank=True)
 
+    ensamble_ok = models.BooleanField(default=False)
+    fecha_ensamble_ok = models.DateTimeField(null=True, blank=True)
+    ensamble_confirmado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ensambles_confirmados",
+    )
+
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
-    # 🔒 Manager original (NO SE TOCA)
     objects = models.Manager()
-
-    # ✅ Nuevo manager SOLO activos
     active_objects = WorkOrderActiveManager()
 
     def __str__(self):
         return f"OT #{self.numero} - {self.titulo}"
 
-
-# =========================
-# MODELO TASK
-# =========================
 
 class WorkOrderTask(models.Model):
 

@@ -246,18 +246,77 @@
                         Ver OT
                     </a>
 
-                    <form method="post"
-                          action="{% url 'taller:confirmar_ensamble_ok' item.ot.numero %}"
-                          style="display:inline;">
-                        {% csrf_token %}
-                        <button class="btn" type="submit">
-                            Confirmar ensamble OK
+                    {% if not item.ot.ensamble_ok %}
+                        <form method="post"
+                            action="{% url 'taller:confirmar_ensamble_ok' item.ot.numero %}"
+                            style="display:inline;">
+                            {% csrf_token %}
+                            <button class="btn" type="submit">
+                                Confirmar ensamble OK
+                            </button>
+                        </form>
+                    {% else %}
+                        <button class="btn btn-success" disabled>
+                            Ensamble confirmado
                         </button>
-                    </form>
+                    {% endif %}
                 </td>
             </tr>
             {% empty %}
             <tr><td colspan="6">No hay trabajos listos para ensamble.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<h3 class="section-title">6. Historial de ensambles confirmados</h3>
+
+<div class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>OT</th>
+                <th>PAW</th>
+                <th>Cliente</th>
+                <th>Confirmó</th>
+                <th>Fecha confirmación</th>
+                <th>Estado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ot in historial_ensamble %}
+            <tr>
+                <td><strong>{{ ot.numero }}</strong></td>
+                <td>{{ ot.paw }}</td>
+                <td>{{ ot.cliente }}</td>
+                <td>
+                    {% if ot.ensamble_confirmado_por %}
+                        {{ ot.ensamble_confirmado_por.get_full_name|default:ot.ensamble_confirmado_por.username }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if ot.fecha_ensamble_ok %}
+                        {{ ot.fecha_ensamble_ok|date:"d/m/Y H:i" }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge badge-green">ENSAMBLE OK</span>
+                </td>
+                <td>
+                    <a class="btn btn-secondary" href="/ot/{{ ot.numero }}/">
+                        Ver OT
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">Aún no hay ensambles confirmados.</td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
