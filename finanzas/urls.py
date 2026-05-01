@@ -5,6 +5,8 @@ app_name = "finanzas"
 
 urlpatterns = [
     path("", views.dashboard_finanzas, name="dashboard"),
+    path("proveedores-cxp/", views.cuentas_proveedores, name="cuentas_proveedores"),
+    path("proveedores-cxp/<int:pk>/", views.cuenta_proveedor_detalle, name="cuenta_proveedor_detalle"),
     path("<int:pk>/", views.detalle_finanzas, name="detalle"),
     path("linea/<int:linea_id>/pagar/", views.marcar_pagado, name="marcar_pagado"),
     path("aprobacion-pagos/", views.aprobacion_pagos, name="aprobacion_pagos"),

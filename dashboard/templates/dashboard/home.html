@@ -283,6 +283,13 @@ tr:hover{
     </a>
     {% endif %} 
 
+    {% if es_finanzas or es_gerente or request.user.is_superuser %}
+    <a href="/finanzas/proveedores-cxp/"
+       class="{% if '/finanzas/proveedores-cxp/' in request.path %}active{% endif %}">
+        Cuentas por pagar
+    </a>
+    {% endif %}
+
     <a href="/paw/"
        class="{% if '/paw/' in request.path %}active{% endif %}">
         PAW

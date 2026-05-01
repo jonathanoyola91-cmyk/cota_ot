@@ -1,0 +1,206 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Cuenta proveedor{% endblock %}
+{% block page_title %}Cuenta proveedor · {{ invoice.supplier.nombre }}{% endblock %}
+
+{% block content %}
+
+<div style="margin-bottom:16px;">
+    <a class="btn btn-secondary" href="{% url 'finanzas:cuentas_proveedores' %}">← Volver a cuentas</a>
+</div>
+
+<div class="cards">
+    <div class="card">
+        <small>Proveedor</small>
+        <strong>{{ invoice.supplier.nombre }}</strong>
+    </div>
+    <div class="card">
+        <small>PAW</small>
+        <strong>{{ invoice.purchase_request.paw_numero|default:"-" }}</strong>
+    </div>
+    <div class="card">
+        <small>Tipo de pago</small>
+        <strong>{{ invoice.tipo_pago }}</strong>
+    </div>
+    <div class="card">
+        <small>Saldo pendiente</small>
+        <strong>$ {{ invoice.saldo|floatformat:0 }}</strong>
+    </div>
+</div>
+
+<div class="cards">
+    <div class="card">
+        <small>Base compra</small>
+        <strong>$ {{ invoice.base_compra|floatformat:0 }}</strong>
+    </div>
+    <div class="card">
+        <small>IVA 19%</small>
+        <strong>$ {{ invoice.iva|floatformat:0 }}</strong>
+    </div>
+    <div class="card">
+        <small>Total con IVA</small>
+        <strong>$ {{ invoice.total_con_iva|floatformat:0 }}</strong>
+    </div>
+    <div class="card">
+        <small>Total abonado</small>
+        <strong>$ {{ invoice.total_abonado|floatformat:0 }}</strong>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <h2>Factura del proveedor</h2>
+    <p style="color:#64748b;margin-top:6px;">Finanzas puede registrar el número y fecha de la factura emitida por el proveedor.</p>
+
+    <form method="post" style="margin-top:18px;">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="guardar_factura">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+                <label>Número factura proveedor</label>
+                {{ invoice_form.numero_factura_proveedor }}
+            </div>
+            <div>
+                <label>Fecha factura proveedor</label>
+                {{ invoice_form.fecha_factura_proveedor }}
+            </div>
+            <div style="grid-column:1 / -1;">
+                <label>Observación</label>
+                {{ invoice_form.observacion }}
+            </div>
+        </div>
+
+        {% if invoice_form.errors %}
+            <div style="margin-top:16px;background:#fee2e2;color:#991b1b;padding:12px;border-radius:10px;">
+                {{ invoice_form.errors }}
+            </div>
+        {% endif %}
+
+        <button class="btn" type="submit" style="margin-top:18px;">Guardar factura proveedor</button>
+    </form>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <h2>Detalle comprado a este proveedor</h2>
+    <br>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Unidad</th>
+                    <th>Cantidad</th>
+                    <th>Precio unitario</th>
+                    <th>Subtotal</th>
+                    <th>Tipo pago</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ln in lineas %}
+                <tr>
+                    <td>{{ ln.codigo }}</td>
+                    <td>{{ ln.descripcion }}</td>
+                    <td>{{ ln.unidad }}</td>
+                    <td>{{ ln.cantidad_a_comprar|floatformat:3 }}</td>
+                    <td>$ {{ ln.precio_unitario|default:0|floatformat:0 }}</td>
+                    <td>$ {{ ln.cantidad_a_comprar|floatformat:3 }} × {{ ln.precio_unitario|default:0|floatformat:0 }}</td>
+                    <td>{{ ln.tipo_pago }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">No hay líneas asociadas a este proveedor.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <h2>Abonos registrados</h2>
+    <br>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Valor</th>
+                <th>Referencia</th>
+                <th>Observación</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for abono in invoice.abonos.all %}
+            <tr>
+                <td>{{ abono.fecha|date:"d/m/Y" }}</td>
+                <td><strong>$ {{ abono.valor|floatformat:0 }}</strong></td>
+                <td>{{ abono.referencia|default:"-" }}</td>
+                <td>{{ abono.observacion|default:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4">No hay abonos registrados.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="panel">
+    <h2>Registrar abono</h2>
+
+    {% if invoice.tipo_pago == "CONTADO" %}
+        <div style="margin-top:12px;background:#dcfce7;color:#166534;padding:14px;border-radius:12px;font-weight:700;">
+            Esta compra es de contado. El sistema la muestra como comprada y con saldo $0 automáticamente.
+        </div>
+    {% else %}
+        <form method="post" style="margin-top:18px;">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="registrar_abono">
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div>
+                    <label>Fecha abono</label>
+                    {{ payment_form.fecha }}
+                </div>
+                <div>
+                    <label>Valor abonado</label>
+                    {{ payment_form.valor }}
+                </div>
+                <div>
+                    <label>Referencia / comprobante</label>
+                    {{ payment_form.referencia }}
+                </div>
+                <div>
+                    <label>Observación</label>
+                    {{ payment_form.observacion }}
+                </div>
+            </div>
+
+            {% if payment_form.errors %}
+                <div style="margin-top:16px;background:#fee2e2;color:#991b1b;padding:12px;border-radius:10px;">
+                    {{ payment_form.errors }}
+                </div>
+            {% endif %}
+
+            <button class="btn" type="submit" style="margin-top:18px;">Registrar abono</button>
+        </form>
+    {% endif %}
+</div>
+
+<style>
+    label{
+        display:block;
+        font-size:12px;
+        font-weight:800;
+        color:#475569;
+        margin-bottom:6px;
+    }
+    @media(max-width:800px){
+        form div[style*="grid-template-columns"]{
+            grid-template-columns:1fr !important;
+        }
+    }
+</style>
+
+{% endblock %}

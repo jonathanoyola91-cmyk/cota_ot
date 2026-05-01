@@ -1,0 +1,164 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Cuentas por pagar proveedores{% endblock %}
+{% block page_title %}Cuentas por pagar proveedores{% endblock %}
+
+{% block content %}
+
+<div class="cards">
+    <div class="card">
+        <small>Base comprada</small>
+        <strong>$ {{ resumen.base|floatformat:0 }}</strong>
+    </div>
+    <div class="card">
+        <small>IVA compras</small>
+        <strong>$ {{ resumen.iva|floatformat:0 }}</strong>
+    </div>
+    <div class="card">
+        <small>Total con IVA</small>
+        <strong>$ {{ resumen.total|floatformat:0 }}</strong>
+    </div>
+    <div class="card">
+        <small>Saldo pendiente</small>
+        <strong>$ {{ resumen.saldo|floatformat:0 }}</strong>
+    </div>
+</div>
+
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px;">
+        <div>
+            <h2 style="margin:0;">Estado de cuenta proveedores</h2>
+            <p style="margin-top:6px;color:#64748b;">
+                Controla por PAW, proveedor y factura: compra, IVA, abonos y saldo. Las compras de contado quedan con saldo cero automáticamente.
+            </p>
+        </div>
+    </div>
+
+    <form method="get" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-bottom:20px;">
+        <div>
+            <label>Buscar</label>
+            <input class="form-control" type="text" name="q" value="{{ q }}" placeholder="PAW, proveedor o factura">
+        </div>
+
+        <div>
+            <label>Proveedor</label>
+            <select class="form-control" name="proveedor">
+                <option value="">Todos</option>
+                {% for s in suppliers %}
+                    <option value="{{ s.id }}" {% if supplier_id|stringformat:'s' == s.id|stringformat:'s' %}selected{% endif %}>
+                        {{ s.nombre }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label>Tipo pago</label>
+            <select class="form-control" name="tipo_pago">
+                <option value="">Todos</option>
+                <option value="CREDITO" {% if tipo_pago == "CREDITO" %}selected{% endif %}>Crédito</option>
+                <option value="CONTADO" {% if tipo_pago == "CONTADO" %}selected{% endif %}>Contado</option>
+            </select>
+        </div>
+
+        <div>
+            <label>Estado</label>
+            <select class="form-control" name="estado">
+                <option value="">Todos</option>
+                <option value="PENDIENTE" {% if estado == "PENDIENTE" %}selected{% endif %}>Con saldo</option>
+                <option value="PAGADA" {% if estado == "PAGADA" %}selected{% endif %}>Pagada / saldo 0</option>
+            </select>
+        </div>
+
+        <button class="btn" type="submit">Filtrar</button>
+    </form>
+
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Solicitud compra</th>
+                    <th>Proveedor</th>
+                    <th>Tipo</th>
+                    <th>Factura proveedor</th>
+                    <th>Base compra</th>
+                    <th>IVA</th>
+                    <th>Total con IVA</th>
+                    <th>Abonos</th>
+                    <th>Saldo</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inv in invoices %}
+                <tr>
+                    <td><strong>{{ inv.purchase_request.paw_numero|default:"-" }}</strong></td>
+                    <td>Compra #{{ inv.purchase_request.id }}</td>
+                    <td>{{ inv.supplier.nombre }}</td>
+                    <td>
+                        {% if inv.tipo_pago == "CONTADO" %}
+                            <span class="badge badge-ok">Contado</span>
+                        {% else %}
+                            <span class="badge badge-warn">Crédito</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ inv.numero_factura_proveedor|default:"Pendiente" }}</td>
+                    <td>$ {{ inv.base_compra|floatformat:0 }}</td>
+                    <td>$ {{ inv.iva|floatformat:0 }}</td>
+                    <td><strong>$ {{ inv.total_con_iva|floatformat:0 }}</strong></td>
+                    <td>$ {{ inv.total_abonado|floatformat:0 }}</td>
+                    <td>
+                        {% if inv.saldo > 0 %}
+                            <strong style="color:#b91c1c;">$ {{ inv.saldo|floatformat:0 }}</strong>
+                        {% else %}
+                            <strong style="color:#15803d;">$ 0</strong>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="btn btn-secondary" href="{% url 'finanzas:cuenta_proveedor_detalle' inv.id %}">
+                            Ver / abonar
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">No hay cuentas por pagar de proveedores con estos filtros.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    label{
+        display:block;
+        font-size:12px;
+        font-weight:800;
+        color:#475569;
+        margin-bottom:6px;
+    }
+    .badge{
+        display:inline-block;
+        padding:5px 9px;
+        border-radius:999px;
+        font-size:12px;
+        font-weight:800;
+    }
+    .badge-ok{
+        background:#dcfce7;
+        color:#166534;
+    }
+    .badge-warn{
+        background:#fef3c7;
+        color:#92400e;
+    }
+    @media(max-width:900px){
+        form[method="get"]{
+            grid-template-columns:1fr !important;
+        }
+    }
+</style>
+
+{% endblock %}
