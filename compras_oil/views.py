@@ -21,6 +21,65 @@ from .forms import SupplierForm
 from .models import PurchaseRequest, Supplier
 
 
+def _get_paw_from_compra(compra):
+    """Obtiene el PAW asociado a la solicitud de compra sin romper si falta alguna relación."""
+    try:
+        return compra.bom.workorder.paw
+    except AttributeError:
+        return None
+
+
+def _estado_es_aprobado(obj):
+    """Valida estados aprobados soportando texto y constantes de modelos."""
+    return str(getattr(obj, "estado", "")).upper() in ["APROBADO", "APROBADA"]
+
+
+def _tiene_lineas_contado(compra):
+    return compra.lineas.filter(cantidad_requerida__gt=0, tipo_pago="CONTADO").exists()
+
+
+def _tiene_lineas_credito(compra):
+    return compra.lineas.filter(cantidad_requerida__gt=0, tipo_pago="CREDITO").exists()
+
+
+def _finanzas_aprobado(compra):
+    try:
+        from finanzas.models import FinanceApproval
+    except Exception:
+        return False
+
+    approvals = FinanceApproval.objects.filter(purchase_request=compra)
+    return any(_estado_es_aprobado(aprob) for aprob in approvals)
+
+
+def _aprobacion_aprobada(compra):
+    try:
+        from aprobacion.models import PurchaseApproval
+    except Exception:
+        return False
+
+    approvals = PurchaseApproval.objects.filter(purchase_request=compra)
+    return any(_estado_es_aprobado(aprob) for aprob in approvals)
+
+
+def _tiene_recepcion(compra):
+    try:
+        from inventario.models import InventoryReception
+    except Exception:
+        return False
+
+    return InventoryReception.objects.filter(purchase_request=compra).exists()
+
+
+def _tiene_entrega_taller(compra):
+    try:
+        from inventario.models import WorkshopDelivery
+    except Exception:
+        return False
+
+    return WorkshopDelivery.objects.filter(purchase_request=compra).exists()
+
+
 @login_required
 def dashboard(request):
     if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
@@ -83,6 +142,7 @@ def compras_dashboard(request):
     return dashboard(request)
 
 
+@require_POST
 @login_required
 def cerrar_solicitud(request, pk):
     if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
@@ -90,17 +150,41 @@ def cerrar_solicitud(request, pk):
         return redirect("/")
 
     compra = get_object_or_404(PurchaseRequest, pk=pk)
+    paw = _get_paw_from_compra(compra)
 
-    if request.method == "POST":
-        compra.estado = "CERRADA"
-        compra.save(update_fields=["estado", "actualizado_en"])
-        messages.success(
+    if compra.estado == "CERRADA":
+        messages.info(request, "Esta compra ya se encuentra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if not _tiene_recepcion(compra):
+        messages.error(
             request,
-            f"Solicitud PAW {compra.paw_numero} cerrada correctamente."
+            "No puedes cerrar la compra. Primero debes registrar la recepción del material."
         )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
 
+    if not _tiene_entrega_taller(compra):
+        messages.error(
+            request,
+            "No puedes cerrar la compra. Primero debes entregar el material a taller."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if paw and paw.estado_operativo != "ENTREGADO_TALLER":
+        messages.error(
+            request,
+            "No puedes cerrar la compra. El PAW todavía no registra entrega a taller."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    compra.estado = "CERRADA"
+    compra.save(update_fields=["estado", "actualizado_en"])
+
+    messages.success(
+        request,
+        f"Compra PAW {compra.paw_numero} cerrada correctamente."
+    )
     return redirect("compras_oil:dashboard")
-
 
 @login_required
 def supplier_detail(request, pk):
@@ -361,6 +445,35 @@ def paw_detail(request, pk):
         total_requerido += (ln.cantidad_requerida or Decimal("0")) * precio
         total_a_comprar += (ln.cantidad_a_comprar or Decimal("0")) * precio
 
+    paw = _get_paw_from_compra(compra)
+
+    flujo_tiene_contado = _tiene_lineas_contado(compra)
+    flujo_tiene_credito = _tiene_lineas_credito(compra)
+    flujo_finanzas_ok = (not flujo_tiene_contado) or _finanzas_aprobado(compra)
+    flujo_aprobacion_ok = _aprobacion_aprobada(compra)
+    flujo_recepcion_ok = _tiene_recepcion(compra)
+    flujo_entrega_ok = _tiene_entrega_taller(compra)
+
+    puede_enviar_finanzas = flujo_tiene_contado and compra.estado != "CERRADA"
+    puede_enviar_aprobacion = flujo_tiene_credito and flujo_finanzas_ok and compra.estado != "CERRADA"
+    puede_enviar_inventario = flujo_aprobacion_ok and compra.estado != "CERRADA"
+    puede_entregar_taller = flujo_recepcion_ok and compra.estado != "CERRADA"
+    puede_cerrar_compra = flujo_recepcion_ok and flujo_entrega_ok and compra.estado != "CERRADA"
+
+    siguiente_paso = "Diligenciar líneas de compra"
+    if compra.estado == "CERRADA":
+        siguiente_paso = "Compra cerrada"
+    elif flujo_tiene_contado and not flujo_finanzas_ok:
+        siguiente_paso = "Enviar a finanzas y esperar aprobación/pago"
+    elif flujo_tiene_credito and not flujo_aprobacion_ok:
+        siguiente_paso = "Enviar a aprobación gerencia"
+    elif not flujo_recepcion_ok:
+        siguiente_paso = "Enviar a inventario y registrar recepción de material"
+    elif not flujo_entrega_ok:
+        siguiente_paso = "Entregar material a taller"
+    else:
+        siguiente_paso = "Cerrar compra"
+
     return render(request, "compras_oil/paw_detail.html", {
         "compra": compra,
         "lineas": queryset,
@@ -368,6 +481,19 @@ def paw_detail(request, pk):
         "total_requerido": total_requerido,
         "total_a_comprar": total_a_comprar,
         "puede_compras": tiene_rol(request.user, ["COMPRAS", "ADMIN"]),
+        "paw": paw,
+        "flujo_tiene_contado": flujo_tiene_contado,
+        "flujo_tiene_credito": flujo_tiene_credito,
+        "flujo_finanzas_ok": flujo_finanzas_ok,
+        "flujo_aprobacion_ok": flujo_aprobacion_ok,
+        "flujo_recepcion_ok": flujo_recepcion_ok,
+        "flujo_entrega_ok": flujo_entrega_ok,
+        "puede_enviar_finanzas": puede_enviar_finanzas,
+        "puede_enviar_aprobacion": puede_enviar_aprobacion,
+        "puede_enviar_inventario": puede_enviar_inventario,
+        "puede_entregar_taller": puede_entregar_taller,
+        "puede_cerrar_compra": puede_cerrar_compra,
+        "siguiente_paso": siguiente_paso,
     })
 
 
@@ -380,16 +506,20 @@ def enviar_finanzas(request, pk):
 
     from finanzas.models import FinanceApproval
 
-    compra = get_object_or_404(PurchaseRequest, pk=pk)
+    compra = get_object_or_404(PurchaseRequest.objects.prefetch_related("lineas"), pk=pk)
 
-    if not compra.lineas.filter(tipo_pago="CONTADO").exists():
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if not _tiene_lineas_contado(compra):
         messages.error(
             request,
             "No hay líneas de pago contado para enviar a Finanzas."
         )
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    paw = compra.bom.workorder.paw
+    paw = _get_paw_from_compra(compra)
 
     if paw:
         paw.estado_operativo = "EN_FINANZAS"
@@ -417,16 +547,27 @@ def enviar_aprobacion(request, pk):
     from aprobacion.models import PurchaseApproval
     from aprobacion.admin import sync_purchase_approval_lines
 
-    compra = get_object_or_404(PurchaseRequest, pk=pk)
+    compra = get_object_or_404(PurchaseRequest.objects.prefetch_related("lineas"), pk=pk)
 
-    if not compra.lineas.filter(tipo_pago="CREDITO").exists():
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if not _tiene_lineas_credito(compra):
         messages.error(
             request,
             "No hay líneas de crédito para enviar a Aprobación."
         )
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    paw = compra.bom.workorder.paw
+    if _tiene_lineas_contado(compra) and not _finanzas_aprobado(compra):
+        messages.error(
+            request,
+            "Esta compra tiene líneas de contado. Primero debes enviarla a Finanzas y esperar aprobación/pago."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    paw = _get_paw_from_compra(compra)
 
     if paw:
         paw.estado_operativo = "EN_APROBACION"
@@ -450,7 +591,6 @@ def enviar_aprobacion(request, pk):
     )
     return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-
 @require_POST
 @login_required
 def enviar_inventario(request, pk):
@@ -465,7 +605,25 @@ def enviar_inventario(request, pk):
         pk=pk,
     )
 
-    paw = compra.bom.workorder.paw
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if _tiene_lineas_contado(compra) and not _finanzas_aprobado(compra):
+        messages.error(
+            request,
+            "No puedes enviar a inventario. Hay líneas de contado pendientes por aprobación/pago en Finanzas."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if _tiene_lineas_credito(compra) and not _aprobacion_aprobada(compra):
+        messages.error(
+            request,
+            "No puedes enviar a inventario. La compra aún no ha sido aprobada por gerencia."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    paw = _get_paw_from_compra(compra)
 
     if paw:
         paw.estado_operativo = "MATERIAL_RECIBIDO"
@@ -480,7 +638,7 @@ def enviar_inventario(request, pk):
 
         cantidad = ln.cantidad_a_comprar or 0
 
-        # 🔥 FILTRO CLAVE
+        # Solo se crean líneas reales de compra.
         if cantidad <= 0:
             continue
 
@@ -497,7 +655,7 @@ def enviar_inventario(request, pk):
             },
         )
 
-    messages.success(request, "PAW enviado a Inventario correctamente.")
+    messages.success(request, "PAW enviado a Inventario. Registra la recepción del material.")
     return redirect("inventario:recepcion_detail", pk=recepcion.pk)
 
 @require_POST
@@ -514,7 +672,18 @@ def generar_entrega_taller(request, pk):
         pk=pk,
     )
 
-    paw = compra.bom.workorder.paw
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if not _tiene_recepcion(compra):
+        messages.error(
+            request,
+            "No puedes entregar a taller. Primero debes registrar la recepción del material."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    paw = _get_paw_from_compra(compra)
 
     if paw:
         paw.estado_operativo = "ENTREGADO_TALLER"
@@ -531,7 +700,7 @@ def generar_entrega_taller(request, pk):
 
         cantidad = ln.cantidad_requerida or 0
 
-        # 🔥 FILTRO CLAVE
+        # Solo se entregan líneas reales.
         if cantidad <= 0:
             continue
 
