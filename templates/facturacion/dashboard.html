@@ -78,6 +78,41 @@
 <div class="panel">
 
     <h2>Panel IVA y facturación por empresa</h2>
+    <div style="margin-top:10px;margin-bottom:20px;">
+    <strong style="font-size:14px;">Filtrar por cuatrimestre:</strong>
+
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+
+        <a href="?cuatrimestre=1"
+           class="btn btn-small"
+           style="background:{% if request.GET.cuatrimestre == '1' %}#2563eb{% else %}#e2e8f0{% endif %};
+                  color:{% if request.GET.cuatrimestre == '1' %}white{% else %}#0f172a{% endif %};">
+            Ene - Abr
+        </a>
+
+        <a href="?cuatrimestre=2"
+           class="btn btn-small"
+           style="background:{% if request.GET.cuatrimestre == '2' %}#2563eb{% else %}#e2e8f0{% endif %};
+                  color:{% if request.GET.cuatrimestre == '2' %}white{% else %}#0f172a{% endif %};">
+            May - Ago
+        </a>
+
+        <a href="?cuatrimestre=3"
+           class="btn btn-small"
+           style="background:{% if request.GET.cuatrimestre == '3' %}#2563eb{% else %}#e2e8f0{% endif %};
+                  color:{% if request.GET.cuatrimestre == '3' %}white{% else %}#0f172a{% endif %};">
+            Sep - Dic
+        </a>
+
+        <a href="?"
+           class="btn btn-small"
+           style="background:{% if not request.GET.cuatrimestre %}#16a34a{% else %}#e2e8f0{% endif %};
+                  color:{% if not request.GET.cuatrimestre %}white{% else %}#0f172a{% endif %};">
+            Actual
+        </a>
+
+    </div>
+</div>
     <p style="color:#64748b;font-weight:700;margin-top:6px;">
         Análisis separado por prefijo del número de factura: OG para Oil Gas e IMP para Impetus.
     </p>
@@ -93,7 +128,7 @@
         </div>
 
         <div class="facturacion-kpi oilgas">
-            <small>IVA cuatrimestre actual</small>
+            <small>IVA cuatrimestre seleccionado</small>
             <strong>$ {{ analisis_og.iva_cuatrimestre|default:0|floatformat:0|intcomma }}</strong>
             <span>Ene-Abr, May-Ago o Sep-Dic según fecha actual</span>
         </div>
@@ -120,7 +155,7 @@
         </div>
 
         <div class="facturacion-kpi impetus">
-            <small>IVA cuatrimestre actual</small>
+            <small>IVA cuatrimestre seleccionado</small>
             <strong>$ {{ analisis_imp.iva_cuatrimestre|default:0|floatformat:0|intcomma }}</strong>
             <span>Ene-Abr, May-Ago o Sep-Dic según fecha actual</span>
         </div>

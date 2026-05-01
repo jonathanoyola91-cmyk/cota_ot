@@ -7,6 +7,7 @@ from core.roles import tiene_rol
 from paw_app.models import Paw
 from .models import Factura
 from .forms import FacturaForm
+from datetime import date
 
 
 def _sumar_valores_facturas(queryset):
@@ -28,30 +29,43 @@ def _sumar_valores_facturas(queryset):
     return subtotal, iva, total
 
 
-def _analisis_empresa(facturas, prefijo):
-    """
-    Calcula análisis financiero por empresa según prefijo de número de factura.
-    Ejemplos:
-    - OG  -> Oil Gas
-    - IMP -> Impetus
-    """
+def _get_rango_cuatrimestre(cuatrimestre, year):
+    if cuatrimestre == 1:
+        return date(year, 1, 1), date(year, 4, 30)
+    elif cuatrimestre == 2:
+        return date(year, 5, 1), date(year, 8, 31)
+    elif cuatrimestre == 3:
+        return date(year, 9, 1), date(year, 12, 31)
+    return None, None
+
+
+def _analisis_empresa(facturas, prefijo, cuatrimestre=None):
     hoy = timezone.now().date()
     inicio_mes = hoy.replace(day=1)
     inicio_anio = hoy.replace(month=1, day=1)
 
-    # Cuatrimestres calendario:
-    # Ene-Abr, May-Ago, Sep-Dic
-    if hoy.month <= 4:
-        inicio_cuatrimestre = hoy.replace(month=1, day=1)
-    elif hoy.month <= 8:
-        inicio_cuatrimestre = hoy.replace(month=5, day=1)
-    else:
-        inicio_cuatrimestre = hoy.replace(month=9, day=1)
-
     qs_empresa = facturas.filter(numero_factura__icontains=prefijo)
 
+    # 🔥 FILTRO DINÁMICO
+    if cuatrimestre:
+        inicio_c, fin_c = _get_rango_cuatrimestre(int(cuatrimestre), hoy.year)
+        qs_cuatrimestre = qs_empresa.filter(
+            fecha_radicacion__range=(inicio_c, fin_c)
+        )
+    else:
+        # comportamiento actual
+        if hoy.month <= 4:
+            inicio_cuatrimestre = hoy.replace(month=1, day=1)
+        elif hoy.month <= 8:
+            inicio_cuatrimestre = hoy.replace(month=5, day=1)
+        else:
+            inicio_cuatrimestre = hoy.replace(month=9, day=1)
+
+        qs_cuatrimestre = qs_empresa.filter(
+            fecha_radicacion__gte=inicio_cuatrimestre
+        )
+
     qs_mes = qs_empresa.filter(fecha_radicacion__gte=inicio_mes)
-    qs_cuatrimestre = qs_empresa.filter(fecha_radicacion__gte=inicio_cuatrimestre)
     qs_anio = qs_empresa.filter(fecha_radicacion__gte=inicio_anio)
 
     subtotal_mes, iva_mes, total_mes = _sumar_valores_facturas(qs_mes)
@@ -80,8 +94,10 @@ def dashboard_facturacion(request):
 
     facturas = Factura.objects.select_related("paw").order_by("-actualizado_en")
 
-    analisis_og = _analisis_empresa(facturas, "OG")
-    analisis_imp = _analisis_empresa(facturas, "IMP")
+    cuatrimestre = request.GET.get("cuatrimestre")
+
+    analisis_og = _analisis_empresa(facturas, "OG", cuatrimestre)
+    analisis_imp = _analisis_empresa(facturas, "IMP", cuatrimestre)
 
     return render(request, "facturacion/dashboard.html", {
         "facturas": facturas,
