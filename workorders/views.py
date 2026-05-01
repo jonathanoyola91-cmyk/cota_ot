@@ -1,5 +1,8 @@
 from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+
 from .models import WorkOrder
 from paw_app.models import Paw
 
@@ -33,10 +36,39 @@ def crear_ot_desde_paw(request, paw_id):
         prioridad=WorkOrder.Priority.MEDIA,
         estado=WorkOrder.Status.NUEVA,
         visibilidad=WorkOrder.Visibility.RESTRINGIDA,
-        
     )
 
     paw.estado_operativo = "OT_CREADA"
     paw.save(update_fields=["estado_operativo"])
 
     return redirect("ot_detail", numero=ot.numero)
+
+
+@login_required
+def confirmar_ensamble_ok(request, numero):
+    ot = get_object_or_404(WorkOrder, numero=numero)
+
+    if ot.ensamble_ok:
+        messages.info(request, "Este ensamble ya había sido confirmado.")
+        return redirect(request.META.get("HTTP_REFERER", "ot_detail"), numero=ot.numero)
+
+    ot.ensamble_ok = True
+    ot.fecha_ensamble_ok = timezone.now()
+    ot.etapa_taller = WorkOrder.EtapaTaller.TERMINADO
+    ot.estado = WorkOrder.Status.TERMINADA
+    ot.terminado_en = timezone.now()
+    ot.save(update_fields=[
+        "ensamble_ok",
+        "fecha_ensamble_ok",
+        "etapa_taller",
+        "estado",
+        "terminado_en",
+        "actualizado_en",
+    ])
+
+    if ot.paw:
+        ot.paw.estado_operativo = "ENSAMBLE_OK"
+        ot.paw.save(update_fields=["estado_operativo"])
+
+    messages.success(request, "Ensamble confirmado correctamente.")
+    return redirect(request.META.get("HTTP_REFERER", "ot_detail"), numero=ot.numero)
