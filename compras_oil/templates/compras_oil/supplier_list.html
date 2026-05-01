@@ -1,0 +1,53 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Proveedores{% endblock %}
+{% block page_title %}Proveedores{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2>Listado de proveedores</h2>
+
+        <a href="{% url 'compras_oil:supplier_create' %}" class="btn">
+            + Nuevo proveedor
+        </a>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Contacto</th>
+                <th>Teléfono</th>
+                <th>NIT</th>
+                <th>Banco</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in suppliers %}
+            <tr>
+                <td>{{ s.nombre }}</td>
+                <td>{{ s.contacto }}</td>
+                <td>{{ s.telefono }}</td>
+                <td>{{ s.nit }}</td>
+                <td>{{ s.banco }}</td>
+                <td>
+                    <a href="{% url 'compras_oil:supplier_detail' s.id %}" class="btn btn-secondary">
+                        Ver
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6">No hay proveedores registrados</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+{% endblock %}

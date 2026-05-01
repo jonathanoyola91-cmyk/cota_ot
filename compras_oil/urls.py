@@ -16,4 +16,5 @@ urlpatterns = [
     path("proveedores/nuevo/", views.supplier_create, name="supplier_create"),
     path("proveedores/<int:pk>/", views.supplier_detail, name="supplier_detail"),
     path("cerrar/<int:pk>/", views.cerrar_solicitud, name="cerrar_solicitud"),
+    path("proveedores/", views.supplier_list, name="supplier_list"),
 ]

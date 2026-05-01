@@ -262,6 +262,17 @@ def supplier_create(request):
         "next_url": next_url,
     })
 
+@login_required
+def supplier_list(request):
+    if not tiene_rol(request.user, ["COMPRAS", "FINANZAS", "GERENTE", "ADMIN"]):
+        messages.error(request, "No tienes acceso a proveedores.")
+        return redirect("/")
+
+    suppliers = Supplier.objects.all().order_by("nombre")
+
+    return render(request, "compras_oil/supplier_list.html", {
+        "suppliers": suppliers
+    })
 
 @login_required
 def purchase_request_pdf(request, pk: int):

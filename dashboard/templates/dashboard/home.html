@@ -276,6 +276,13 @@ tr:hover{
     </a>
     {% endif %}
 
+    {% if es_compras or es_finanzas %}
+    <a href="/compras/proveedores/"
+       class="{% if '/proveedores/' in request.path %}active{% endif %}">
+        Proveedores
+    </a>
+    {% endif %} 
+
     <a href="/paw/"
        class="{% if '/paw/' in request.path %}active{% endif %}">
         PAW
