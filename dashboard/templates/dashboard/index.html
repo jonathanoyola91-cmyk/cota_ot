@@ -453,6 +453,18 @@
                 <div class="kpi-card kpi-red">
                     <small>Pendiente facturar</small>
                     <strong>{{ pendientes_facturar }}</strong>
+
+                    {% if paws_pendientes_facturar %}
+                        <div style="margin-top:8px; font-size:12px;">
+                            {% for paw in paws_pendientes_facturar %}
+                                <div>
+                                    <a href="/paw/{{ paw.id }}/">
+                                        {{ paw.numero_paw }} - {{ paw.cliente }}
+                                    </a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -542,61 +554,87 @@
             </div>
         </div>
 
-        <!-- PANEL DERECHO -->
+        <!-- PANEL DERECHO: BLOQUEOS REALES DEL PROCESO -->
         <div class="side-stack">
 
             <div class="panel-pro">
                 <div class="panel-header">
                     <div>
-                        <h3>Prioridades</h3>
-                        <div class="panel-subtitle">Qué revisar primero</div>
+                        <h3>💰 Bloqueos en Finanzas</h3>
+                        <div class="panel-subtitle">PAW detenidos por aprobación o pagos</div>
                     </div>
                 </div>
 
                 <div class="task-list">
+                    {% if bloqueos_finanzas %}
+                        {% for paw in bloqueos_finanzas %}
+                        <div class="task-card task-yellow">
+                            <strong>{{ paw.numero_paw }} - {{ paw.cliente }}</strong>
 
-                    {% if paws_atrasados > 0 %}
-                    <div class="task-card task-red">
-                        <strong>PAW atrasados</strong>
-                        <span>{{ paws_atrasados }} requieren revisión inmediata.</span>
-                    </div>
+                            {% if paw.estado_operativo == "EN_APROBACION" %}
+                                <span>Pendiente aprobación de pago / gerencia</span>
+                            {% elif paw.estado_operativo == "EN_FINANZAS" %}
+                                <span>Pendiente revisión o pago en finanzas</span>
+                            {% else %}
+                                <span>{{ paw.estado_operativo }}</span>
+                            {% endif %}
+
+                            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                                <a class="btn-pro" href="/paw/{{ paw.id }}/">Ver PAW</a>
+                                <a class="btn-pro" href="/finanzas/" style="background:#f59e0b; box-shadow:0 6px 12px rgba(245,158,11,.22);">Ir a finanzas</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">Sin bloqueos en finanzas</div>
                     {% endif %}
-
-                    {% if paw_finanzas > 0 %}
-                    <div class="task-card task-yellow">
-                        <strong>Pagos por aprobar</strong>
-                        <span>{{ paw_finanzas }} PAW están detenidos en finanzas.</span>
-                    </div>
-                    {% endif %}
-
-                    {% if pendientes_facturar > 0 %}
-                    <div class="task-card task-green">
-                        <strong>Pendiente facturar</strong>
-                        <span>{{ pendientes_facturar }} productos listos requieren facturación.</span>
-                    </div>
-                    {% endif %}
-
-                    {% if paw_compras > 0 %}
-                    <div class="task-card task-blue">
-                        <strong>Compras pendientes</strong>
-                        <span>{{ paw_compras }} PAW requieren gestión de compras.</span>
-                    </div>
-                    {% endif %}
-
-                    {% if paws_atrasados == 0 and paw_finanzas == 0 and pendientes_facturar == 0 and paw_compras == 0 %}
-                    <div class="empty-state">
-                        Sin alertas críticas activas.
-                    </div>
-                    {% endif %}
-
                 </div>
             </div>
 
             <div class="panel-pro">
                 <div class="panel-header">
                     <div>
-                        <h3>Semáforo operativo</h3>
-                        <div class="panel-subtitle">PAW con acción pendiente</div>
+                        <h3>🧾 Pendientes de Facturación</h3>
+                        <div class="panel-subtitle">Producto OK, falta crear factura</div>
+                    </div>
+                </div>
+
+                <div class="task-list">
+                    {% if bloqueos_facturacion %}
+                        {% for paw in bloqueos_facturacion %}
+                        <div class="task-card task-green">
+                            <strong>{{ paw.numero_paw }} - {{ paw.cliente }}</strong>
+                            <span>Producto listo para facturar</span>
+
+                            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                                <a class="btn-pro" href="/paw/{{ paw.id }}/">Ver PAW</a>
+                                <a class="btn-pro" href="/facturacion/crear/{{ paw.id }}/" style="background:#16a34a; box-shadow:0 6px 12px rgba(22,163,74,.22);">Facturar</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% elif paws_pendientes_facturar %}
+                        {% for paw in paws_pendientes_facturar %}
+                        <div class="task-card task-green">
+                            <strong>{{ paw.numero_paw }} - {{ paw.cliente }}</strong>
+                            <span>Producto listo para facturar</span>
+
+                            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                                <a class="btn-pro" href="/paw/{{ paw.id }}/">Ver PAW</a>
+                                <a class="btn-pro" href="/facturacion/crear/{{ paw.id }}/" style="background:#16a34a; box-shadow:0 6px 12px rgba(22,163,74,.22);">Facturar</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">Nada pendiente por facturar</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="panel-pro">
+                <div class="panel-header">
+                    <div>
+                        <h3>🚧 Otros Bloqueos Operativos</h3>
+                        <div class="panel-subtitle">Solo etapas que frenan el proceso</div>
                     </div>
                 </div>
 
@@ -605,40 +643,38 @@
                         <thead>
                             <tr>
                                 <th>PAW</th>
-                                <th>Estado</th>
+                                <th>Bloqueo</th>
                                 <th>Ver</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             {% for paw in paws_criticos %}
-                            <tr>
-                                <td>
-                                    <span class="paw-number">{{ paw.numero_paw }}</span>
-                                </td>
+                                {% if paw.estado_operativo != "EN_FINANZAS" and paw.estado_operativo != "EN_APROBACION" %}
+                                <tr>
+                                    <td><span class="paw-number">{{ paw.numero_paw }}</span></td>
 
-                                <td>
-                                    {% if paw.estado_operativo == "EN_COMPRAS" %}
-                                        <span class="status-pill pill-red">Compras</span>
-                                    {% elif paw.estado_operativo == "EN_FINANZAS" %}
-                                        <span class="status-pill pill-yellow">Finanzas</span>
-                                    {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
-                                        <span class="status-pill pill-blue">Taller</span>
-                                    {% elif paw.estado_operativo == "EN_APROBACION" %}
-                                        <span class="status-pill pill-purple">Aprobación</span>
-                                    {% else %}
-                                        <span class="status-pill pill-gray">{{ paw.estado_operativo }}</span>
-                                    {% endif %}
-                                </td>
+                                    <td>
+                                        {% if paw.estado_operativo == "EN_COMPRAS" %}
+                                            <span class="status-pill pill-red">Compras</span>
+                                        {% elif paw.estado_operativo == "MATERIAL_RECIBIDO" %}
+                                            <span class="status-pill pill-blue">Material recibido</span>
+                                        {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
+                                            <span class="status-pill pill-purple">Taller</span>
+                                        {% else %}
+                                            <span class="status-pill pill-gray">{{ paw.estado_operativo }}</span>
+                                        {% endif %}
+                                    </td>
 
-                                <td>
-                                    <a class="btn-pro" href="/paw/{{ paw.id }}/">Ver</a>
-                                </td>
-                            </tr>
+                                    <td>
+                                        <a class="btn-pro" href="/paw/{{ paw.id }}/">Ver</a>
+                                    </td>
+                                </tr>
+                                {% endif %}
                             {% empty %}
                             <tr>
                                 <td colspan="3">
-                                    <div class="empty-state">Sin PAW críticos</div>
+                                    <div class="empty-state">Sin bloqueos operativos</div>
                                 </td>
                             </tr>
                             {% endfor %}

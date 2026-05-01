@@ -27,6 +27,7 @@ def dashboard_home(request):
     paw_taller = paws.filter(estado_operativo="ENTREGADO_TALLER").count()
     producto_listo = paws.filter(estado_operativo="PRODUCTO_OK").count()
     pendientes_facturar = paws.filter(estado_operativo="PRODUCTO_OK").count()
+    paws_pendientes_facturar = paws.filter(estado_operativo="PRODUCTO_OK").order_by("-actualizado_en")[:5]
 
     paws_criticos = paws.filter(
         estado_operativo__in=[
@@ -93,6 +94,7 @@ def dashboard_home(request):
         "paws_entregas": paws_entregas,
         "paws_atrasados": paws_atrasados,
         "paws_proximos": paws_proximos,
+        "paws_pendientes_facturar": paws_pendientes_facturar,
 
         "ultimas_cotizaciones": ultimas_cotizaciones,
         "ultimos_paws": ultimos_paws,
