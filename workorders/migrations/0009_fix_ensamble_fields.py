@@ -9,15 +9,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='workorder',
-            name='ensamble_confirmado_por',
-            field=models.ForeignKey(
-                to=settings.AUTH_USER_MODEL,
-                null=True,
-                blank=True,
-                on_delete=models.SET_NULL,
-                related_name='ensambles_confirmados'
-            ),
-        ),
+        # 🔥 VACÍO: no hacer nada en DB  
     ]
