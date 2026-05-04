@@ -304,6 +304,7 @@
                         <th>Proveedor</th>
                         <th>P.Unit</th>
                         <th>Tipo Pago</th>
+                        <th>% Pago</th>
                         <th>Condición / Obs. de compra</th>
                     </tr>
                 </thead>
@@ -356,6 +357,14 @@
                                 {{ form.instance.tipo_pago|default:"-" }}
                             {% endif %}
                         </td>
+                        
+                        <td style="min-width:100px;">
+                            {% if puede_compras %}
+                                {{ form.porcentaje_pago }}
+                            {% else %}
+                                {{ form.instance.porcentaje_pago|default:"100" }} %
+                            {% endif %}
+                        </td> 
 
                         <td style="min-width:300px;">
                             {% if puede_compras %}

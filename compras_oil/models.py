@@ -129,6 +129,13 @@ class PurchaseLine(models.Model):
         blank=True
     )
 
+    porcentaje_pago = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=100,
+        help_text="Ej: 50 para 50%, 100 para 100%"
+    )
+
     # Notas de compras
     observaciones_compras = models.TextField(blank=True)
 

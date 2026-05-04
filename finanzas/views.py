@@ -18,6 +18,7 @@ from django.db.models import (
 from django.db.models.functions import Coalesce
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from core.roles import tiene_rol
 from compras_oil.models import PurchaseLine, Supplier
@@ -32,6 +33,8 @@ from .models import (
 
 IVA_RATE = Decimal("0.19")
 PAGE_SIZE = 50
+
+
 
 
 def _puede_ver_finanzas(user):
@@ -260,6 +263,26 @@ def aprobacion_pagos(request):
         "lineas": lineas,
     })
 
+@require_POST
+@login_required
+def actualizar_tipo_operacion(request, linea_id):
+    if not tiene_rol(request.user, ["FINANZAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para cambiar el tipo de operación.")
+        return redirect("/")
+
+    linea = get_object_or_404(FinanceApprovalLine, id=linea_id)
+
+    tipo_operacion = request.POST.get("tipo_operacion")
+
+    if tipo_operacion not in ["COMPRA", "SERVICIO"]:
+        messages.error(request, "Tipo de operación no válido.")
+        return redirect("finanzas:detalle", pk=linea.approval.id)
+
+    linea.tipo_operacion = tipo_operacion
+    linea.save(update_fields=["tipo_operacion", "actualizado_en"])
+
+    messages.success(request, "Tipo de operación actualizado.")
+    return redirect("finanzas:detalle", pk=linea.approval.id)
 
 @login_required
 def aprobar_linea_pago(request, linea_id):
@@ -289,7 +312,6 @@ def aprobar_linea_pago(request, linea_id):
 
     return redirect("finanzas:aprobacion_pagos")
 
-
 @login_required
 def detalle_finanzas(request, pk):
     if not _puede_ver_finanzas(request.user):
@@ -306,6 +328,31 @@ def detalle_finanzas(request, pk):
         "purchase_line__proveedor"
     ).all()
 
+    # 🔥 AQUI VA TU LOGICA (BIEN INDENTADA)
+    for linea in lineas:
+        cantidad = linea.purchase_line.cantidad_a_comprar or 0
+        precio = linea.purchase_line.precio_unitario or 0
+
+        subtotal = cantidad * precio
+        iva = subtotal * Decimal("0.19")
+
+        porcentaje = linea.purchase_line.porcentaje_pago or 100
+        base_pago = subtotal * (porcentaje / Decimal("100"))
+
+        if linea.tipo_operacion == "SERVICIO":
+            retencion = subtotal * Decimal("0.04")
+        else:
+            retencion = subtotal * Decimal("0.025")
+
+        total_pagar = base_pago + iva - retencion
+
+        linea.subtotal_calc = subtotal
+        linea.iva_calc = iva
+        linea.retencion_calc = retencion
+        linea.total_pagar_calc = total_pagar
+        linea.porcentaje_pago_calc = porcentaje
+
+    # 🔥 ESTE RETURN DEBE ESTAR DENTRO DEL DEF
     return render(request, "finanzas/detalle.html", {
         "fin": fin,
         "lineas": lineas

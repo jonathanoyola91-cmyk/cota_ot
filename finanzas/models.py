@@ -63,6 +63,15 @@ class FinanceApprovalLine(models.Model):
     - Admin decide qué se paga y qué espera
     - Finanzas ejecuta solo lo aprobado
     """
+    class TipoOperacion(models.TextChoices):
+        SERVICIO = "SERVICIO", "Servicio"
+        COMPRA = "COMPRA", "Compra"
+
+    tipo_operacion = models.CharField(
+        max_length=20,
+        choices=TipoOperacion.choices,
+        default=TipoOperacion.COMPRA
+    )
 
     class Decision(models.TextChoices):
         PENDIENTE = "PENDIENTE", "Pendiente"

@@ -15,7 +15,7 @@ class SupplierForm(forms.ModelForm):
             "nit",
             "banco",
             "cuenta_bancaria",
-            "tipo_cuenta",
+            "tipo_cuenta",            
         ]
 
         widgets = {
@@ -27,6 +27,7 @@ class SupplierForm(forms.ModelForm):
             "banco": forms.TextInput(attrs={"class": "form-control"}),
             "cuenta_bancaria": forms.TextInput(attrs={"class": "form-control"}),
             "tipo_cuenta": forms.Select(attrs={"class": "form-control"}),
+            
         }
 
 class PurchaseLineForm(forms.ModelForm):
@@ -38,6 +39,7 @@ class PurchaseLineForm(forms.ModelForm):
             "proveedor",
             "precio_unitario",
             "tipo_pago",
+            "porcentaje_pago",
             "observaciones_compras",
         ]
 
@@ -57,7 +59,14 @@ class PurchaseLineForm(forms.ModelForm):
             "tipo_pago": forms.Select(attrs={
                 "class": "form-control"
             }),
-
+            
+            "porcentaje_pago": forms.Select(
+                choices=[
+                    (50, "50%"),
+                    (100, "100%"),
+                ],
+                attrs={"class": "form-control"}
+            ),
             "observaciones_compras": forms.Textarea(attrs={
                 "class": "form-control",
                 "rows": 2,

@@ -11,4 +11,5 @@ urlpatterns = [
     path("linea/<int:linea_id>/pagar/", views.marcar_pagado, name="marcar_pagado"),
     path("aprobacion-pagos/", views.aprobacion_pagos, name="aprobacion_pagos"),
     path("aprobar-linea/<int:linea_id>/", views.aprobar_linea_pago, name="aprobar_linea_pago"),
+    path("linea/<int:linea_id>/tipo-operacion/", views.actualizar_tipo_operacion, name="actualizar_tipo_operacion"),
 ]
