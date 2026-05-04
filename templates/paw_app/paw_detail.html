@@ -247,6 +247,21 @@
         margin-top:4px;
     }
 
+
+
+    /* Control visual para placeholders de información restringida.
+       Los valores reales SOLO se renderizan dentro de condiciones de rol. */
+    .restricted-placeholder {
+        display:inline-block;
+        background:#f1f5f9;
+        color:#64748b;
+        border:1px solid #e2e8f0;
+        border-radius:999px;
+        padding:5px 9px;
+        font-size:12px;
+        font-weight:800;
+    }
+
     @media (max-width:1200px) {
         .progress-grid { grid-template-columns:repeat(4,1fr); }
         .summary-grid,
@@ -354,11 +369,24 @@
             <div class="quote-item">
                 <small>Número cotización</small>
                 {% if paw.cotizacion %}
-                    <strong>
-                        <a href="/quotes/{{ paw.cotizacion.id }}/">
-                            {{ paw.cotizacion.numero_cotizacion }}
-                        </a>
-                    </strong>
+                    {% if request.user.is_superuser %}
+                        <strong>
+                            <a href="/quotes/{{ paw.cotizacion.id }}/">
+                                {{ paw.cotizacion.numero_cotizacion }}
+                            </a>
+                        </strong>
+                    {% else %}
+                        {% for group in request.user.groups.all %}
+                            {% if group.name == "ADMIN" or group.name == "COMERCIAL" or group.name == "FINANZAS" %}
+                                <strong>
+                                    <a href="/quotes/{{ paw.cotizacion.id }}/">
+                                        {{ paw.cotizacion.numero_cotizacion }}
+                                    </a>
+                                </strong>
+                            {% endif %}
+                        {% endfor %}
+                        <span class="restricted-placeholder">Restringido</span>
+                    {% endif %}
                 {% else %}
                     <span>Sin cotización</span>
                 {% endif %}
@@ -371,13 +399,20 @@
 
             <div class="quote-item">
                 <small>Valor</small>
-                <span>
-                    {% if paw.cotizacion %}
-                        $ {{ paw.cotizacion.valor }}
+                {% if paw.cotizacion %}
+                    {% if request.user.is_superuser %}
+                        <span>$ {{ paw.cotizacion.valor }}</span>
                     {% else %}
-                        -
+                        {% for group in request.user.groups.all %}
+                            {% if group.name == "ADMIN" or group.name == "COMERCIAL" or group.name == "FINANZAS" or group.name == "GERENTE" %}
+                                <span>$ {{ paw.cotizacion.valor }}</span>
+                            {% endif %}
+                        {% endfor %}
+                        <span class="restricted-placeholder">Valor restringido</span>
                     {% endif %}
-                </span>
+                {% else %}
+                    <span>-</span>
+                {% endif %}
             </div>
 
             <div class="quote-item">
@@ -598,7 +633,15 @@
                                     <th>Descripción</th>
                                     <th>Proveedor</th>
                                     <th>Cantidad</th>
-                                    <th>Valor Unit.</th>
+                                    {% if request.user.is_superuser %}
+                                        <th>Valor Unit.</th>
+                                    {% else %}
+                                        {% for group in request.user.groups.all %}
+                                            {% if group.name == "ADMIN" or group.name == "COMERCIAL" or group.name == "FINANZAS" or group.name == "GERENTE" %}
+                                                <th>Valor Unit.</th>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
                                     <th>Decisión</th>
                                     <th>Pago</th>
                                 </tr>
@@ -623,9 +666,15 @@
                                         {{ linea.purchase_line.cantidad_a_comprar|default:"0" }}
                                     </td>
 
-                                    <td>
-                                        $ {{ linea.purchase_line.precio_unitario|default:"0" }}
-                                    </td>
+                                    {% if request.user.is_superuser %}
+                                        <td>$ {{ linea.purchase_line.precio_unitario|default:"0" }}</td>
+                                    {% else %}
+                                        {% for group in request.user.groups.all %}
+                                            {% if group.name == "ADMIN" or group.name == "COMERCIAL" or group.name == "FINANZAS" or group.name == "GERENTE" %}
+                                                <td>$ {{ linea.purchase_line.precio_unitario|default:"0" }}</td>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
 
                                     <td>
                                         {% if linea.decision == "APROBADO" %}
@@ -662,9 +711,19 @@
 
                     <br>
 
-                    <a class="btn" href="{% url 'finanzas:detalle' ot.bom.compra.finance_approval.id %}">
-                        🔎 Ir a Finanzas
-                    </a>
+                    {% if request.user.is_superuser %}
+                        <a class="btn" href="{% url 'finanzas:detalle' ot.bom.compra.finance_approval.id %}">
+                            🔎 Ir a Finanzas
+                        </a>
+                    {% else %}
+                        {% for group in request.user.groups.all %}
+                            {% if group.name == "ADMIN" or group.name == "FINANZAS" or group.name == "GERENTE" %}
+                                <a class="btn" href="{% url 'finanzas:detalle' ot.bom.compra.finance_approval.id %}">
+                                    🔎 Ir a Finanzas
+                                </a>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
                 </div>
 
             {% endif %}
