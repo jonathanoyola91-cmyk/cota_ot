@@ -274,7 +274,7 @@ def actualizar_tipo_operacion(request, linea_id):
 
     tipo_operacion = request.POST.get("tipo_operacion")
 
-    if tipo_operacion not in ["COMPRA", "SERVICIO"]:
+    if tipo_operacion not in ["COMPRA", "SERVICIO", "NA"]:
         messages.error(request, "Tipo de operación no válido.")
         return redirect("finanzas:detalle", pk=linea.approval.id)
 
@@ -336,19 +336,28 @@ def detalle_finanzas(request, pk):
         subtotal = cantidad * precio
         iva = subtotal * Decimal("0.19")
 
-        porcentaje = linea.purchase_line.porcentaje_pago or 100
-        base_pago = subtotal * (porcentaje / Decimal("100"))
+        porcentaje = Decimal(linea.purchase_line.porcentaje_pago or Decimal("100.00"))
 
         if linea.tipo_operacion == "SERVICIO":
             retencion = subtotal * Decimal("0.04")
-        else:
+            linea.tipo_operacion_label = "Servicio - retención 4%"
+        elif linea.tipo_operacion == "COMPRA":
             retencion = subtotal * Decimal("0.025")
+            linea.tipo_operacion_label = "Compra - retención 2.5%"
+        else:
+            retencion = Decimal("0.00")
+            linea.tipo_operacion_label = "N/A - sin retención"
 
-        total_pagar = base_pago + iva - retencion
+        # Fórmula correcta:
+        # 1) subtotal + IVA - retención = base neta
+        # 2) aplicar el porcentaje de pago al final
+        base_total = subtotal + iva - retencion
+        total_pagar = base_total * (porcentaje / Decimal("100"))
 
         linea.subtotal_calc = subtotal
         linea.iva_calc = iva
         linea.retencion_calc = retencion
+        linea.base_total_calc = base_total
         linea.total_pagar_calc = total_pagar
         linea.porcentaje_pago_calc = porcentaje
 

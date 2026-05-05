@@ -46,8 +46,9 @@
                     <th>Pagado</th>
                     <th>Subtotal</th>
                     <th>IVA</th>
-                    <th>% Pago</th>
                     <th>Retención</th>
+                    <th>Base neta</th>
+                    <th>% Pago</th>
                     <th>Total a pagar</th>
                     <th>Acción</th>
                 </tr>
@@ -113,6 +114,9 @@
                                 <option value="SERVICIO" {% if linea.tipo_operacion == "SERVICIO" %}selected{% endif %}>
                                     Servicio - retención 4%
                                 </option>
+                                <option value="NA" {% if linea.tipo_operacion == "NA" %}selected{% endif %}>
+                                    N/A - sin retención
+                                </option>
                             </select>
                         </form>
                     </td>
@@ -131,8 +135,9 @@
 
                     <td style="white-space:nowrap;">$ {{ linea.subtotal_calc|floatformat:0 }}</td>
                     <td style="white-space:nowrap;">$ {{ linea.iva_calc|floatformat:0 }}</td>
-                    <td style="white-space:nowrap;">{{ linea.porcentaje_pago_calc|floatformat:0 }}%</td>
                     <td style="white-space:nowrap;">$ {{ linea.retencion_calc|floatformat:0 }}</td>
+                    <td style="white-space:nowrap;">$ {{ linea.base_total_calc|floatformat:0 }}</td>
+                    <td style="white-space:nowrap;">{{ linea.porcentaje_pago_calc|floatformat:0 }}%</td>
                     <td style="white-space:nowrap;"><strong>$ {{ linea.total_pagar_calc|floatformat:0 }}</strong></td>
 
                     <td style="min-width:160px;">
@@ -173,7 +178,7 @@
 
                 {% empty %}
                 <tr>
-                    <td colspan="15">No hay líneas financieras.</td>
+                    <td colspan="16">No hay líneas financieras.</td>
                 </tr>
                 {% endfor %}
             </tbody>

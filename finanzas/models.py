@@ -63,15 +63,6 @@ class FinanceApprovalLine(models.Model):
     - Admin decide qué se paga y qué espera
     - Finanzas ejecuta solo lo aprobado
     """
-    class TipoOperacion(models.TextChoices):
-        SERVICIO = "SERVICIO", "Servicio"
-        COMPRA = "COMPRA", "Compra"
-
-    tipo_operacion = models.CharField(
-        max_length=20,
-        choices=TipoOperacion.choices,
-        default=TipoOperacion.COMPRA
-    )
 
     class Decision(models.TextChoices):
         PENDIENTE = "PENDIENTE", "Pendiente"
@@ -79,6 +70,11 @@ class FinanceApprovalLine(models.Model):
         PROGRAMADO = "PROGRAMADO", "Programado"
         EN_ESPERA = "EN_ESPERA", "En espera"
         RECHAZADO = "RECHAZADO", "Rechazado"
+
+    class TipoOperacion(models.TextChoices):
+        COMPRA = "COMPRA", "Compra - retención 2.5%"
+        SERVICIO = "SERVICIO", "Servicio - retención 4%"
+        NA = "NA", "N/A - sin retención"
 
     approval = models.ForeignKey(
         FinanceApproval,
@@ -96,6 +92,12 @@ class FinanceApprovalLine(models.Model):
         max_length=20,
         choices=Decision.choices,
         default=Decision.PENDIENTE,
+    )
+
+    tipo_operacion = models.CharField(
+        max_length=20,
+        choices=TipoOperacion.choices,
+        default=TipoOperacion.COMPRA,
     )
 
     scheduled_date = models.DateField(null=True, blank=True)
