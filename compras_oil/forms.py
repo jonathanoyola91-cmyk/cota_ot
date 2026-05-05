@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import modelformset_factory
 from .models import Supplier, PurchaseLine
+from decimal import Decimal
 
 
 class SupplierForm(forms.ModelForm):
@@ -30,12 +31,16 @@ class SupplierForm(forms.ModelForm):
 
 
 class PurchaseLineForm(forms.ModelForm):
-    porcentaje_pago = forms.ChoiceField(
-        choices=[
-            ("50", "50%"),
-            ("100", "100%"),
-        ],
-        widget=forms.Select(attrs={"class": "form-control"})
+    porcentaje_pago = forms.DecimalField(
+        required=True,
+        initial=Decimal("100.00"),
+        widget=forms.Select(
+            choices=[
+                (Decimal("50.00"), "50%"),
+                (Decimal("100.00"), "100%"),
+            ],
+            attrs={"class": "form-control"}
+        )
     )
 
     class Meta:
@@ -50,18 +55,10 @@ class PurchaseLineForm(forms.ModelForm):
         ]
 
         widgets = {
-            "cantidad_disponible": forms.NumberInput(attrs={
-                "class": "form-control"
-            }),
-            "proveedor": forms.Select(attrs={
-                "class": "form-control"
-            }),
-            "precio_unitario": forms.NumberInput(attrs={
-                "class": "form-control"
-            }),
-            "tipo_pago": forms.Select(attrs={
-                "class": "form-control"
-            }),
+            "cantidad_disponible": forms.NumberInput(attrs={"class": "form-control"}),
+            "proveedor": forms.Select(attrs={"class": "form-control"}),
+            "precio_unitario": forms.NumberInput(attrs={"class": "form-control"}),
+            "tipo_pago": forms.Select(attrs={"class": "form-control"}),
             "observaciones_compras": forms.Textarea(attrs={
                 "class": "form-control",
                 "rows": 2,
@@ -71,8 +68,7 @@ class PurchaseLineForm(forms.ModelForm):
 
     def clean_porcentaje_pago(self):
         value = self.cleaned_data.get("porcentaje_pago")
-        return float(value)
-
+        return value or Decimal("100.00")
 
 PurchaseLineFormSet = modelformset_factory(
     PurchaseLine,
