@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte actividades PAW {{ servicio.paw.numero_paw }}</title>
+<style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#111827;margin:30px;}
+    .header{border-bottom:3px solid #111827;padding-bottom:12px;margin-bottom:20px;}
+    h1{margin:0;font-size:24px;} h2{margin-top:24px;font-size:18px;}
+    .meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px;font-size:14px;}
+    .day{border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin-bottom:14px;page-break-inside:avoid;}
+    .day-title{font-weight:800;margin-bottom:8px;color:#1e40af;}
+    .activities{white-space:pre-line;line-height:1.5;}
+    .no-cost{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:10px;padding:10px;margin:14px 0;font-weight:700;}
+    .print-btn{background:#2563eb;color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer;margin-bottom:16px;}
+    @media print{.print-btn{display:none;} body{margin:15px;}}
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+
+<div class="header">
+    <h1>Reporte preliminar de actividades</h1>
+    <div class="meta">
+        <div><strong>PAW:</strong> {{ servicio.paw.numero_paw }}</div>
+        <div><strong>Estado:</strong> {{ servicio.estado }}</div>
+        <div><strong>Cliente:</strong> {{ servicio.paw.cliente|default:"-" }}</div>
+        <div><strong>Campo:</strong> {{ servicio.paw.campo|default:"-" }}</div>
+        <div><strong>Responsable:</strong> {{ servicio.responsable|default:"-" }}</div>
+        <div><strong>Fecha:</strong> {{ servicio.fecha_inicio|date:"d/m/Y" }} - {{ servicio.fecha_fin|date:"d/m/Y"|default:"En curso" }}</div>
+    </div>
+</div>
+
+<div class="no-cost">Este reporte es de actividades. No incluye costos internos ni relación de gastos.</div>
+
+{% for gasto in gastos %}
+<div class="day">
+    <div class="day-title">Día {{ gasto.dia_numero }} · {{ gasto.fecha|date:"d/m/Y" }}</div>
+    <div class="activities">{{ gasto.actividades|default:"Sin actividades registradas." }}</div>
+    {% if gasto.observaciones %}
+        <h2>Observaciones</h2>
+        <div class="activities">{{ gasto.observaciones }}</div>
+    {% endif %}
+</div>
+{% empty %}
+<p>No hay actividades registradas.</p>
+{% endfor %}
+
+</body>
+</html>

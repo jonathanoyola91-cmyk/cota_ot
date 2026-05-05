@@ -68,30 +68,30 @@ class FieldServiceDailyExpense(models.Model):
     fecha = models.DateField(default=timezone.localdate)
     dia_numero = models.PositiveIntegerField(default=1)
 
-    # Valores unitarios / diarios diligenciados por el líder de campo
+    # Actividades: reporte técnico/preliminar para cliente, sin costos.
+    actividades = models.TextField(
+        "Actividades realizadas",
+        blank=True,
+        help_text="Resumen técnico de actividades realizadas durante el día. No incluir valores económicos.",
+    )
+
     transporte = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     apoyo_local = models.DecimalField(
         "Apoyo local / comunidad",
         max_digits=14,
         decimal_places=2,
         default=0,
-        help_text="Permisos, guías, accesos, apoyo comunitario o logística local.",
     )
     alojamiento = models.DecimalField(
-        "Alojamiento por persona",
+        "Alojamiento unitario",
         max_digits=14,
         decimal_places=2,
         default=0,
-        help_text="Valor unitario por persona.",
+        help_text="Valor unitario por persona. El sistema lo multiplica por personas.",
     )
 
     personas = models.PositiveIntegerField(default=1)
-    tarifa_alimentacion = models.DecimalField(
-        "Alimentación por persona",
-        max_digits=14,
-        decimal_places=2,
-        default=0,
-    )
+    tarifa_alimentacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     hidratacion_por_persona = models.DecimalField(max_digits=14, decimal_places=2, default=10000)
 
     vuelo_ida_aplica = models.BooleanField(default=False)
@@ -151,18 +151,6 @@ class FieldServiceDailyExpense(models.Model):
             + self.total_vuelos
             + Decimal(self.gastos_adicionales or 0)
         )
-
-    def save(self, *args, **kwargs):
-        if not self.dia_numero and self.servicio_id:
-            ultimo = (
-                FieldServiceDailyExpense.objects
-                .filter(servicio_id=self.servicio_id)
-                .order_by("-dia_numero")
-                .first()
-            )
-            self.dia_numero = (ultimo.dia_numero + 1) if ultimo else 1
-
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Día {self.dia_numero} - {self.servicio}"

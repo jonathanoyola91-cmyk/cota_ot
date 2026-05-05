@@ -416,26 +416,30 @@ window.addEventListener("load", function(){
         Cuentas por pagar
     </a>
     {% endif %}
-
+ 
+    {% if not es_campo or es_ingenieria or es_gerente or request.user.is_superuser %}
     <a href="/paw/"
        class="{% if '/paw/' in request.path %}active{% endif %}">
         PAW
     </a>
+    {% endif %}
 
     <a href="/ot/"
        class="{% if '/ot/' in request.path %}active{% endif %}">
         Órdenes de Trabajo
     </a>
-
+    
+    {% if es_taller or es_ingenieria or es_gerente or request.user.is_superuser %}
     <a href="/taller/"
       class="{% if '/taller/' in request.path %}active{% endif %}">
        Taller
     </a>
+    {% endif %}
 
     {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente %}
     <a href="/campo/"
        class="{% if '/campo/' in request.path %}active{% endif %}">
-        📍 Campo
+        Campo
     </a>
     {% else %}
         {% for group in request.user.groups.all %}

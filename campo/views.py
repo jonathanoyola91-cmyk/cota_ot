@@ -13,6 +13,15 @@ def _puede_campo(user):
     return tiene_rol(user, ["CAMPO", "INGENIERIA", "GERENTE", "ADMIN"])
 
 
+def _puede_ver_gastos(user):
+    return tiene_rol(user, ["FINANZAS", "GERENTE", "ADMIN"])
+
+
+def _siguiente_dia(servicio):
+    ultimo = servicio.gastos.order_by("-dia_numero", "-id").first()
+    return (ultimo.dia_numero + 1) if ultimo else 1
+
+
 @login_required
 def dashboard_campo(request):
     if not _puede_campo(request.user):
@@ -45,12 +54,8 @@ def detalle_servicio(request, servicio_id):
     return render(request, "campo/detalle_servicio.html", {
         "servicio": servicio,
         "gastos": servicio.gastos.all(),
+        "puede_ver_gastos": _puede_ver_gastos(request.user),
     })
-
-
-def _siguiente_dia(servicio):
-    ultimo = servicio.gastos.order_by("-dia_numero").first()
-    return (ultimo.dia_numero + 1) if ultimo else 1
 
 
 @login_required
@@ -65,20 +70,23 @@ def crear_gasto_diario(request, servicio_id):
         messages.error(request, "No puedes agregar gastos a un servicio finalizado.")
         return redirect("campo:detalle_servicio", servicio_id=servicio.id)
 
-    siguiente_dia = _siguiente_dia(servicio)
-
     if request.method == "POST":
-        form = FieldServiceDailyExpenseForm(request.POST, siguiente_dia=siguiente_dia)
+        form = FieldServiceDailyExpenseForm(request.POST)
         if form.is_valid():
             gasto = form.save(commit=False)
             gasto.servicio = servicio
-            gasto.dia_numero = siguiente_dia
             gasto.registrado_por = request.user
+            # Mantiene consecutivo seguro aunque manipulen el HTML.
+            if not gasto.dia_numero:
+                gasto.dia_numero = _siguiente_dia(servicio)
             gasto.save()
-            messages.success(request, f"Gasto diario día {gasto.dia_numero} registrado correctamente.")
+            messages.success(request, "Registro diario guardado correctamente.")
             return redirect("campo:detalle_servicio", servicio_id=servicio.id)
     else:
-        form = FieldServiceDailyExpenseForm(siguiente_dia=siguiente_dia)
+        form = FieldServiceDailyExpenseForm(initial={
+            "dia_numero": _siguiente_dia(servicio),
+            "fecha": timezone.localdate(),
+        })
 
     return render(request, "campo/gasto_form.html", {
         "form": form,
@@ -93,24 +101,18 @@ def editar_gasto_diario(request, gasto_id):
         messages.error(request, "No tienes permiso para editar gastos de campo.")
         return redirect("/")
 
-    gasto = get_object_or_404(
-        FieldServiceDailyExpense.objects.select_related("servicio", "servicio__paw"),
-        id=gasto_id,
-    )
+    gasto = get_object_or_404(FieldServiceDailyExpense.objects.select_related("servicio", "servicio__paw"), id=gasto_id)
     servicio = gasto.servicio
 
     if servicio.estado == FieldService.Estado.FINALIZADO:
-        messages.error(request, "No puedes editar gastos de un servicio finalizado.")
+        messages.error(request, "No puedes editar registros de un servicio finalizado.")
         return redirect("campo:detalle_servicio", servicio_id=servicio.id)
 
     if request.method == "POST":
         form = FieldServiceDailyExpenseForm(request.POST, instance=gasto)
         if form.is_valid():
-            gasto = form.save(commit=False)
-            # Se mantiene el día original para evitar saltos o duplicados por edición.
-            gasto.dia_numero = gasto.dia_numero
-            gasto.save()
-            messages.success(request, "Gasto diario actualizado correctamente.")
+            form.save()
+            messages.success(request, "Registro diario actualizado correctamente.")
             return redirect("campo:detalle_servicio", servicio_id=servicio.id)
     else:
         form = FieldServiceDailyExpenseForm(instance=gasto)
@@ -137,7 +139,7 @@ def finalizar_servicio(request, servicio_id):
         return redirect("campo:detalle_servicio", servicio_id=servicio.id)
 
     if not servicio.gastos.exists():
-        messages.error(request, "No puedes finalizar el servicio sin registrar al menos un gasto diario.")
+        messages.error(request, "No puedes finalizar el servicio sin registrar al menos un día de actividades.")
         return redirect("campo:detalle_servicio", servicio_id=servicio.id)
 
     servicio.estado = FieldService.Estado.FINALIZADO
@@ -150,3 +152,37 @@ def finalizar_servicio(request, servicio_id):
 
     messages.success(request, "Servicio finalizado. El PAW quedó listo para facturación.")
     return redirect("paw_detail", paw_id=paw.id)
+
+
+@login_required
+def reporte_actividades(request, servicio_id):
+    if not _puede_campo(request.user):
+        messages.error(request, "No tienes acceso al reporte de actividades.")
+        return redirect("/")
+
+    servicio = get_object_or_404(
+        FieldService.objects.select_related("paw", "responsable").prefetch_related("gastos"),
+        id=servicio_id,
+    )
+
+    return render(request, "campo/reporte_actividades.html", {
+        "servicio": servicio,
+        "gastos": servicio.gastos.all(),
+    })
+
+
+@login_required
+def reporte_gastos(request, servicio_id):
+    if not _puede_ver_gastos(request.user):
+        messages.error(request, "No tienes acceso al reporte de gastos.")
+        return redirect("campo:detalle_servicio", servicio_id=servicio_id)
+
+    servicio = get_object_or_404(
+        FieldService.objects.select_related("paw", "responsable").prefetch_related("gastos"),
+        id=servicio_id,
+    )
+
+    return render(request, "campo/reporte_gastos.html", {
+        "servicio": servicio,
+        "gastos": servicio.gastos.all(),
+    })

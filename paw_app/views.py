@@ -36,6 +36,10 @@ def cambiar_tipo_operacion(request, paw_id):
 @login_required
 def paw_list(request):
     paws = Paw.objects.select_related("cotizacion", "creado_por").order_by("-creado_en")
+
+    if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
+        paws = paws.filter(tipo_operacion=Paw.TipoOperacion.SERVICIO_CAMPO)
+
     return render(request, "paw_app/paw_list.html", {"paws": paws})
 
 
@@ -45,6 +49,12 @@ def paw_detail(request, paw_id):
         Paw.objects.select_related("cotizacion", "creado_por"),
         id=paw_id,
     )
+
+    if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
+        if paw.tipo_operacion != Paw.TipoOperacion.SERVICIO_CAMPO:
+            messages.error(request, "No tienes acceso a este PAW.")
+            return redirect("campo:dashboard")
+
     return render(request, "paw_app/paw_detail.html", {"paw": paw})
 
 
