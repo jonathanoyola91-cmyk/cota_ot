@@ -92,140 +92,216 @@ def _sync_supplier_invoices(user=None):
 
 def _queryset_cuentas_proveedores():
     """
-    Query base optimizada para el listado.
+    Query base para cuentas por pagar.
 
-    Calcula en base de datos:
-    - base_compra_calc
-    - iva_calc
-    - total_con_iva_calc
-    - total_abonado_real_calc
-    - total_abonado_calc
-    - saldo_calc
-    - tipo_pago_calc
-
-    Nota: el modelo todavía conserva sus propiedades originales; estas anotaciones
-    se usan principalmente para filtrar y resumir sin recorrer todas las facturas.
+    Los valores financieros finales se calculan en Python en
+    _preparar_invoices_para_template(), porque el saldo ahora depende de:
+    - porcentaje pagado de contado por línea,
+    - tipo de pago CONTADO / CREDITO / NA,
+    - retención según tipo de operación de la línea financiera,
+    - abonos manuales registrados a la cuenta por pagar.
     """
-    output_money = DecimalField(max_digits=16, decimal_places=2)
-
-    base_subquery = (
-        PurchaseLine.objects.filter(
-            request_id=OuterRef("purchase_request_id"),
-            proveedor_id=OuterRef("supplier_id"),
-            cantidad_requerida__gt=0,
-        )
-        .values("request_id", "proveedor_id")
-        .annotate(
-            total=Sum(
-                F("cantidad_a_comprar") * F("precio_unitario"),
-                output_field=output_money,
-            )
-        )
-        .values("total")[:1]
-    )
-
-    abonos_subquery = (
-        SupplierPayment.objects.filter(
-            supplier_invoice_id=OuterRef("pk"),
-        )
-        .values("supplier_invoice_id")
-        .annotate(total=Sum("valor", output_field=output_money))
-        .values("total")[:1]
-    )
-
-    tiene_contado = Exists(
-        PurchaseLine.objects.filter(
-            request_id=OuterRef("purchase_request_id"),
-            proveedor_id=OuterRef("supplier_id"),
-            cantidad_requerida__gt=0,
-            tipo_pago="CONTADO",
-        )
-    )
-
-    qs = (
+    return (
         SupplierInvoice.objects.select_related(
             "supplier",
             "purchase_request",
             "purchase_request__bom",
             "purchase_request__bom__workorder",
         )
-        .annotate(
-            base_compra_calc=Coalesce(
-                Subquery(base_subquery, output_field=output_money),
-                Value(Decimal("0.00"), output_field=output_money),
-            ),
-            total_abonado_real_calc=Coalesce(
-                Subquery(abonos_subquery, output_field=output_money),
-                Value(Decimal("0.00"), output_field=output_money),
-            ),
-            es_contado=tiene_contado,
-        )
-        .annotate(
-            iva_calc=F("base_compra_calc") * Value(IVA_RATE, output_field=output_money),
-            total_con_iva_calc=F("base_compra_calc") + F("iva_calc"),
-            tipo_pago_calc=Case(
-                When(es_contado=True, then=Value("CONTADO")),
-                default=Value("CREDITO"),
-            ),
-        )
-        .annotate(
-            total_abonado_calc=Case(
-                When(es_contado=True, then=F("total_con_iva_calc")),
-                default=F("total_abonado_real_calc"),
-                output_field=output_money,
-            ),
-            saldo_calc=Case(
-                When(es_contado=True, then=Value(Decimal("0.00"), output_field=output_money)),
-                When(total_con_iva_calc__lte=F("total_abonado_real_calc"), then=Value(Decimal("0.00"), output_field=output_money)),
-                default=F("total_con_iva_calc") - F("total_abonado_real_calc"),
-                output_field=output_money,
-            ),
+        .prefetch_related(
+            "abonos",
+            "purchase_request__lineas",
+            "purchase_request__lineas__proveedor",
+            "purchase_request__lineas__finance_line",
         )
         .order_by("supplier__nombre", "-purchase_request__actualizado_en")
     )
 
-    return qs
+def _resumen_queryset(invoices):
+    """Resume una lista de cuentas ya preparadas para el template."""
+    data = {
+        "base": Decimal("0.00"),
+        "iva": Decimal("0.00"),
+        "retencion": Decimal("0.00"),
+        "total": Decimal("0.00"),
+        "pagado_contado": Decimal("0.00"),
+        "abonado": Decimal("0.00"),
+        "saldo": Decimal("0.00"),
+    }
 
-
-def _resumen_queryset(qs):
-    """
-    Resume usando campos anotados en BD, sin convertir todo a lista.
-    """
-    output_money = DecimalField(max_digits=16, decimal_places=2)
-
-    data = qs.aggregate(
-        base=Coalesce(Sum("base_compra_calc", output_field=output_money), Value(Decimal("0.00"), output_field=output_money)),
-        iva=Coalesce(Sum("iva_calc", output_field=output_money), Value(Decimal("0.00"), output_field=output_money)),
-        total=Coalesce(Sum("total_con_iva_calc", output_field=output_money), Value(Decimal("0.00"), output_field=output_money)),
-        abonado=Coalesce(Sum("total_abonado_calc", output_field=output_money), Value(Decimal("0.00"), output_field=output_money)),
-        saldo=Coalesce(Sum("saldo_calc", output_field=output_money), Value(Decimal("0.00"), output_field=output_money)),
-    )
+    for inv in invoices:
+        data["base"] += Decimal(getattr(inv, "base_compra_calc", Decimal("0.00")) or 0)
+        data["iva"] += Decimal(getattr(inv, "iva_calc", Decimal("0.00")) or 0)
+        data["retencion"] += Decimal(getattr(inv, "retencion_calc", Decimal("0.00")) or 0)
+        data["total"] += Decimal(getattr(inv, "total_con_iva_calc", Decimal("0.00")) or 0)
+        data["pagado_contado"] += Decimal(getattr(inv, "pagado_contado_calc", Decimal("0.00")) or 0)
+        data["abonado"] += Decimal(getattr(inv, "total_abonado_calc", Decimal("0.00")) or 0)
+        data["saldo"] += Decimal(getattr(inv, "saldo_calc", Decimal("0.00")) or 0)
 
     return data
 
 
+def _retencion_por_linea(linea):
+    """Calcula retención por línea según el tipo de operación financiera."""
+    subtotal = Decimal(linea.cantidad_a_comprar or 0) * Decimal(linea.precio_unitario or 0)
+    finance_line = getattr(linea, "finance_line", None)
+    tipo_operacion = getattr(finance_line, "tipo_operacion", "COMPRA") or "COMPRA"
+
+    if tipo_operacion == "SERVICIO":
+        return subtotal * Decimal("0.04"), "Servicio 4%"
+
+    if tipo_operacion == "COMPRA":
+        return subtotal * Decimal("0.025"), "Compra 2.5%"
+
+    return Decimal("0.00"), "N/A sin retención"
+
+
+def _calcular_cuenta_proveedor(invoice):
+    """
+    Calcula la trazabilidad real de una cuenta por pagar por proveedor.
+
+    Reglas:
+    - N/A no genera saldo financiero.
+    - CONTADO paga el porcentaje indicado en compras.
+    - CREDITO queda pendiente hasta registrar abonos.
+    - El saldo considera: subtotal + IVA - retención - pago contado - abonos.
+    """
+    lineas = invoice.purchase_request.lineas.filter(
+        proveedor=invoice.supplier,
+        cantidad_requerida__gt=0,
+        cantidad_a_comprar__gt=0,
+    ).select_related("proveedor").prefetch_related("finance_line")
+
+    base = Decimal("0.00")
+    iva = Decimal("0.00")
+    retencion = Decimal("0.00")
+    total_neto = Decimal("0.00")
+    pagado_contado = Decimal("0.00")
+    base_credito = Decimal("0.00")
+    base_na = Decimal("0.00")
+    tipos = set()
+    trazabilidad = []
+
+    for linea in lineas:
+        tipo_pago = linea.tipo_pago or "CREDITO"
+        porcentaje = Decimal(linea.porcentaje_pago or 0)
+        subtotal = Decimal(linea.cantidad_a_comprar or 0) * Decimal(linea.precio_unitario or 0)
+
+        if tipo_pago == "NA":
+            tipos.add("NA")
+            base_na += subtotal
+            trazabilidad.append({
+                "codigo": linea.codigo,
+                "tipo_pago": "N/A",
+                "porcentaje": Decimal("0.00"),
+                "subtotal": subtotal,
+                "iva": Decimal("0.00"),
+                "retencion": Decimal("0.00"),
+                "total_neto": Decimal("0.00"),
+                "pagado_contado": Decimal("0.00"),
+                "pendiente": Decimal("0.00"),
+                "nota": "No genera cuenta por pagar",
+            })
+            continue
+
+        tipos.add(tipo_pago)
+        iva_linea = subtotal * IVA_RATE
+        retencion_linea, tipo_operacion_label = _retencion_por_linea(linea)
+        total_linea = subtotal + iva_linea - retencion_linea
+
+        pago_contado_linea = Decimal("0.00")
+        pendiente_linea = total_linea
+
+        if tipo_pago == "CONTADO":
+            pago_contado_linea = total_linea * (porcentaje / Decimal("100"))
+            pendiente_linea = total_linea - pago_contado_linea
+        elif tipo_pago == "CREDITO":
+            base_credito += total_linea
+
+        base += subtotal
+        iva += iva_linea
+        retencion += retencion_linea
+        total_neto += total_linea
+        pagado_contado += pago_contado_linea
+
+        trazabilidad.append({
+            "codigo": linea.codigo,
+            "tipo_pago": tipo_pago,
+            "porcentaje": porcentaje,
+            "subtotal": subtotal,
+            "iva": iva_linea,
+            "retencion": retencion_linea,
+            "tipo_operacion": tipo_operacion_label,
+            "total_neto": total_linea,
+            "pagado_contado": pago_contado_linea,
+            "pendiente": pendiente_linea,
+            "nota": "",
+        })
+
+    total_abonado_real = sum((Decimal(a.valor or 0) for a in invoice.abonos.all()), Decimal("0.00"))
+    total_abonado = pagado_contado + total_abonado_real
+    saldo = total_neto - total_abonado
+    if saldo < 0:
+        saldo = Decimal("0.00")
+
+    tipos_financieros = {t for t in tipos if t != "NA"}
+    if len(tipos_financieros) > 1:
+        tipo_pago_view = "MIXTO"
+    elif "CONTADO" in tipos_financieros:
+        tipo_pago_view = "CONTADO"
+    elif "CREDITO" in tipos_financieros:
+        tipo_pago_view = "CREDITO"
+    elif "NA" in tipos:
+        tipo_pago_view = "NA"
+    else:
+        tipo_pago_view = "-"
+
+    return {
+        "base": base,
+        "iva": iva,
+        "retencion": retencion,
+        "total_neto": total_neto,
+        "pagado_contado": pagado_contado,
+        "abonos_reales": total_abonado_real,
+        "total_abonado": total_abonado,
+        "saldo": saldo,
+        "base_credito": base_credito,
+        "base_na": base_na,
+        "tipo_pago": tipo_pago_view,
+        "trazabilidad": trazabilidad,
+    }
+
 def _preparar_invoices_para_template(invoices):
     """
-    El template actual usa propiedades del modelo (base_compra, iva, saldo).
-    Para evitar consultas extra por cada fila, copiamos los valores anotados
-    sobre atributos normales que el template puede mostrar con nombres *_calc.
-
-    Si más adelante actualizas el template, usa:
-    - inv.base_compra_calc
-    - inv.iva_calc
-    - inv.total_con_iva_calc
-    - inv.total_abonado_calc
-    - inv.saldo_calc
-    - inv.tipo_pago_calc
+    Prepara cada cuenta para mostrar trazabilidad financiera completa:
+    subtotal, IVA, retención, pagado de contado, abonos y saldo real.
     """
     for inv in invoices:
-        # Alias útiles si actualizas el template después.
-        inv.base_compra_view = inv.base_compra_calc or Decimal("0.00")
-        inv.iva_view = inv.iva_calc or Decimal("0.00")
-        inv.total_con_iva_view = inv.total_con_iva_calc or Decimal("0.00")
-        inv.total_abonado_view = inv.total_abonado_calc or Decimal("0.00")
-        inv.saldo_view = inv.saldo_calc or Decimal("0.00")
+        calc = _calcular_cuenta_proveedor(inv)
+
+        inv.base_compra_calc = calc["base"]
+        inv.iva_calc = calc["iva"]
+        inv.retencion_calc = calc["retencion"]
+        inv.total_con_iva_calc = calc["total_neto"]
+        inv.pagado_contado_calc = calc["pagado_contado"]
+        inv.total_abonado_real_calc = calc["abonos_reales"]
+        inv.total_abonado_calc = calc["total_abonado"]
+        inv.saldo_calc = calc["saldo"]
+        inv.base_credito_calc = calc["base_credito"]
+        inv.base_na_calc = calc["base_na"]
+        inv.tipo_pago_calc = calc["tipo_pago"]
+        inv.trazabilidad_calc = calc["trazabilidad"]
+
+        # Alias para templates existentes.
+        inv.base_compra_view = inv.base_compra_calc
+        inv.iva_view = inv.iva_calc
+        inv.retencion_view = inv.retencion_calc
+        inv.total_con_iva_view = inv.total_con_iva_calc
+        inv.pagado_contado_view = inv.pagado_contado_calc
+        inv.total_abonado_view = inv.total_abonado_calc
+        inv.saldo_view = inv.saldo_calc
         inv.tipo_pago_view = inv.tipo_pago_calc
+
     return invoices
 
 
@@ -403,8 +479,6 @@ def cuentas_proveedores(request):
         return redirect("/")
 
     # Para que no sea pesado en cada apertura, puedes sincronizar manualmente con ?sync=1.
-    # Ejemplo: /finanzas/proveedores-cxp/?sync=1
-    # También sincroniza automáticamente cuando todavía no hay cuentas creadas.
     sync_requested = request.GET.get("sync") == "1"
     if sync_requested or not SupplierInvoice.objects.exists():
         creadas = _sync_supplier_invoices(request.user)
@@ -418,33 +492,35 @@ def cuentas_proveedores(request):
     estado = request.GET.get("estado")
     q = request.GET.get("q", "").strip()
 
-    invoices = _queryset_cuentas_proveedores()
+    invoices_qs = _queryset_cuentas_proveedores()
 
     if supplier_id:
-        invoices = invoices.filter(supplier_id=supplier_id)
+        invoices_qs = invoices_qs.filter(supplier_id=supplier_id)
 
     if q:
-        invoices = invoices.filter(
+        invoices_qs = invoices_qs.filter(
             Q(numero_factura_proveedor__icontains=q) |
             Q(supplier__nombre__icontains=q) |
             Q(purchase_request__paw_numero__icontains=q) |
             Q(purchase_request__paw_nombre__icontains=q)
         )
 
-    if tipo_pago in ["CREDITO", "CONTADO"]:
-        invoices = invoices.filter(tipo_pago_calc=tipo_pago)
+    invoices_all = _preparar_invoices_para_template(list(invoices_qs))
+
+    if tipo_pago in ["CREDITO", "CONTADO", "MIXTO", "NA"]:
+        invoices_all = [inv for inv in invoices_all if inv.tipo_pago_calc == tipo_pago]
 
     if estado == "PENDIENTE":
-        invoices = invoices.filter(saldo_calc__gt=0)
+        invoices_all = [inv for inv in invoices_all if inv.saldo_calc > 0]
     elif estado == "PAGADA":
-        invoices = invoices.filter(saldo_calc__lte=0)
+        invoices_all = [inv for inv in invoices_all if inv.saldo_calc <= 0]
 
-    resumen = _resumen_queryset(invoices)
+    resumen = _resumen_queryset(invoices_all)
 
-    paginator = Paginator(invoices, PAGE_SIZE)
+    paginator = Paginator(invoices_all, PAGE_SIZE)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
-    invoices_page = _preparar_invoices_para_template(list(page_obj.object_list))
+    invoices_page = list(page_obj.object_list)
 
     suppliers = Supplier.objects.only("id", "nombre").order_by("nombre")
 
