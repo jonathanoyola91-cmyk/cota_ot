@@ -1,0 +1,206 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Campo · PAW {{ servicio.paw.numero_paw }}{% endblock %}
+
+{% block content %}
+
+<style>
+    .campo-actions {
+        display:flex;
+        gap:10px;
+        align-content:flex-start;
+        flex-wrap:wrap;
+    }
+
+    .campo-table-wrap { overflow-x:auto; }
+
+    .campo-note {
+        background:#eff6ff;
+        border:1px solid #bfdbfe;
+        color:#1e40af;
+        padding:10px 12px;
+        border-radius:12px;
+        font-weight:800;
+        font-size:13px;
+        margin-top:12px;
+    }
+
+    .campo-mobile-expenses { display:none; }
+
+    .campo-expense-card {
+        background:#ffffff;
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:16px;
+        box-shadow:0 8px 20px rgba(15,23,42,.05);
+        margin-bottom:12px;
+    }
+
+    .campo-expense-card h3 {
+        margin:0 0 10px;
+        color:#0f172a;
+        font-size:17px;
+    }
+
+    .campo-expense-row {
+        display:flex;
+        justify-content:space-between;
+        gap:14px;
+        border-bottom:1px solid #f1f5f9;
+        padding:7px 0;
+        font-size:14px;
+    }
+
+    .campo-expense-row span:first-child { color:#64748b; }
+    .campo-expense-row strong { color:#0f172a; text-align:right; }
+
+    .campo-expense-total {
+        background:#ecfdf5;
+        color:#166534;
+        border-radius:12px;
+        padding:10px;
+        margin-top:12px;
+        font-weight:900;
+        text-align:center;
+    }
+
+    @media (max-width:700px) {
+        .campo-actions { flex-direction:column; }
+        .campo-actions .btn,
+        .campo-actions button { width:100%; text-align:center; }
+        .campo-table-wrap { display:none; }
+        .campo-mobile-expenses { display:block; }
+    }
+</style>
+
+<div class="cards">
+    <div class="card">
+        <small>PAW</small>
+        <strong>{{ servicio.paw.numero_paw }}</strong>
+    </div>
+    <div class="card">
+        <small>Estado</small>
+        <strong>{{ servicio.estado }}</strong>
+    </div>
+    <div class="card">
+        <small>Días registrados</small>
+        <strong>{{ servicio.total_dias }}</strong>
+    </div>
+    <div class="card">
+        <small>Total gastos</small>
+        <strong>$ {{ servicio.total_gastos|floatformat:0 }}</strong>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin-top:0;">Servicio técnico en campo</h2>
+            <p><strong>Cliente:</strong> {{ servicio.paw.cliente|default:"-" }}</p>
+            <p><strong>Campo:</strong> {{ servicio.paw.campo|default:"-" }}</p>
+            <p><strong>Responsable:</strong> {{ servicio.responsable|default:"-" }}</p>
+            <p><strong>Fecha inicio:</strong> {{ servicio.fecha_inicio|date:"d/m/Y" }}</p>
+            <p><strong>Fecha fin:</strong> {{ servicio.fecha_fin|date:"d/m/Y"|default:"Pendiente" }}</p>
+
+            <div class="campo-note">
+                El líder de campo puede ingresar desde el celular a impetuscontrol.com → Campo → Servicio PAW → Registrar gasto diario.
+            </div>
+        </div>
+
+        <div class="campo-actions">
+            <a class="btn btn-secondary" href="{% url 'paw_detail' servicio.paw.id %}">Volver al PAW</a>
+            {% if servicio.estado != "FINALIZADO" %}
+                <a class="btn" href="{% url 'campo:crear_gasto_diario' servicio.id %}">+ Registrar gasto diario</a>
+                <form method="post" action="{% url 'campo:finalizar_servicio' servicio.id %}"
+                      onsubmit="return confirm('¿Finalizar el servicio? El PAW quedará listo para facturación.');">
+                    {% csrf_token %}
+                    <button class="btn" type="submit">Finalizar servicio</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <h2>Relación de gastos diarios</h2>
+    <br>
+
+    <div class="campo-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Día</th>
+                    <th>Fecha</th>
+                    <th>Transporte</th>
+                    <th>Apoyo local / comunidad</th>
+                    <th>Alojamiento unit.</th>
+                    <th>Alojamiento total</th>
+                    <th>Personas</th>
+                    <th>Alimentación</th>
+                    <th>Hidratación</th>
+                    <th>Vuelos</th>
+                    <th>Adicionales</th>
+                    <th>Total día</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for gasto in gastos %}
+                <tr>
+                    <td><strong>{{ gasto.dia_numero }}</strong></td>
+                    <td>{{ gasto.fecha|date:"d/m/Y" }}</td>
+                    <td>$ {{ gasto.transporte|floatformat:0 }}</td>
+                    <td>$ {{ gasto.apoyo_local|floatformat:0 }}</td>
+                    <td>$ {{ gasto.alojamiento|floatformat:0 }}</td>
+                    <td><strong>$ {{ gasto.alojamiento_total|floatformat:0 }}</strong></td>
+                    <td>{{ gasto.personas }}</td>
+                    <td>$ {{ gasto.alimentacion_total|floatformat:0 }}</td>
+                    <td>$ {{ gasto.hidratacion_total|floatformat:0 }}</td>
+                    <td>$ {{ gasto.total_vuelos|floatformat:0 }}</td>
+                    <td>$ {{ gasto.gastos_adicionales|floatformat:0 }}</td>
+                    <td><strong>$ {{ gasto.total_dia|floatformat:0 }}</strong></td>
+                    <td>
+                        {% if servicio.estado != "FINALIZADO" %}
+                            <a class="btn btn-secondary" href="{% url 'campo:editar_gasto_diario' gasto.id %}">Editar</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="13">No hay gastos diarios registrados.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="campo-mobile-expenses">
+        {% for gasto in gastos %}
+            <div class="campo-expense-card">
+                <h3>Día {{ gasto.dia_numero }} · {{ gasto.fecha|date:"d/m/Y" }}</h3>
+                <div class="campo-expense-row"><span>Transporte</span><strong>$ {{ gasto.transporte|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Apoyo local / comunidad</span><strong>$ {{ gasto.apoyo_local|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Alojamiento unitario</span><strong>$ {{ gasto.alojamiento|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Alojamiento total</span><strong>$ {{ gasto.alojamiento_total|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Personas</span><strong>{{ gasto.personas }}</strong></div>
+                <div class="campo-expense-row"><span>Alimentación</span><strong>$ {{ gasto.alimentacion_total|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Hidratación</span><strong>$ {{ gasto.hidratacion_total|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Vuelos</span><strong>$ {{ gasto.total_vuelos|floatformat:0 }}</strong></div>
+                <div class="campo-expense-row"><span>Adicionales</span><strong>$ {{ gasto.gastos_adicionales|floatformat:0 }}</strong></div>
+                <div class="campo-expense-total">Total día: $ {{ gasto.total_dia|floatformat:0 }}</div>
+                {% if servicio.estado != "FINALIZADO" %}
+                    <br>
+                    <a class="btn btn-secondary" style="width:100%;text-align:center;" href="{% url 'campo:editar_gasto_diario' gasto.id %}">Editar gasto</a>
+                {% endif %}
+            </div>
+        {% empty %}
+            <div class="campo-expense-card">
+                No hay gastos diarios registrados.
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% endblock %}

@@ -356,6 +356,11 @@
         </div>
 
         <div class="summary-card">
+            <small>Tipo operación</small>
+            <strong>{{ paw.get_tipo_operacion_display|default:"Ensamble / Taller" }}</strong>
+        </div>
+
+        <div class="summary-card">
             <small>Fecha entrega</small>
             <strong>{{ paw.fecha_entrega|default:"Pendiente" }}</strong>
         </div>
@@ -563,26 +568,46 @@
                 </div>
             </div>
 
-            <div class="workflow-card {% if paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
+            <div class="workflow-card {% if paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.servicio_campo %}done{% else %}pending{% endif %}">
                 <div>
                     <small>Etapa 6</small>
 
-                    {% if paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
-                        <strong>Ensamble disponible ✅</strong>
+                    {% if paw.tipo_operacion == "SERVICIO_CAMPO" %}
+                        {% if paw.servicio_campo %}
+                            <strong>Instalación / servicio iniciado ✅</strong>
+                        {% else %}
+                            <strong>Pendiente iniciar instalación</strong>
+                        {% endif %}
                     {% else %}
-                        <strong>Ensamble pendiente</strong>
+                        {% if paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
+                            <strong>Ensamble disponible ✅</strong>
+                        {% else %}
+                            <strong>Ensamble pendiente</strong>
+                        {% endif %}
                     {% endif %}
                 </div>
 
                 <div class="workflow-actions">
-                    {% if paw.estado_operativo == "ENTREGADO_TALLER" %}
-                        <a class="btn btn-secondary" href="{% url 'registrar_ensamble' paw.id %}">
-                            Registrar ensamble
-                        </a>
-                    {% elif paw.estado_operativo == "PRODUCTO_OK" %}
-                        <span class="badge-soft">Ensamble finalizado</span>
+                    {% if paw.tipo_operacion == "SERVICIO_CAMPO" %}
+                        {% if paw.servicio_campo %}
+                            <a class="btn" href="{% url 'campo:detalle_servicio' paw.servicio_campo.id %}">
+                                Ver gastos campo
+                            </a>
+                        {% else %}
+                            <a class="btn" href="{% url 'iniciar_servicio_campo' paw.id %}">
+                                Iniciar instalación
+                            </a>
+                        {% endif %}
                     {% else %}
-                        <span class="badge-soft">Pendiente entrega a taller</span>
+                        {% if paw.estado_operativo == "ENTREGADO_TALLER" %}
+                            <a class="btn btn-secondary" href="{% url 'registrar_ensamble' paw.id %}">
+                                Registrar ensamble
+                            </a>
+                        {% elif paw.estado_operativo == "PRODUCTO_OK" %}
+                            <span class="badge-soft">Ensamble finalizado</span>
+                        {% else %}
+                            <span class="badge-soft">Pendiente entrega a taller</span>
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -591,22 +616,42 @@
                 <div>
                     <small>Etapa Final</small>
 
-                    {% if paw.estado_operativo == "PRODUCTO_OK" %}
-                        <strong>Producto listo ✅</strong>
+                    {% if paw.tipo_operacion == "SERVICIO_CAMPO" %}
+                        {% if paw.estado_operativo == "PRODUCTO_OK" %}
+                            <strong>Servicio finalizado ✅</strong>
+                        {% else %}
+                            <strong>Servicio pendiente</strong>
+                        {% endif %}
                     {% else %}
-                        <strong>Producto pendiente</strong>
+                        {% if paw.estado_operativo == "PRODUCTO_OK" %}
+                            <strong>Producto listo ✅</strong>
+                        {% else %}
+                            <strong>Producto pendiente</strong>
+                        {% endif %}
                     {% endif %}
                 </div>
 
                 <div class="workflow-actions">
-                    {% if paw.estado_operativo == "PRODUCTO_OK" %}
-                        <span class="badge-soft">Listo para facturación</span>
-                    {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
-                        <a class="btn" href="{% url 'marcar_producto_ok' paw.id %}">
-                            Marcar producto listo
-                        </a>
+                    {% if paw.tipo_operacion == "SERVICIO_CAMPO" %}
+                        {% if paw.estado_operativo == "PRODUCTO_OK" %}
+                            <span class="badge-soft">Listo para facturación</span>
+                        {% elif paw.servicio_campo %}
+                            <a class="btn" href="{% url 'campo:detalle_servicio' paw.servicio_campo.id %}">
+                                Finalizar desde Campo
+                            </a>
+                        {% else %}
+                            <span class="badge-soft">Pendiente iniciar instalación</span>
+                        {% endif %}
                     {% else %}
-                        <span class="badge-soft">Pendiente ensamble</span>
+                        {% if paw.estado_operativo == "PRODUCTO_OK" %}
+                            <span class="badge-soft">Listo para facturación</span>
+                        {% elif paw.estado_operativo == "ENTREGADO_TALLER" %}
+                            <a class="btn" href="{% url 'marcar_producto_ok' paw.id %}">
+                                Marcar producto listo
+                            </a>
+                        {% else %}
+                            <span class="badge-soft">Pendiente ensamble</span>
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -728,6 +773,30 @@
 
             {% endif %}
         {% endwith %}
+    {% endif %}
+
+    {% if paw.tipo_operacion == "SERVICIO_CAMPO" and paw.servicio_campo %}
+    <div class="section-card">
+        <h3 class="section-title">Resumen servicio de campo</h3>
+        <div class="quote-grid">
+            <div class="quote-item">
+                <small>Estado servicio</small>
+                <span>{{ paw.servicio_campo.estado }}</span>
+            </div>
+            <div class="quote-item">
+                <small>Días registrados</small>
+                <span>{{ paw.servicio_campo.total_dias }}</span>
+            </div>
+            <div class="quote-item">
+                <small>Total gastos</small>
+                <span>$ {{ paw.servicio_campo.total_gastos|floatformat:0 }}</span>
+            </div>
+        </div>
+        <br>
+        <a class="btn" href="{% url 'campo:detalle_servicio' paw.servicio_campo.id %}">
+            Ver relación de gastos
+        </a>
+    </div>
     {% endif %}
 
     <div class="section-card">

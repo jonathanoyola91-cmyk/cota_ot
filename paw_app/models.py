@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.db import models
 
+
 class EstadoOperativo(models.TextChoices):
     PAW_CREADO = "PAW_CREADO", "PAW creado"
     OT_CREADA = "OT_CREADA", "OT creada"
@@ -17,7 +18,12 @@ class EstadoOperativo(models.TextChoices):
     FACTURADO = "FACTURADO", "Facturado"
     RADICADO = "RADICADO", "Radicado"
 
+
 class Paw(models.Model):
+    class TipoOperacion(models.TextChoices):
+        ENSAMBLE = "ENSAMBLE", "Ensamble / Taller"
+        SERVICIO_CAMPO = "SERVICIO_CAMPO", "Servicio técnico en campo"
+
     numero_paw = models.CharField(
         "Número PAW",
         max_length=50,
@@ -45,16 +51,24 @@ class Paw(models.Model):
     fecha_entrega = models.DateField(null=True, blank=True)
     fecha_salida = models.DateField(null=True, blank=True)
 
+    tipo_operacion = models.CharField(
+        "Tipo de operación",
+        max_length=30,
+        choices=TipoOperacion.choices,
+        default=TipoOperacion.ENSAMBLE,
+        help_text="Use Servicio técnico en campo cuando el PAW no requiere ensamble en taller.",
+    )
+
     estado_operativo = models.CharField(
         max_length=30,
         choices=EstadoOperativo.choices,
-        default=EstadoOperativo.PAW_CREADO
+        default=EstadoOperativo.PAW_CREADO,
     )
 
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        related_name="paws_creados"
+        related_name="paws_creados",
     )
 
     creado_en = models.DateTimeField(auto_now_add=True)

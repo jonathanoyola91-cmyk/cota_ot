@@ -247,10 +247,61 @@ tr:hover{
 
     .sidebar{
         width:100%;
+        padding:14px 12px;
+        position:sticky;
+        top:0;
+        z-index:1000;
+    }
+
+    .brand{
+        font-size:18px;
+        margin-bottom:12px;
+    }
+
+    .menu{
+        display:flex;
+        gap:8px;
+        overflow-x:auto;
+        padding-bottom:4px;
+        -webkit-overflow-scrolling:touch;
+    }
+
+    .menu a{
+        flex:0 0 auto;
+        white-space:nowrap;
+        margin-bottom:0;
+        padding:10px 12px;
+    }
+
+    .main{
+        padding:14px;
+    }
+
+    .topbar{
+        padding:14px;
+        gap:10px;
+        flex-wrap:wrap;
+    }
+
+    .topbar h1{
+        font-size:18px;
     }
 
     .dashboard-grid{
         grid-template-columns:1fr;
+    }
+
+    .panel{
+        padding:16px;
+    }
+
+    .cards{
+        grid-template-columns:1fr;
+        gap:12px;
+    }
+
+    .card{
+        padding:16px;
     }
 }
 </style>
@@ -380,6 +431,22 @@ window.addEventListener("load", function(){
       class="{% if '/taller/' in request.path %}active{% endif %}">
        Taller
     </a>
+
+    {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente %}
+    <a href="/campo/"
+       class="{% if '/campo/' in request.path %}active{% endif %}">
+        📍 Campo
+    </a>
+    {% else %}
+        {% for group in request.user.groups.all %}
+            {% if group.name == "CAMPO" or group.name == "INGENIERIA" or group.name == "GERENTE" or group.name == "ADMIN" %}
+                <a href="/campo/"
+                   class="{% if '/campo/' in request.path %}active{% endif %}">
+                    📍 Campo
+                </a>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
 
     {% if es_finanzas %}
     <a href="/finanzas/"

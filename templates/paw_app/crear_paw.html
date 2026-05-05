@@ -4,19 +4,123 @@
 
 {% block content %}
 
+<style>
+    .paw-create-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-bottom: 20px;
+    }
+
+    .paw-create-card {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+    .paw-create-card small {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .paw-create-card strong {
+        color: #0f172a;
+        font-size: 15px;
+    }
+
+    .operation-box {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 16px;
+        margin: 18px 0;
+    }
+
+    .operation-box label {
+        display: block;
+        font-weight: 900;
+        color: #0f172a;
+        margin-bottom: 8px;
+    }
+
+    .operation-box select {
+        width: 100%;
+        max-width: 420px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        font-weight: 800;
+        background: #fff;
+    }
+
+    .operation-help {
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.5;
+        margin-top: 10px;
+    }
+
+    .operation-help strong {
+        color: #0f172a;
+    }
+
+    @media (max-width: 900px) {
+        .paw-create-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
 <div class="panel">
     <h2>Crear PAW desde Cotización</h2>
     <br>
 
-    <p><strong>Cotización:</strong> {{ cotizacion.numero_cotizacion }}</p>
-    <p><strong>Cliente:</strong> {{ cotizacion.cliente }}</p>
-    <p><strong>Nombre:</strong> {{ cotizacion.nombre_cotizacion }}</p>
+    <div class="paw-create-grid">
+        <div class="paw-create-card">
+            <small>Cotización</small>
+            <strong>{{ cotizacion.numero_cotizacion }}</strong>
+        </div>
 
-    <br>
+        <div class="paw-create-card">
+            <small>Cliente</small>
+            <strong>{{ cotizacion.cliente }}</strong>
+        </div>
+
+        <div class="paw-create-card">
+            <small>Nombre</small>
+            <strong>{{ cotizacion.nombre_cotizacion }}</strong>
+        </div>
+    </div>
 
     <form method="post">
         {% csrf_token %}
-        <button class="btn">Crear PAW</button>
+
+        <div class="operation-box">
+            <label for="tipo_operacion">Tipo de operación del PAW</label>
+
+            <select name="tipo_operacion" id="tipo_operacion" required>
+                {% for value, label in tipos_operacion %}
+                    <option value="{{ value }}" {% if value == "ENSAMBLE" %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <div class="operation-help">
+                <p>
+                    <strong>Ensamble / Taller:</strong> mantiene el flujo actual de taller, ensamble OK y producto listo.
+                </p>
+                <p>
+                    <strong>Servicio técnico en campo:</strong> activa el flujo de instalación, gastos diarios y finalización de servicio.
+                </p>
+            </div>
+        </div>
+
+        <button class="btn" type="submit">Crear PAW</button>
     </form>
 </div>
 

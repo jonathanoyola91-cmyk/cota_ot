@@ -1,0 +1,143 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}{% if modo == "editar" %}Editar gasto{% else %}Nuevo gasto{% endif %} · PAW {{ servicio.paw.numero_paw }}{% endblock %}
+
+{% block content %}
+
+<style>
+    .campo-form-grid {
+        display:grid;
+        grid-template-columns:repeat(3,1fr);
+        gap:14px;
+    }
+
+    .campo-help {
+        background:#f8fafc;
+        border:1px solid #e2e8f0;
+        color:#475569;
+        padding:10px 12px;
+        border-radius:12px;
+        font-size:13px;
+        line-height:1.5;
+        margin-bottom:14px;
+    }
+
+    .campo-total-preview {
+        background:#ecfdf5;
+        border:1px solid #bbf7d0;
+        color:#166534;
+        padding:12px;
+        border-radius:12px;
+        font-weight:900;
+        margin:14px 0;
+        position:sticky;
+        bottom:10px;
+        z-index:20;
+        box-shadow:0 8px 20px rgba(15,23,42,.08);
+    }
+
+    .campo-form-actions { display:flex;gap:10px;flex-wrap:wrap; }
+
+    @media (max-width:800px) {
+        .campo-form-grid { grid-template-columns:1fr; }
+        .campo-form-actions { flex-direction:column; }
+        .campo-form-actions .btn,
+        .campo-form-actions button { width:100%; text-align:center; }
+        .form-control { min-height:46px; font-size:16px; }
+        textarea.form-control { min-height:90px; }
+    }
+</style>
+
+<div class="panel">
+    <h2>{% if modo == "editar" %}Editar gasto diario{% else %}Registrar gasto diario{% endif %}</h2>
+    <p style="color:#64748b;">PAW {{ servicio.paw.numero_paw }} · {{ servicio.paw.cliente|default:"-" }}</p>
+
+    <div class="campo-help">
+        Ingrese valores unitarios. El sistema multiplica alojamiento, alimentación e hidratación por la cantidad de personas.
+        El número de día se asigna automáticamente de forma consecutiva.
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="campo-form-grid">
+            {% for field in form %}
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <label style="font-size:13px;font-weight:800;color:#334155;">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small style="color:#64748b;">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% if field.errors %}
+                        <small style="color:#dc2626;">{{ field.errors|striptags }}</small>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="campo-total-preview" id="total-preview">
+            Total estimado día: $ 0
+        </div>
+
+        <div class="campo-form-actions">
+            <button class="btn" type="submit">Guardar</button>
+            <a class="btn btn-secondary" href="{% url 'campo:detalle_servicio' servicio.id %}">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    function getNumber(name) {
+        const input = document.querySelector(`[name="${name}"]`);
+        if (!input) return 0;
+        const raw = String(input.value || "0").replace(",", ".");
+        const value = parseFloat(raw);
+        return isNaN(value) ? 0 : value;
+    }
+
+    function getChecked(name) {
+        const input = document.querySelector(`[name="${name}"]`);
+        return input ? input.checked : false;
+    }
+
+    function formatMoney(value) {
+        return new Intl.NumberFormat("es-CO", {
+            maximumFractionDigits: 0
+        }).format(value);
+    }
+
+    function calcularTotal() {
+        const personas = getNumber("personas") || 0;
+        const transporte = getNumber("transporte");
+        const apoyoLocal = getNumber("apoyo_local");
+        const alojamiento = getNumber("alojamiento") * personas;
+        const alimentacion = getNumber("tarifa_alimentacion") * personas;
+        const hidratacion = getNumber("hidratacion_por_persona") * personas;
+        const adicionales = getNumber("gastos_adicionales");
+
+        let vuelos = 0;
+        if (getChecked("vuelo_ida_aplica")) {
+            vuelos += getNumber("vuelo_ida_valor");
+        }
+        if (getChecked("vuelo_regreso_aplica")) {
+            vuelos += getNumber("vuelo_regreso_valor");
+        }
+
+        const total = transporte + apoyoLocal + alojamiento + alimentacion + hidratacion + vuelos + adicionales;
+        const preview = document.getElementById("total-preview");
+        if (preview) {
+            preview.innerText = "Total estimado día: $ " + formatMoney(total);
+        }
+    }
+
+    document.querySelectorAll("input, select, textarea").forEach(function (el) {
+        el.addEventListener("input", calcularTotal);
+        el.addEventListener("change", calcularTotal);
+    });
+
+    calcularTotal();
+});
+</script>
+
+{% endblock %}
