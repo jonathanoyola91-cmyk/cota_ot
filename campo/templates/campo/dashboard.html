@@ -20,6 +20,7 @@
             <thead>
                 <tr>
                     <th>PAW</th>
+                    <th>Nombre PAW</th>
                     <th>Cliente</th>
                     <th>Campo</th>
                     <th>Estado</th>
@@ -32,6 +33,7 @@
                 {% for servicio in servicios %}
                 <tr>
                     <td><strong>{{ servicio.paw.numero_paw }}</strong></td>
+                    <td>{{ servicio.paw.nombre_paw|default:"-" }}</td>
                     <td>{{ servicio.paw.cliente|default:"-" }}</td>
                     <td>{{ servicio.paw.campo|default:"-" }}</td>
                     <td>{{ servicio.estado }}</td>
