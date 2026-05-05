@@ -357,7 +357,36 @@
 
         <div class="summary-card">
             <small>Tipo operación</small>
-            <strong>{{ paw.get_tipo_operacion_display|default:"Ensamble / Taller" }}</strong>
+
+            <strong>
+                {{ paw.get_tipo_operacion_display|default:"Ensamble / Taller" }}
+            </strong>
+
+            {% if request.user.is_superuser or es_gerente or es_ingenieria %}
+            <form method="post"
+                  action="{% url 'cambiar_tipo_operacion' paw.id %}"
+                  style="margin-top:10px;">
+
+                {% csrf_token %}
+
+                <select name="tipo_operacion"
+                        class="form-control"
+                        onchange="this.form.submit()">
+
+                    <option value="ENSAMBLE"
+                        {% if paw.tipo_operacion == "ENSAMBLE" %}selected{% endif %}>
+                        Ensamble / Taller
+                    </option>
+
+                    <option value="SERVICIO_CAMPO"
+                        {% if paw.tipo_operacion == "SERVICIO_CAMPO" %}selected{% endif %}>
+                        Servicio técnico en campo
+                    </option>
+
+                </select>
+
+            </form>
+            {% endif %}
         </div>
 
         <div class="summary-card">

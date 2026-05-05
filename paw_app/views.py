@@ -8,6 +8,32 @@ from quotes.models import Quotation
 
 
 @login_required
+def cambiar_tipo_operacion(request, paw_id):
+    if not tiene_rol(request.user, ["ADMIN", "GERENTE", "INGENIERIA"]):
+        messages.error(request, "No tienes permiso para cambiar el tipo de operación.")
+        return redirect("paw_detail", paw_id=paw_id)
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+        tipo_operacion = request.POST.get("tipo_operacion")
+
+        if tipo_operacion not in [
+            Paw.TipoOperacion.ENSAMBLE,
+            Paw.TipoOperacion.SERVICIO_CAMPO,
+        ]:
+            messages.error(request, "Tipo de operación no válido.")
+            return redirect("paw_detail", paw_id=paw.id)
+
+        paw.tipo_operacion = tipo_operacion
+        paw.save(update_fields=["tipo_operacion", "actualizado_en"])
+
+        messages.success(request, "Tipo de operación actualizado correctamente.")
+        return redirect("paw_detail", paw_id=paw.id)
+
+    return redirect("paw_detail", paw_id=paw.id)
+
+@login_required
 def paw_list(request):
     paws = Paw.objects.select_related("cotizacion", "creado_por").order_by("-creado_en")
     return render(request, "paw_app/paw_list.html", {"paws": paws})
