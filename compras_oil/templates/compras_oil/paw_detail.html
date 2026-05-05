@@ -395,4 +395,52 @@
     </div>
 </form>
 
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const rows = document.querySelectorAll("#purchase-lines-form table tbody tr");
+
+    rows.forEach(function (row) {
+        const tipoPago = row.querySelector("select[name$='-tipo_pago']");
+        const porcentaje = row.querySelector("select[name$='-porcentaje_pago']");
+
+        if (!tipoPago || !porcentaje) return;
+
+        function bloquearVisualmente() {
+            porcentaje.style.pointerEvents = "none";
+            porcentaje.style.background = "#e5e7eb";
+            porcentaje.style.color = "#64748b";
+            porcentaje.style.cursor = "not-allowed";
+        }
+
+        function desbloquearVisualmente() {
+            porcentaje.style.pointerEvents = "auto";
+            porcentaje.style.background = "";
+            porcentaje.style.color = "";
+            porcentaje.style.cursor = "";
+        }
+
+        function aplicarRegla() {
+            if (tipoPago.value === "NA") {
+                porcentaje.value = "0.00";
+                bloquearVisualmente();
+            } else if (tipoPago.value === "CREDITO") {
+                porcentaje.value = "100.00";
+                bloquearVisualmente();
+            } else if (tipoPago.value === "CONTADO") {
+                desbloquearVisualmente();
+
+                if (porcentaje.value === "0.00") {
+                    porcentaje.value = "100.00";
+                }
+            } else {
+                desbloquearVisualmente();
+            }
+        }
+
+        aplicarRegla();
+        tipoPago.addEventListener("change", aplicarRegla);
+    });
+});
+</script>
+
 {% endblock %}
