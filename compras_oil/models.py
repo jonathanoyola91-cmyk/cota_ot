@@ -35,6 +35,7 @@ class PurchaseRequest(models.Model):
         CERRADA = "CERRADA", "Cerrada"
 
     class TipoPago(models.TextChoices):
+        NA = "NA", "N/A"
         CREDITO = "CREDITO", "Crédito"
         CONTADO = "CONTADO", "Contado"
 
@@ -132,8 +133,8 @@ class PurchaseLine(models.Model):
     porcentaje_pago = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        default=100,
-        help_text="Ej: 50 para 50%, 100 para 100%"
+        default=Decimal("0.00"),
+        help_text="0 para N/A, 50 para anticipo, 100 para pago completo"
     )
 
     # Notas de compras
@@ -143,7 +144,7 @@ class PurchaseLine(models.Model):
     tipo_pago = models.CharField(
         max_length=20,
         choices=PurchaseRequest.TipoPago.choices,
-        default=PurchaseRequest.TipoPago.CREDITO,
+        default=PurchaseRequest.TipoPago.NA,
     )
 
     def save(self, *args, **kwargs):
@@ -151,6 +152,8 @@ class PurchaseLine(models.Model):
         - Hereda tipo_pago desde encabezado al crear.
         - ✅ Arrastra plano/código/desc/unidad/observaciones y cantidad_requerida desde BomItem si existe.
         - Calcula cantidad_a_comprar = max(cantidad_requerida - cantidad_disponible, 0)
+        - Normaliza porcentaje_pago según tipo_pago:
+          N/A => 0%, Crédito => 100%, Contado => 50% o 100%.
         """
 
         # Si la línea es nueva y el encabezado tiene tipo_pago, heredarlo
@@ -184,6 +187,17 @@ class PurchaseLine(models.Model):
         disp = self.cantidad_disponible or Decimal("0")
         x = req - disp
         self.cantidad_a_comprar = x if x > 0 else Decimal("0")
+
+        # Normalización de pago
+        porcentaje = Decimal(self.porcentaje_pago or 0)
+
+        if self.tipo_pago == PurchaseRequest.TipoPago.NA:
+            self.porcentaje_pago = Decimal("0.00")
+        elif self.tipo_pago == PurchaseRequest.TipoPago.CREDITO:
+            self.porcentaje_pago = Decimal("100.00")
+        elif self.tipo_pago == PurchaseRequest.TipoPago.CONTADO:
+            if porcentaje not in [Decimal("50.00"), Decimal("100.00")]:
+                self.porcentaje_pago = Decimal("100.00")
 
         super().save(*args, **kwargs)
 

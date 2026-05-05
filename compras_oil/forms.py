@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from django import forms
 from django.forms import modelformset_factory
-from .models import Supplier, PurchaseLine
-from decimal import Decimal
+
+from .models import Supplier, PurchaseLine, PurchaseRequest
 
 
 class SupplierForm(forms.ModelForm):
@@ -31,16 +33,16 @@ class SupplierForm(forms.ModelForm):
 
 
 class PurchaseLineForm(forms.ModelForm):
-    porcentaje_pago = forms.DecimalField(
-        required=True,
-        initial=Decimal("100.00"),
-        widget=forms.Select(
-            choices=[
-                (Decimal("50.00"), "50%"),
-                (Decimal("100.00"), "100%"),
-            ],
-            attrs={"class": "form-control"}
-        )
+    porcentaje_pago = forms.TypedChoiceField(
+        required=False,
+        choices=[
+            ("0.00", "0%"),
+            ("50.00", "50%"),
+            ("100.00", "100%"),
+        ],
+        coerce=Decimal,
+        empty_value=Decimal("0.00"),
+        widget=forms.Select(attrs={"class": "form-control"}),
     )
 
     class Meta:
@@ -66,9 +68,40 @@ class PurchaseLineForm(forms.ModelForm):
             }),
         }
 
-    def clean_porcentaje_pago(self):
-        value = self.cleaned_data.get("porcentaje_pago")
-        return value or Decimal("100.00")
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Garantiza que el select muestre el valor real guardado en BD
+        # para evitar que 100.00 se vea como 50% por defecto.
+        if self.instance and self.instance.pk:
+            valor = self.instance.porcentaje_pago
+            if valor is None:
+                valor = Decimal("0.00")
+            self.initial["porcentaje_pago"] = f"{Decimal(valor):.2f}"
+        else:
+            self.initial.setdefault("porcentaje_pago", "0.00")
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        tipo_pago = cleaned_data.get("tipo_pago")
+        porcentaje = cleaned_data.get("porcentaje_pago") or Decimal("0.00")
+
+        if tipo_pago == PurchaseRequest.TipoPago.NA:
+            cleaned_data["porcentaje_pago"] = Decimal("0.00")
+
+        elif tipo_pago == PurchaseRequest.TipoPago.CREDITO:
+            cleaned_data["porcentaje_pago"] = Decimal("100.00")
+
+        elif tipo_pago == PurchaseRequest.TipoPago.CONTADO:
+            if porcentaje not in [Decimal("50.00"), Decimal("100.00")]:
+                raise forms.ValidationError(
+                    "Para pago contado debes seleccionar 50% o 100%. Usa N/A para stock o compras locales sin pago financiero."
+                )
+            cleaned_data["porcentaje_pago"] = porcentaje
+
+        return cleaned_data
+
 
 PurchaseLineFormSet = modelformset_factory(
     PurchaseLine,
