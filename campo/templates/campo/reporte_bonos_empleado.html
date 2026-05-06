@@ -48,7 +48,9 @@
                 <th>Nombre PAW</th>
                 <th>Campo</th>
                 <th>Rol</th>
-                <th>Valor</th>
+                <th>Bono campo</th>
+                <th>Bono movilización</th>
+                <th>Total día</th>
             </tr>
         </thead>
         <tbody>
@@ -60,11 +62,13 @@
                 <td>{{ item.nombre|default:"-" }}</td>
                 <td>{{ item.campo|default:"-" }}</td>
                 <td>{{ item.rol }}</td>
-                <td>$ {{ item.valor|floatformat:0 }}</td>
+                <td>$ {{ item.bono_campo|floatformat:0 }}</td>
+                <td>$ {{ item.bono_movilizacion|floatformat:0 }}</td>
+                <td><strong>$ {{ item.total_dia|floatformat:0 }}</strong></td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="7">No hay registros para este técnico.</td>
+                <td colspan="9">No hay registros para este técnico.</td>
             </tr>
             {% endfor %}
         </tbody>

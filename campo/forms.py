@@ -41,8 +41,11 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
             "fecha",
             "dia_numero",
             "actividades",
+            "dia_trabajado_campo",
+            "salida_despues_mediodia",
+            "regreso_despues_6pm",
+            "solo_viaje_traslado",
             "transporte",
-            "apoyo_local",
             "alojamiento",
             "personas",
             "tarifa_alimentacion",
@@ -58,7 +61,11 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
         labels = {
             "dia_numero": "Día",
             "actividades": "Actividades realizadas del día",
-            "apoyo_local": "Apoyo local / comunidad",
+            "dia_trabajado_campo": "Día trabajado en campo",
+            "salida_despues_mediodia": "Salida después del mediodía",
+            "regreso_despues_6pm": "Regreso después de las 6:00 pm",
+            "solo_viaje_traslado": "Solo viaje / traslado",
+            "transporte": "Transporte comunidad / operación",
             "alojamiento": "Alojamiento unitario",
             "tarifa_alimentacion": "Alimentación unitaria",
             "hidratacion_por_persona": "Hidratación por persona",
@@ -74,8 +81,11 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
                 "rows": 5,
                 "placeholder": "Ej: Se realizó charla de seguridad, instalación del equipo, pruebas funcionales y validación con el cliente.",
             }),
+            "dia_trabajado_campo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "salida_despues_mediodia": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "regreso_despues_6pm": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "solo_viaje_traslado": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "transporte": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "apoyo_local": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "alojamiento": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "personas": forms.NumberInput(attrs={"class": "form-control", "min": 1}),
             "tarifa_alimentacion": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
@@ -87,3 +97,37 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
             "gastos_adicionales": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
         }
+
+        help_texts = {
+            "transporte": "Valor manual que cobra la operación/comunidad por movilización diaria.",
+            "personas": "Cantidad de personas para gastos operativos. Los bonos se calculan por líder/apoyo asignados.",
+            "dia_trabajado_campo": "Aplica bono de campo según rol: líder/apoyo.",
+            "salida_despues_mediodia": "Si no trabajó campo, aplica solo movilización por persona.",
+            "regreso_despues_6pm": "Si trabajó el día, suma movilización adicional por persona.",
+            "solo_viaje_traslado": "No aplica bono de campo; aplica solo movilización por persona.",
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        dia_trabajado = cleaned_data.get("dia_trabajado_campo")
+        salida_tarde = cleaned_data.get("salida_despues_mediodia")
+        regreso_tarde = cleaned_data.get("regreso_despues_6pm")
+        solo_viaje = cleaned_data.get("solo_viaje_traslado")
+
+        if solo_viaje and dia_trabajado:
+            raise forms.ValidationError(
+                "Si marcas 'Solo viaje / traslado', no debes marcar 'Día trabajado en campo'."
+            )
+
+        if solo_viaje and regreso_tarde:
+            raise forms.ValidationError(
+                "Si es solo viaje / traslado, no marques 'Regreso después de las 6:00 pm'."
+            )
+
+        if not dia_trabajado and not salida_tarde and not solo_viaje:
+            raise forms.ValidationError(
+                "Debes marcar al menos una clasificación: día trabajado, salida después del mediodía o solo viaje."
+            )
+
+        return cleaned_data

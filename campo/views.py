@@ -10,11 +10,15 @@ from django.views.decorators.http import require_POST
 
 from core.roles import tiene_rol
 from .forms import AsignarTecnicosForm, FieldServiceDailyExpenseForm
-from .models import FieldService, FieldServiceDailyExpense
+from .models import (
+    BONO_APOYO,
+    BONO_LIDER,
+    BONO_MOVILIZACION_PERSONA,
+    FieldService,
+    FieldServiceDailyExpense,
+)
 
 
-BONO_LIDER = Decimal("90000")
-BONO_APOYO = Decimal("75000")
 
 
 def _puede_campo(user):
@@ -89,36 +93,53 @@ def reporte_bonos_empleado(request):
     total = Decimal("0")
     dias_lider = 0
     dias_apoyo = 0
+    dias_movilizacion = 0
 
     for gasto in gastos:
         servicio = gasto.servicio
         paw = servicio.paw
 
-        if servicio.especialista_lider == tecnico:
-            detalle.append({
-                "fecha": gasto.fecha,
-                "dia": gasto.dia_numero,
-                "paw": paw.numero_paw,
-                "nombre": paw.nombre_paw,
-                "campo": paw.campo,
-                "rol": "Especialista líder",
-                "valor": BONO_LIDER,
-            })
-            total += BONO_LIDER
+        es_lider = servicio.especialista_lider == tecnico
+        es_apoyo = servicio.especialista_apoyo == tecnico
+
+        if not es_lider and not es_apoyo:
+            continue
+
+        rol = "Especialista líder" if es_lider else "Especialista apoyo"
+        bono_campo = Decimal("0")
+        bono_movilizacion = Decimal("0")
+
+        if es_lider and gasto.bono_lider > 0:
+            bono_campo = Decimal(gasto.bono_lider or 0)
             dias_lider += 1
 
-        if servicio.especialista_apoyo == tecnico:
-            detalle.append({
-                "fecha": gasto.fecha,
-                "dia": gasto.dia_numero,
-                "paw": paw.numero_paw,
-                "nombre": paw.nombre_paw,
-                "campo": paw.campo,
-                "rol": "Especialista apoyo",
-                "valor": BONO_APOYO,
-            })
-            total += BONO_APOYO
+        if es_apoyo and gasto.bono_apoyo > 0:
+            bono_campo = Decimal(gasto.bono_apoyo or 0)
             dias_apoyo += 1
+
+        if gasto.aplica_bono_movilizacion:
+            bono_movilizacion = BONO_MOVILIZACION_PERSONA
+            dias_movilizacion += 1
+
+        total_dia = bono_campo + bono_movilizacion
+
+        # Si el técnico está asignado, pero ese día no tiene bono de campo ni movilización, no se lista.
+        if total_dia <= 0:
+            continue
+
+        detalle.append({
+            "fecha": gasto.fecha,
+            "dia": gasto.dia_numero,
+            "paw": paw.numero_paw,
+            "nombre": paw.nombre_paw,
+            "campo": paw.campo,
+            "rol": rol,
+            "bono_campo": bono_campo,
+            "bono_movilizacion": bono_movilizacion,
+            "total_dia": total_dia,
+        })
+
+        total += total_dia
 
     return render(request, "campo/reporte_bonos_empleado.html", {
         "tecnico": tecnico,
@@ -126,6 +147,7 @@ def reporte_bonos_empleado(request):
         "total": total,
         "dias_lider": dias_lider,
         "dias_apoyo": dias_apoyo,
+        "dias_movilizacion": dias_movilizacion,
         "fecha_inicio": fecha_inicio,
         "fecha_fin": fecha_fin,
     })
@@ -342,12 +364,11 @@ def reporte_bonos(request):
     """
     Reporte interno de bonos de técnicos por corte.
 
-    Regla:
+    Reglas:
     - Corte estándar del 28 al 27.
-    - Líder: 90.000 por día registrado.
-    - Apoyo: 75.000 por día registrado.
-    - Cada día se toma desde FieldServiceDailyExpense.
-    - Cada técnico se toma desde FieldService.especialista_lider / especialista_apoyo.
+    - Bono campo líder y apoyo se calcula según la clasificación del día.
+    - Movilización: 70.000 por persona cuando aplique salida tarde, regreso después de 6 pm o solo viaje.
+    - Los costos operativos como transporte comunidad, vuelos y gastos adicionales quedan separados.
     """
     if not _puede_ver_gastos(request.user):
         messages.error(request, "No tienes acceso al reporte de bonos.")
@@ -373,6 +394,7 @@ def reporte_bonos(request):
     resumen = defaultdict(lambda: {
         "dias_lider": 0,
         "dias_apoyo": 0,
+        "dias_movilizacion": 0,
         "total": Decimal("0"),
         "detalle": [],
     })
@@ -380,15 +402,16 @@ def reporte_bonos(request):
     total_general = Decimal("0")
     total_dias_lider = 0
     total_dias_apoyo = 0
+    total_dias_movilizacion = 0
 
     for gasto in gastos:
         servicio = gasto.servicio
         paw = servicio.paw
 
-        if servicio.especialista_lider:
+        if servicio.especialista_lider and gasto.bono_lider > 0:
             tecnico = servicio.especialista_lider
             resumen[tecnico]["dias_lider"] += 1
-            resumen[tecnico]["total"] += BONO_LIDER
+            resumen[tecnico]["total"] += gasto.bono_lider
             resumen[tecnico]["detalle"].append({
                 "fecha": gasto.fecha,
                 "dia": gasto.dia_numero,
@@ -396,16 +419,17 @@ def reporte_bonos(request):
                 "nombre": paw.nombre_paw,
                 "campo": paw.campo,
                 "rol": "Especialista líder",
-                "valor": BONO_LIDER,
+                "concepto": "Bono campo líder",
+                "valor": gasto.bono_lider,
             })
 
-            total_general += BONO_LIDER
+            total_general += gasto.bono_lider
             total_dias_lider += 1
 
-        if servicio.especialista_apoyo:
+        if servicio.especialista_apoyo and gasto.bono_apoyo > 0:
             tecnico = servicio.especialista_apoyo
             resumen[tecnico]["dias_apoyo"] += 1
-            resumen[tecnico]["total"] += BONO_APOYO
+            resumen[tecnico]["total"] += gasto.bono_apoyo
             resumen[tecnico]["detalle"].append({
                 "fecha": gasto.fecha,
                 "dia": gasto.dia_numero,
@@ -413,11 +437,33 @@ def reporte_bonos(request):
                 "nombre": paw.nombre_paw,
                 "campo": paw.campo,
                 "rol": "Especialista apoyo",
-                "valor": BONO_APOYO,
+                "concepto": "Bono campo apoyo",
+                "valor": gasto.bono_apoyo,
             })
 
-            total_general += BONO_APOYO
+            total_general += gasto.bono_apoyo
             total_dias_apoyo += 1
+
+        if gasto.aplica_bono_movilizacion:
+            for tecnico in [servicio.especialista_lider, servicio.especialista_apoyo]:
+                if not tecnico:
+                    continue
+
+                resumen[tecnico]["dias_movilizacion"] += 1
+                resumen[tecnico]["total"] += BONO_MOVILIZACION_PERSONA
+                resumen[tecnico]["detalle"].append({
+                    "fecha": gasto.fecha,
+                    "dia": gasto.dia_numero,
+                    "paw": paw.numero_paw,
+                    "nombre": paw.nombre_paw,
+                    "campo": paw.campo,
+                    "rol": "Movilización",
+                    "concepto": "Bono movilización",
+                    "valor": BONO_MOVILIZACION_PERSONA,
+                })
+
+                total_general += BONO_MOVILIZACION_PERSONA
+                total_dias_movilizacion += 1
 
     resumen_ordenado = dict(sorted(resumen.items(), key=lambda item: item[0]))
 
@@ -428,6 +474,9 @@ def reporte_bonos(request):
         "total_general": total_general,
         "total_dias_lider": total_dias_lider,
         "total_dias_apoyo": total_dias_apoyo,
+        "total_dias_movilizacion": total_dias_movilizacion,
         "bono_lider": BONO_LIDER,
         "bono_apoyo": BONO_APOYO,
+        "bono_movilizacion": BONO_MOVILIZACION_PERSONA,
     })
+

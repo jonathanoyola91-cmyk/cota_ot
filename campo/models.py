@@ -5,6 +5,11 @@ from django.db import models
 from django.utils import timezone
 
 
+BONO_LIDER = Decimal("90000")
+BONO_APOYO = Decimal("75000")
+BONO_MOVILIZACION_PERSONA = Decimal("70000")
+
+
 class FieldService(models.Model):
     TECNICOS_CHOICES = [
         ("Carlos Hende", "Carlos Hende"),
@@ -75,8 +80,24 @@ class FieldService(models.Model):
         return total
 
     @property
+    def total_bonos(self):
+        total = Decimal("0.00")
+        for gasto in self.gastos.all():
+            total += gasto.total_bonos
+        return total
+
+    @property
     def total_dias(self):
         return self.gastos.count()
+
+    @property
+    def cantidad_tecnicos_asignados(self):
+        cantidad = 0
+        if self.especialista_lider:
+            cantidad += 1
+        if self.especialista_apoyo:
+            cantidad += 1
+        return cantidad
 
     def __str__(self):
         return f"Servicio campo - PAW {self.paw.numero_paw}"
@@ -99,13 +120,45 @@ class FieldServiceDailyExpense(models.Model):
         help_text="Resumen técnico de actividades realizadas durante el día. No incluir valores económicos.",
     )
 
-    transporte = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    apoyo_local = models.DecimalField(
-        "Apoyo local / comunidad",
+    # Clasificación operativa para liquidar bonos internos.
+    dia_trabajado_campo = models.BooleanField(
+        "Día trabajado en campo",
+        default=True,
+        help_text="Marcar cuando el personal trabajó en campo y aplica bono según rol.",
+    )
+    salida_despues_mediodia = models.BooleanField(
+        "Salida después del mediodía",
+        default=False,
+        help_text="Si solo hubo salida después de las 12:00, no aplica bono campo; aplica movilización.",
+    )
+    regreso_despues_6pm = models.BooleanField(
+        "Regreso después de las 6:00 pm",
+        default=False,
+        help_text="Si ya trabajó el día, suma movilización adicional por persona.",
+    )
+    solo_viaje_traslado = models.BooleanField(
+        "Solo viaje / traslado",
+        default=False,
+        help_text="Día sin trabajo en campo. Solo aplica movilización por persona.",
+    )
+
+    transporte = models.DecimalField(
+        "Transporte comunidad / operación",
         max_digits=14,
         decimal_places=2,
         default=0,
+        help_text="Valor manual que cobra la operación/comunidad por movilización diaria.",
     )
+
+    # Campo legado: se conserva para no romper registros/migraciones anteriores.
+    apoyo_local = models.DecimalField(
+        "Apoyo local / comunidad (legado)",
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        help_text="Campo legado. Ya no se captura en el formulario.",
+    )
+
     alojamiento = models.DecimalField(
         "Alojamiento unitario",
         max_digits=14,
@@ -114,7 +167,10 @@ class FieldServiceDailyExpense(models.Model):
         help_text="Valor unitario por persona. El sistema lo multiplica por personas.",
     )
 
-    personas = models.PositiveIntegerField(default=1)
+    personas = models.PositiveIntegerField(
+        default=1,
+        help_text="Cantidad de personas para gastos operativos como alojamiento, alimentación e hidratación.",
+    )
     tarifa_alimentacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     hidratacion_por_persona = models.DecimalField(max_digits=14, decimal_places=2, default=10000)
 
@@ -144,6 +200,57 @@ class FieldServiceDailyExpense(models.Model):
         verbose_name_plural = "Gastos diarios de campo"
 
     @property
+    def cantidad_personas_bono(self):
+        """
+        Para bonos se liquida por técnico asignado al servicio.
+        Si aún no asignaron técnicos, usa el campo personas como respaldo.
+        """
+        cantidad = self.servicio.cantidad_tecnicos_asignados if self.servicio_id else 0
+        return cantidad or int(self.personas or 0)
+
+    @property
+    def aplica_bono_campo(self):
+        if self.solo_viaje_traslado:
+            return False
+        if self.salida_despues_mediodia and not self.dia_trabajado_campo:
+            return False
+        return bool(self.dia_trabajado_campo)
+
+    @property
+    def aplica_bono_movilizacion(self):
+        return bool(
+            self.solo_viaje_traslado
+            or self.salida_despues_mediodia
+            or self.regreso_despues_6pm
+        )
+
+    @property
+    def bono_lider(self):
+        if self.aplica_bono_campo and self.servicio.especialista_lider:
+            return BONO_LIDER
+        return Decimal("0.00")
+
+    @property
+    def bono_apoyo(self):
+        if self.aplica_bono_campo and self.servicio.especialista_apoyo:
+            return BONO_APOYO
+        return Decimal("0.00")
+
+    @property
+    def bono_campo_total(self):
+        return self.bono_lider + self.bono_apoyo
+
+    @property
+    def bono_movilizacion_total(self):
+        if not self.aplica_bono_movilizacion:
+            return Decimal("0.00")
+        return Decimal(self.cantidad_personas_bono or 0) * BONO_MOVILIZACION_PERSONA
+
+    @property
+    def total_bonos(self):
+        return self.bono_campo_total + self.bono_movilizacion_total
+
+    @property
     def alojamiento_total(self):
         return Decimal(self.personas or 0) * Decimal(self.alojamiento or 0)
 
@@ -166,9 +273,12 @@ class FieldServiceDailyExpense(models.Model):
 
     @property
     def total_dia(self):
+        """
+        Total de costos operativos del día.
+        Los bonos técnicos quedan separados en total_bonos.
+        """
         return (
             Decimal(self.transporte or 0)
-            + Decimal(self.apoyo_local or 0)
             + self.alojamiento_total
             + self.alimentacion_total
             + self.hidratacion_total
