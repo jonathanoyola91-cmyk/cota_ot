@@ -6,6 +6,14 @@ from django.utils import timezone
 
 
 class FieldService(models.Model):
+    TECNICOS_CHOICES = [
+        ("Carlos Hende", "Carlos Hende"),
+        ("Reison Vanegas", "Reison Vanegas"),
+        ("Yeferson Muñoz", "Yeferson Muñoz"),
+        ("Sergio Ortiz", "Sergio Ortiz"),
+        ("Jose Oyola", "Jose Oyola"),
+    ]
+
     class Estado(models.TextChoices):
         EN_CURSO = "EN_CURSO", "En curso"
         FINALIZADO = "FINALIZADO", "Finalizado"
@@ -31,6 +39,22 @@ class FieldService(models.Model):
         related_name="servicios_campo_responsable",
         null=True,
         blank=True,
+    )
+
+    especialista_lider = models.CharField(
+        "Especialista líder",
+        max_length=100,
+        choices=TECNICOS_CHOICES,
+        blank=True,
+        default="",
+    )
+
+    especialista_apoyo = models.CharField(
+        "Especialista apoyo",
+        max_length=100,
+        choices=TECNICOS_CHOICES,
+        blank=True,
+        default="",
     )
 
     observaciones = models.TextField(blank=True)

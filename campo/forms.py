@@ -1,5 +1,37 @@
 from django import forms
-from .models import FieldServiceDailyExpense
+from .models import FieldService, FieldServiceDailyExpense
+
+
+class AsignarTecnicosForm(forms.ModelForm):
+    class Meta:
+        model = FieldService
+        fields = [
+            "especialista_lider",
+            "especialista_apoyo",
+        ]
+
+        labels = {
+            "especialista_lider": "Especialista líder",
+            "especialista_apoyo": "Especialista apoyo",
+        }
+
+        widgets = {
+            "especialista_lider": forms.Select(attrs={"class": "form-control"}),
+            "especialista_apoyo": forms.Select(attrs={"class": "form-control"}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        lider = cleaned_data.get("especialista_lider")
+        apoyo = cleaned_data.get("especialista_apoyo")
+
+        if lider and apoyo and lider == apoyo:
+            raise forms.ValidationError(
+                "El especialista líder y el especialista apoyo no pueden ser la misma persona."
+            )
+
+        return cleaned_data
 
 
 class FieldServiceDailyExpenseForm(forms.ModelForm):

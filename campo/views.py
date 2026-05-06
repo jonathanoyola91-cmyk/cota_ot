@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.roles import tiene_rol
-from .forms import FieldServiceDailyExpenseForm
+from .forms import AsignarTecnicosForm, FieldServiceDailyExpenseForm
 from .models import FieldService, FieldServiceDailyExpense
 
 
@@ -55,6 +55,36 @@ def detalle_servicio(request, servicio_id):
         "servicio": servicio,
         "gastos": servicio.gastos.all(),
         "puede_ver_gastos": _puede_ver_gastos(request.user),
+    })
+
+
+@login_required
+def asignar_tecnicos(request, servicio_id):
+    if not _puede_campo(request.user):
+        messages.error(request, "No tienes permiso para asignar técnicos de campo.")
+        return redirect("/")
+
+    servicio = get_object_or_404(
+        FieldService.objects.select_related("paw", "responsable"),
+        id=servicio_id,
+    )
+
+    if servicio.estado == FieldService.Estado.FINALIZADO:
+        messages.error(request, "No puedes cambiar técnicos de un servicio finalizado.")
+        return redirect("campo:detalle_servicio", servicio_id=servicio.id)
+
+    if request.method == "POST":
+        form = AsignarTecnicosForm(request.POST, instance=servicio)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Técnicos asignados correctamente.")
+            return redirect("campo:detalle_servicio", servicio_id=servicio.id)
+    else:
+        form = AsignarTecnicosForm(instance=servicio)
+
+    return render(request, "campo/asignar_tecnicos.html", {
+        "servicio": servicio,
+        "form": form,
     })
 
 

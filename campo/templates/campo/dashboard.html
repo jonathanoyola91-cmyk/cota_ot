@@ -24,6 +24,8 @@
                     <th>Cliente</th>
                     <th>Campo</th>
                     <th>Estado</th>
+                    <th>Líder</th>
+                    <th>Apoyo</th>
                     <th>Días</th>
                     <th>Total gastos</th>
                     <th>Acción</th>
@@ -37,6 +39,8 @@
                     <td>{{ servicio.paw.cliente|default:"-" }}</td>
                     <td>{{ servicio.paw.campo|default:"-" }}</td>
                     <td>{{ servicio.estado }}</td>
+                    <td>{{ servicio.especialista_lider|default:"-" }}</td>
+                    <td>{{ servicio.especialista_apoyo|default:"-" }}</td>
                     <td>{{ servicio.total_dias }}</td>
                     <td><strong>$ {{ servicio.total_gastos|floatformat:0 }}</strong></td>
                     <td>
@@ -47,7 +51,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7">No hay servicios de campo registrados.</td>
+                    <td colspan="10">No hay servicios de campo registrados.</td>
                 </tr>
                 {% endfor %}
             </tbody>

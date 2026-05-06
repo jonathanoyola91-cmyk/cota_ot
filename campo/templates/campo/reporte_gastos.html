@@ -24,7 +24,9 @@
         <div><strong>Estado:</strong> {{ servicio.estado }}</div>
         <div><strong>Cliente:</strong> {{ servicio.paw.cliente|default:"-" }}</div>
         <div><strong>Campo:</strong> {{ servicio.paw.campo|default:"-" }}</div>
-        <div><strong>Responsable:</strong> {{ servicio.responsable|default:"-" }}</div>
+        <div><strong>Responsable sistema:</strong> {{ servicio.responsable|default:"-" }}</div>
+        <div><strong>Especialista líder:</strong> {{ servicio.especialista_lider|default:"-" }}</div>
+        <div><strong>Especialista apoyo:</strong> {{ servicio.especialista_apoyo|default:"-" }}</div>
         <div><strong>Fecha:</strong> {{ servicio.fecha_inicio|date:"d/m/Y" }} - {{ servicio.fecha_fin|date:"d/m/Y"|default:"En curso" }}</div>
     </div>
 </div>

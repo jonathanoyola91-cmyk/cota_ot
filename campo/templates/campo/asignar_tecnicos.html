@@ -1,0 +1,86 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Asignar técnicos · PAW {{ servicio.paw.numero_paw }}{% endblock %}
+
+{% block content %}
+
+<style>
+    .tech-grid {
+        display:grid;
+        grid-template-columns:repeat(2, minmax(220px, 1fr));
+        gap:16px;
+    }
+
+    .tech-help {
+        background:#eff6ff;
+        border:1px solid #bfdbfe;
+        color:#1e40af;
+        padding:12px 14px;
+        border-radius:12px;
+        font-weight:800;
+        font-size:13px;
+        margin:14px 0 18px;
+        line-height:1.5;
+    }
+
+    .tech-actions {
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        margin-top:18px;
+    }
+
+    @media (max-width:760px) {
+        .tech-grid { grid-template-columns:1fr; }
+        .tech-actions { flex-direction:column; }
+        .tech-actions .btn,
+        .tech-actions button { width:100%; text-align:center; }
+    }
+</style>
+
+<div class="panel">
+    <h2>Asignar técnicos de campo</h2>
+
+    <p style="color:#64748b; margin-top:6px;">
+        PAW {{ servicio.paw.numero_paw }} · {{ servicio.paw.nombre_paw|default:servicio.paw.cliente }}
+    </p>
+
+    <div class="tech-help">
+        Asigna una sola vez el equipo técnico para este PAW. Estos nombres aparecerán automáticamente en el detalle del servicio y en los reportes de actividades y gastos.
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div style="background:#fee2e2;color:#991b1b;border-radius:12px;padding:12px;margin-bottom:14px;font-weight:800;">
+                {{ form.non_field_errors|striptags }}
+            </div>
+        {% endif %}
+
+        <div class="tech-grid">
+            <div>
+                <label style="font-size:13px;font-weight:800;color:#334155;">Especialista líder</label>
+                {{ form.especialista_lider }}
+                {% if form.especialista_lider.errors %}
+                    <small style="color:#dc2626;">{{ form.especialista_lider.errors|striptags }}</small>
+                {% endif %}
+            </div>
+
+            <div>
+                <label style="font-size:13px;font-weight:800;color:#334155;">Especialista apoyo</label>
+                {{ form.especialista_apoyo }}
+                {% if form.especialista_apoyo.errors %}
+                    <small style="color:#dc2626;">{{ form.especialista_apoyo.errors|striptags }}</small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="tech-actions">
+            <button class="btn" type="submit">Guardar técnicos</button>
+            <a class="btn btn-secondary" href="{% url 'campo:detalle_servicio' servicio.id %}">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
