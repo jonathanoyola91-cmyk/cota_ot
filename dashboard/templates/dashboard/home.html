@@ -436,7 +436,7 @@ window.addEventListener("load", function(){
     </a>
     {% endif %}
 
-    {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente %}
+    {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente or es_finanzas %}
     <a href="/campo/"
        class="{% if '/campo/' in request.path and not '/campo/reporte-bonos/' in request.path %}active{% endif %}">
         📍 Campo
