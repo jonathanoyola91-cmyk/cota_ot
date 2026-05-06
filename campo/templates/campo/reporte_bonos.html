@@ -1,0 +1,245 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Campo · Reporte bonos técnicos{% endblock %}
+
+{% block content %}
+
+<style>
+    .bonos-filter {
+        display:flex;
+        gap:12px;
+        flex-wrap:wrap;
+        align-items:end;
+        margin-bottom:18px;
+    }
+
+    .bonos-filter > div {
+        min-width:180px;
+    }
+
+    .bonos-summary {
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+        gap:14px;
+        margin-bottom:18px;
+    }
+
+    .bonos-card {
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:16px;
+        box-shadow:0 6px 16px rgba(15,23,42,.05);
+    }
+
+    .bonos-card small {
+        display:block;
+        color:#64748b;
+        font-size:12px;
+        font-weight:800;
+        margin-bottom:6px;
+    }
+
+    .bonos-card strong {
+        font-size:20px;
+        color:#0f172a;
+    }
+
+    .tecnico-card {
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:18px;
+        padding:18px;
+        margin-bottom:18px;
+        box-shadow:0 8px 22px rgba(15,23,42,.05);
+    }
+
+    .tecnico-head {
+        display:flex;
+        justify-content:space-between;
+        gap:12px;
+        flex-wrap:wrap;
+        margin-bottom:14px;
+    }
+
+    .tecnico-head h3 {
+        margin:0;
+        color:#0f172a;
+    }
+
+    .badge-bono {
+        background:#dcfce7;
+        color:#166534;
+        border-radius:999px;
+        padding:7px 11px;
+        font-size:12px;
+        font-weight:900;
+    }
+
+    .print-actions {
+        display:flex;
+        justify-content:flex-end;
+        margin-bottom:14px;
+    }
+
+    @media(max-width:700px) {
+        .bonos-filter {
+            flex-direction:column;
+            align-items:stretch;
+        }
+
+        .bonos-filter > div,
+        .bonos-filter button {
+            width:100%;
+        }
+
+        .print-actions {
+            justify-content:stretch;
+        }
+
+        .print-actions .btn {
+            width:100%;
+            text-align:center;
+        }
+    }
+
+    @media print {
+        .sidebar,
+        .topbar,
+        .print-actions,
+        .bonos-filter {
+            display:none !important;
+        }
+
+        .main {
+            padding:0 !important;
+        }
+
+        .panel,
+        .tecnico-card,
+        .bonos-card {
+            box-shadow:none !important;
+        }
+    }
+</style>
+
+<div class="panel">
+
+    <div class="print-actions">
+        <button class="btn btn-secondary" onclick="window.print()">Imprimir / PDF</button>
+    </div>
+
+    <h2>Reporte bonos técnicos</h2>
+
+    <p style="color:#64748b;margin-top:6px;">
+        Corte calculado por registros diarios de servicio de campo.
+        Regla: del 28 al 27 de cada mes.
+    </p>
+
+    <form method="get" class="bonos-filter">
+        <div>
+            <label style="font-size:13px;font-weight:800;color:#334155;">Fecha inicio</label>
+            <input class="form-control" type="date" name="fecha_inicio" value="{{ fecha_inicio|date:'Y-m-d' }}">
+        </div>
+
+        <div>
+            <label style="font-size:13px;font-weight:800;color:#334155;">Fecha fin</label>
+            <input class="form-control" type="date" name="fecha_fin" value="{{ fecha_fin|date:'Y-m-d' }}">
+        </div>
+
+        <button class="btn" type="submit">Filtrar</button>
+    </form>
+
+    <div class="bonos-summary">
+        <div class="bonos-card">
+            <small>Periodo</small>
+            <strong>{{ fecha_inicio|date:"d/m/Y" }} → {{ fecha_fin|date:"d/m/Y" }}</strong>
+        </div>
+
+        <div class="bonos-card">
+            <small>Días líder</small>
+            <strong>{{ total_dias_lider }}</strong>
+        </div>
+
+        <div class="bonos-card">
+            <small>Días apoyo</small>
+            <strong>{{ total_dias_apoyo }}</strong>
+        </div>
+
+        <div class="bonos-card">
+            <small>Total bonos</small>
+            <strong>$ {{ total_general|floatformat:0 }}</strong>
+        </div>
+    </div>
+
+    <p style="color:#64748b;margin-bottom:18px;">
+        Tarifa líder: $ {{ bono_lider|floatformat:0 }} / día ·
+        Tarifa apoyo: $ {{ bono_apoyo|floatformat:0 }} / día
+    </p>
+
+    {% for tecnico, data in resumen.items %}
+
+        <div class="tecnico-card">
+            <div class="tecnico-head">
+                <div>
+                    <h3>{{ tecnico }}</h3>
+                    <p style="color:#64748b;margin-top:6px;">
+                        Días líder: <strong>{{ data.dias_lider }}</strong> ·
+                        Días apoyo: <strong>{{ data.dias_apoyo }}</strong>
+                    </p>
+                </div>
+
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <span class="badge-bono">
+                    Total: $ {{ data.total|floatformat:0 }}
+                </span>
+                <a class="btn btn-secondary"
+                   target="_blank"
+                   href="{% url 'campo:reporte_bonos_empleado' %}?tecnico={{ tecnico|urlencode }}&fecha_inicio={{ fecha_inicio|date:'Y-m-d' }}&fecha_fin={{ fecha_fin|date:'Y-m-d' }}">
+                    PDF empleado
+                </a>
+
+            </div>
+
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Día</th>
+                            <th>PAW</th>
+                            <th>Nombre PAW</th>
+                            <th>Campo</th>
+                            <th>Rol</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for item in data.detalle %}
+                            <tr>
+                                <td>{{ item.fecha|date:"d/m/Y" }}</td>
+                                <td>{{ item.dia }}</td>
+                                <td><strong>{{ item.paw }}</strong></td>
+                                <td>{{ item.nombre|default:"-" }}</td>
+                                <td>{{ item.campo|default:"-" }}</td>
+                                <td>{{ item.rol }}</td>
+                                <td><strong>$ {{ item.valor|floatformat:0 }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    {% empty %}
+
+        <div class="bonos-card">
+            <strong>No hay registros para este corte.</strong>
+        </div>
+
+    {% endfor %}
+
+</div>
+
+{% endblock %}

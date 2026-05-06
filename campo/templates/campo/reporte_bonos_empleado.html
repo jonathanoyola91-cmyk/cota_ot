@@ -1,0 +1,75 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Bono técnico · {{ tecnico }}{% endblock %}
+
+{% block content %}
+
+<style>
+@media print {
+    .sidebar, .topbar, .no-print {
+        display:none !important;
+    }
+
+    .main {
+        padding:0 !important;
+    }
+
+    .panel {
+        box-shadow:none !important;
+    }
+}
+</style>
+
+<div class="panel">
+
+    <div class="no-print" style="text-align:right;margin-bottom:16px;">
+        <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+    </div>
+
+    <h2>Reporte de bonos por técnico</h2>
+
+    <p><strong>Técnico:</strong> {{ tecnico }}</p>
+    <p><strong>Periodo:</strong> {{ fecha_inicio|date:"d/m/Y" }} al {{ fecha_fin|date:"d/m/Y" }}</p>
+
+    <hr><br>
+
+    <p><strong>Días como líder:</strong> {{ dias_lider }}</p>
+    <p><strong>Días como apoyo:</strong> {{ dias_apoyo }}</p>
+    <p><strong>Total bono:</strong> $ {{ total|floatformat:0 }}</p>
+
+    <br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Día</th>
+                <th>PAW</th>
+                <th>Nombre PAW</th>
+                <th>Campo</th>
+                <th>Rol</th>
+                <th>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in detalle %}
+            <tr>
+                <td>{{ item.fecha|date:"d/m/Y" }}</td>
+                <td>{{ item.dia }}</td>
+                <td>{{ item.paw }}</td>
+                <td>{{ item.nombre|default:"-" }}</td>
+                <td>{{ item.campo|default:"-" }}</td>
+                <td>{{ item.rol }}</td>
+                <td>$ {{ item.valor|floatformat:0 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">No hay registros para este técnico.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+{% endblock %}

@@ -438,18 +438,16 @@ window.addEventListener("load", function(){
 
     {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente %}
     <a href="/campo/"
-       class="{% if '/campo/' in request.path %}active{% endif %}">
-        Campo
+       class="{% if '/campo/' in request.path and not '/campo/reporte-bonos/' in request.path %}active{% endif %}">
+        📍 Campo
     </a>
-    {% else %}
-        {% for group in request.user.groups.all %}
-            {% if group.name == "CAMPO" or group.name == "INGENIERIA" or group.name == "GERENTE" or group.name == "ADMIN" %}
-                <a href="/campo/"
-                   class="{% if '/campo/' in request.path %}active{% endif %}">
-                    📍 Campo
-                </a>
-            {% endif %}
-        {% endfor %}
+    {% endif %}
+
+    {% if es_finanzas or es_gerente or request.user.is_superuser %}
+    <a href="/campo/reporte-bonos/"
+       class="{% if '/campo/reporte-bonos/' in request.path %}active{% endif %}">
+        💰 Bonos técnicos
+    </a>
     {% endif %}
 
     {% if es_finanzas %}
