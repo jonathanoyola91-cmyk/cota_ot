@@ -16,9 +16,8 @@ from .models import (
     BONO_MOVILIZACION_PERSONA,
     FieldService,
     FieldServiceDailyExpense,
+    FieldServicePersonExpense,
 )
-
-
 
 
 def _puede_campo(user):
@@ -68,6 +67,224 @@ def _parse_fecha(value):
     except ValueError:
         return None
 
+
+def _to_decimal(value):
+    if value in [None, ""]:
+        return Decimal("0.00")
+
+    try:
+        return Decimal(str(value).replace(",", "."))
+    except Exception:
+        return Decimal("0.00")
+
+
+def _to_bool(value):
+    return str(value).lower() in ["1", "true", "on", "yes", "si", "sí"]
+
+
+def _tecnicos_base(servicio, cantidad=None):
+    tecnicos = []
+
+    if servicio.especialista_lider:
+        tecnicos.append(servicio.especialista_lider)
+
+    if servicio.especialista_apoyo and servicio.especialista_apoyo not in tecnicos:
+        tecnicos.append(servicio.especialista_apoyo)
+
+    cantidad = int(cantidad or len(tecnicos) or 1)
+
+    while len(tecnicos) < cantidad:
+        tecnicos.append("")
+
+    return tecnicos[:cantidad]
+
+
+def _detalle_personas_inicial(servicio, cantidad=None):
+    detalle = []
+
+    for tecnico in _tecnicos_base(servicio, cantidad):
+        detalle.append({
+            "persona": tecnico,
+            "clasificacion": FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO,
+            "alojamiento": Decimal("0.00"),
+            "alimentacion": Decimal("0.00"),
+            "lavanderia": Decimal("0.00"),
+            "transporte_personal": Decimal("0.00"),
+            "vuelo_ida_aplica": False,
+            "vuelo_ida_valor": Decimal("0.00"),
+            "vuelo_regreso_aplica": False,
+            "vuelo_regreso_valor": Decimal("0.00"),
+            "observaciones": "",
+        })
+
+    return detalle
+
+
+def _detalle_personas_existente(gasto):
+    detalle = []
+
+    for linea in gasto.detalle_personas.all():
+        detalle.append({
+            "persona": linea.persona,
+            "clasificacion": linea.clasificacion,
+            "alojamiento": linea.alojamiento,
+            "alimentacion": linea.alimentacion,
+            "lavanderia": linea.lavanderia,
+            "transporte_personal": linea.transporte_personal,
+            "vuelo_ida_aplica": linea.vuelo_ida_aplica,
+            "vuelo_ida_valor": linea.vuelo_ida_valor,
+            "vuelo_regreso_aplica": linea.vuelo_regreso_aplica,
+            "vuelo_regreso_valor": linea.vuelo_regreso_valor,
+            "observaciones": linea.observaciones,
+        })
+
+    if not detalle:
+        detalle = _detalle_personas_inicial(gasto.servicio, gasto.personas)
+
+    return detalle
+
+
+def _leer_detalle_personas_post(request):
+    personas = request.POST.getlist("persona[]")
+    clasificaciones = request.POST.getlist("clasificacion[]")
+    alojamientos = request.POST.getlist("alojamiento_persona[]")
+    alimentaciones = request.POST.getlist("alimentacion_persona[]")
+    lavanderias = request.POST.getlist("lavanderia_persona[]")
+    transportes_personales = request.POST.getlist("transporte_personal[]")
+    vuelos_ida_aplica = request.POST.getlist("vuelo_ida_aplica[]")
+    vuelos_ida_valor = request.POST.getlist("vuelo_ida_valor[]")
+    vuelos_regreso_aplica = request.POST.getlist("vuelo_regreso_aplica[]")
+    vuelos_regreso_valor = request.POST.getlist("vuelo_regreso_valor[]")
+    observaciones = request.POST.getlist("observacion_persona[]")
+
+    total = max(
+        len(personas),
+        len(clasificaciones),
+        len(alojamientos),
+        len(alimentaciones),
+        len(lavanderias),
+        len(transportes_personales),
+        len(vuelos_ida_valor),
+        len(vuelos_regreso_valor),
+        0,
+    )
+
+    detalle = []
+
+    for index in range(total):
+        persona = personas[index].strip() if index < len(personas) else ""
+
+        if not persona:
+            continue
+
+        clasificacion = (
+            clasificaciones[index]
+            if index < len(clasificaciones)
+            else FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO
+        )
+
+        opciones_validas = [opcion[0] for opcion in FieldServicePersonExpense.Clasificacion.choices]
+        if clasificacion not in opciones_validas:
+            clasificacion = FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO
+
+        detalle.append({
+            "persona": persona,
+            "clasificacion": clasificacion,
+            "alojamiento": _to_decimal(alojamientos[index] if index < len(alojamientos) else 0),
+            "alimentacion": _to_decimal(alimentaciones[index] if index < len(alimentaciones) else 0),
+            "lavanderia": _to_decimal(lavanderias[index] if index < len(lavanderias) else 0),
+            "transporte_personal": _to_decimal(transportes_personales[index] if index < len(transportes_personales) else 0),
+            "vuelo_ida_aplica": _to_bool(vuelos_ida_aplica[index] if index < len(vuelos_ida_aplica) else False),
+            "vuelo_ida_valor": _to_decimal(vuelos_ida_valor[index] if index < len(vuelos_ida_valor) else 0),
+            "vuelo_regreso_aplica": _to_bool(vuelos_regreso_aplica[index] if index < len(vuelos_regreso_aplica) else False),
+            "vuelo_regreso_valor": _to_decimal(vuelos_regreso_valor[index] if index < len(vuelos_regreso_valor) else 0),
+            "observaciones": observaciones[index].strip() if index < len(observaciones) else "",
+        })
+
+    return detalle
+
+
+def _guardar_detalle_personas(gasto, detalle):
+    gasto.detalle_personas.all().delete()
+
+    for item in detalle:
+        FieldServicePersonExpense.objects.create(
+            gasto_diario=gasto,
+            persona=item["persona"],
+            clasificacion=item["clasificacion"],
+            alojamiento=item["alojamiento"],
+            alimentacion=item["alimentacion"],
+            lavanderia=item["lavanderia"],
+            transporte_personal=item["transporte_personal"],
+            vuelo_ida_aplica=item["vuelo_ida_aplica"],
+            vuelo_ida_valor=item["vuelo_ida_valor"],
+            vuelo_regreso_aplica=item["vuelo_regreso_aplica"],
+            vuelo_regreso_valor=item["vuelo_regreso_valor"],
+            observaciones=item["observaciones"],
+        )
+
+
+def _sincronizar_campos_legados_bonos(gasto, detalle):
+    """
+    Mantiene los campos anteriores sincronizados para no romper pantallas/reportes
+    que todavía miren los booleanos del gasto diario.
+    """
+    clasificaciones = {item["clasificacion"] for item in detalle}
+
+    gasto.dia_trabajado_campo = bool(
+        FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO in clasificaciones
+        or FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM in clasificaciones
+    )
+    gasto.salida_despues_mediodia = bool(
+        FieldServicePersonExpense.Clasificacion.SALIDA_DESPUES_MEDIODIA in clasificaciones
+    )
+    gasto.regreso_despues_6pm = bool(
+        FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM in clasificaciones
+    )
+    gasto.solo_viaje_traslado = bool(
+        FieldServicePersonExpense.Clasificacion.SOLO_VIAJE_TRASLADO in clasificaciones
+        and not gasto.dia_trabajado_campo
+    )
+
+    gasto.personas = max(len(detalle), 1)
+
+    gasto.save(update_fields=[
+        "dia_trabajado_campo",
+        "salida_despues_mediodia",
+        "regreso_despues_6pm",
+        "solo_viaje_traslado",
+        "personas",
+        "actualizado_en",
+    ])
+
+
+def _bono_campo_persona(servicio, persona, clasificacion):
+    if clasificacion not in [
+        FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO,
+        FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM,
+    ]:
+        return Decimal("0.00")
+
+    if persona == servicio.especialista_lider:
+        return BONO_LIDER
+
+    if persona == servicio.especialista_apoyo:
+        return BONO_APOYO
+
+    return Decimal("0.00")
+
+
+def _bono_movilizacion_persona(clasificacion):
+    if clasificacion in [
+        FieldServicePersonExpense.Clasificacion.SALIDA_DESPUES_MEDIODIA,
+        FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM,
+        FieldServicePersonExpense.Clasificacion.SOLO_VIAJE_TRASLADO,
+    ]:
+        return BONO_MOVILIZACION_PERSONA
+
+    return Decimal("0.00")
+
+
 @login_required
 def reporte_bonos_empleado(request):
     if not _puede_ver_gastos(request.user):
@@ -85,6 +302,7 @@ def reporte_bonos_empleado(request):
     gastos = (
         FieldServiceDailyExpense.objects
         .select_related("servicio", "servicio__paw")
+        .prefetch_related("detalle_personas")
         .filter(fecha__range=[fecha_inicio, fecha_fin])
         .order_by("fecha", "servicio__paw__numero_paw", "dia_numero")
     )
@@ -98,6 +316,56 @@ def reporte_bonos_empleado(request):
     for gasto in gastos:
         servicio = gasto.servicio
         paw = servicio.paw
+
+        lineas = list(gasto.detalle_personas.all())
+
+        if lineas:
+            for linea in lineas:
+                if linea.persona != tecnico:
+                    continue
+
+                es_lider = servicio.especialista_lider == tecnico
+                es_apoyo = servicio.especialista_apoyo == tecnico
+
+                rol = "Técnico"
+                if es_lider:
+                    rol = "Especialista líder"
+                elif es_apoyo:
+                    rol = "Especialista apoyo"
+
+                bono_campo = _bono_campo_persona(servicio, tecnico, linea.clasificacion)
+                bono_movilizacion = _bono_movilizacion_persona(linea.clasificacion)
+
+                if bono_campo > 0:
+                    if es_lider:
+                        dias_lider += 1
+                    elif es_apoyo:
+                        dias_apoyo += 1
+
+                if bono_movilizacion > 0:
+                    dias_movilizacion += 1
+
+                total_dia = bono_campo + bono_movilizacion
+
+                if total_dia <= 0:
+                    continue
+
+                detalle.append({
+                    "fecha": gasto.fecha,
+                    "dia": gasto.dia_numero,
+                    "paw": paw.numero_paw,
+                    "nombre": paw.nombre_paw,
+                    "campo": paw.campo,
+                    "rol": rol,
+                    "clasificacion": linea.get_clasificacion_display(),
+                    "bono_campo": bono_campo,
+                    "bono_movilizacion": bono_movilizacion,
+                    "total_dia": total_dia,
+                })
+
+                total += total_dia
+
+            continue
 
         es_lider = servicio.especialista_lider == tecnico
         es_apoyo = servicio.especialista_apoyo == tecnico
@@ -134,6 +402,7 @@ def reporte_bonos_empleado(request):
             "nombre": paw.nombre_paw,
             "campo": paw.campo,
             "rol": rol,
+            "clasificacion": "Registro anterior",
             "bono_campo": bono_campo,
             "bono_movilizacion": bono_movilizacion,
             "total_dia": total_dia,
@@ -151,6 +420,7 @@ def reporte_bonos_empleado(request):
         "fecha_inicio": fecha_inicio,
         "fecha_fin": fecha_fin,
     })
+
 
 @login_required
 def dashboard_campo(request):
@@ -179,7 +449,7 @@ def detalle_servicio(request, servicio_id):
     servicio = get_object_or_404(
         FieldService.objects
         .select_related("paw", "responsable")
-        .prefetch_related("gastos"),
+        .prefetch_related("gastos", "gastos__detalle_personas"),
         id=servicio_id,
     )
 
@@ -234,7 +504,12 @@ def crear_gasto_diario(request, servicio_id):
 
     if request.method == "POST":
         form = FieldServiceDailyExpenseForm(request.POST)
-        if form.is_valid():
+        detalle_personas = _leer_detalle_personas_post(request)
+
+        if not detalle_personas:
+            form.add_error(None, "Debes registrar al menos una persona en el detalle individual.")
+
+        if form.is_valid() and detalle_personas:
             gasto = form.save(commit=False)
             gasto.servicio = servicio
             gasto.registrado_por = request.user
@@ -243,19 +518,29 @@ def crear_gasto_diario(request, servicio_id):
             if not gasto.dia_numero:
                 gasto.dia_numero = _siguiente_dia(servicio)
 
+            gasto.personas = len(detalle_personas)
             gasto.save()
+
+            _guardar_detalle_personas(gasto, detalle_personas)
+            _sincronizar_campos_legados_bonos(gasto, detalle_personas)
+
             messages.success(request, "Registro diario guardado correctamente.")
             return redirect("campo:detalle_servicio", servicio_id=servicio.id)
     else:
+        cantidad_inicial = servicio.cantidad_tecnicos_asignados or 1
         form = FieldServiceDailyExpenseForm(initial={
             "dia_numero": _siguiente_dia(servicio),
             "fecha": timezone.localdate(),
+            "personas": cantidad_inicial,
         })
+        detalle_personas = _detalle_personas_inicial(servicio, cantidad_inicial)
 
     return render(request, "campo/gasto_form.html", {
         "form": form,
         "servicio": servicio,
         "modo": "crear",
+        "detalle_personas": detalle_personas,
+        "clasificacion_choices": FieldServicePersonExpense.Clasificacion.choices,
     })
 
 
@@ -266,7 +551,9 @@ def editar_gasto_diario(request, gasto_id):
         return redirect("/")
 
     gasto = get_object_or_404(
-        FieldServiceDailyExpense.objects.select_related("servicio", "servicio__paw"),
+        FieldServiceDailyExpense.objects
+        .select_related("servicio", "servicio__paw")
+        .prefetch_related("detalle_personas"),
         id=gasto_id,
     )
     servicio = gasto.servicio
@@ -277,18 +564,32 @@ def editar_gasto_diario(request, gasto_id):
 
     if request.method == "POST":
         form = FieldServiceDailyExpenseForm(request.POST, instance=gasto)
-        if form.is_valid():
-            form.save()
+        detalle_personas = _leer_detalle_personas_post(request)
+
+        if not detalle_personas:
+            form.add_error(None, "Debes registrar al menos una persona en el detalle individual.")
+
+        if form.is_valid() and detalle_personas:
+            gasto = form.save(commit=False)
+            gasto.personas = len(detalle_personas)
+            gasto.save()
+
+            _guardar_detalle_personas(gasto, detalle_personas)
+            _sincronizar_campos_legados_bonos(gasto, detalle_personas)
+
             messages.success(request, "Registro diario actualizado correctamente.")
             return redirect("campo:detalle_servicio", servicio_id=servicio.id)
     else:
         form = FieldServiceDailyExpenseForm(instance=gasto)
+        detalle_personas = _detalle_personas_existente(gasto)
 
     return render(request, "campo/gasto_form.html", {
         "form": form,
         "servicio": servicio,
         "gasto": gasto,
         "modo": "editar",
+        "detalle_personas": detalle_personas,
+        "clasificacion_choices": FieldServicePersonExpense.Clasificacion.choices,
     })
 
 
@@ -330,7 +631,7 @@ def reporte_actividades(request, servicio_id):
     servicio = get_object_or_404(
         FieldService.objects
         .select_related("paw", "responsable")
-        .prefetch_related("gastos"),
+        .prefetch_related("gastos", "gastos__detalle_personas"),
         id=servicio_id,
     )
 
@@ -349,7 +650,7 @@ def reporte_gastos(request, servicio_id):
     servicio = get_object_or_404(
         FieldService.objects
         .select_related("paw", "responsable")
-        .prefetch_related("gastos"),
+        .prefetch_related("gastos", "gastos__detalle_personas"),
         id=servicio_id,
     )
 
@@ -366,8 +667,8 @@ def reporte_bonos(request):
 
     Reglas:
     - Corte estándar del 28 al 27.
-    - Bono campo líder y apoyo se calcula según la clasificación del día.
-    - Movilización: 70.000 por persona cuando aplique salida tarde, regreso después de 6 pm o solo viaje.
+    - Si el gasto diario tiene detalle por persona, liquida por cada técnico.
+    - Si el gasto diario es antiguo y no tiene detalle, conserva la lógica anterior.
     - Los costos operativos como transporte comunidad, vuelos y gastos adicionales quedan separados.
     """
     if not _puede_ver_gastos(request.user):
@@ -387,6 +688,7 @@ def reporte_bonos(request):
     gastos = (
         FieldServiceDailyExpense.objects
         .select_related("servicio", "servicio__paw")
+        .prefetch_related("detalle_personas")
         .filter(fecha__range=[fecha_inicio, fecha_fin])
         .order_by("fecha", "servicio__paw__numero_paw", "dia_numero")
     )
@@ -407,7 +709,71 @@ def reporte_bonos(request):
     for gasto in gastos:
         servicio = gasto.servicio
         paw = servicio.paw
+        lineas = list(gasto.detalle_personas.all())
 
+        if lineas:
+            for linea in lineas:
+                tecnico = linea.persona
+
+                if not tecnico:
+                    continue
+
+                bono_campo = _bono_campo_persona(servicio, tecnico, linea.clasificacion)
+                bono_movilizacion = _bono_movilizacion_persona(linea.clasificacion)
+
+                if bono_campo <= 0 and bono_movilizacion <= 0:
+                    continue
+
+                rol = "Técnico"
+                concepto = linea.get_clasificacion_display()
+
+                if tecnico == servicio.especialista_lider:
+                    rol = "Especialista líder"
+                    if bono_campo > 0:
+                        resumen[tecnico]["dias_lider"] += 1
+                        total_dias_lider += 1
+
+                elif tecnico == servicio.especialista_apoyo:
+                    rol = "Especialista apoyo"
+                    if bono_campo > 0:
+                        resumen[tecnico]["dias_apoyo"] += 1
+                        total_dias_apoyo += 1
+
+                if bono_movilizacion > 0:
+                    resumen[tecnico]["dias_movilizacion"] += 1
+                    total_dias_movilizacion += 1
+
+                if bono_campo > 0:
+                    resumen[tecnico]["total"] += bono_campo
+                    resumen[tecnico]["detalle"].append({
+                        "fecha": gasto.fecha,
+                        "dia": gasto.dia_numero,
+                        "paw": paw.numero_paw,
+                        "nombre": paw.nombre_paw,
+                        "campo": paw.campo,
+                        "rol": rol,
+                        "concepto": f"Bono campo - {concepto}",
+                        "valor": bono_campo,
+                    })
+                    total_general += bono_campo
+
+                if bono_movilizacion > 0:
+                    resumen[tecnico]["total"] += bono_movilizacion
+                    resumen[tecnico]["detalle"].append({
+                        "fecha": gasto.fecha,
+                        "dia": gasto.dia_numero,
+                        "paw": paw.numero_paw,
+                        "nombre": paw.nombre_paw,
+                        "campo": paw.campo,
+                        "rol": "Movilización",
+                        "concepto": f"Bono movilización - {concepto}",
+                        "valor": bono_movilizacion,
+                    })
+                    total_general += bono_movilizacion
+
+            continue
+
+        # Lógica anterior para registros que no tengan detalle individual.
         if servicio.especialista_lider and gasto.bono_lider > 0:
             tecnico = servicio.especialista_lider
             resumen[tecnico]["dias_lider"] += 1
@@ -479,4 +845,3 @@ def reporte_bonos(request):
         "bono_apoyo": BONO_APOYO,
         "bono_movilizacion": BONO_MOVILIZACION_PERSONA,
     })
-

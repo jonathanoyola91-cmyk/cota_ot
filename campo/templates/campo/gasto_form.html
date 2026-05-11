@@ -1,4 +1,3 @@
-```html
 {% extends "dashboard/home.html" %}
 
 {% block page_title %}{% if modo == "editar" %}Editar día{% else %}Nuevo día{% endif %} · PAW {{ servicio.paw.numero_paw }}{% endblock %}
@@ -60,57 +59,122 @@
     color:#334155;
 }
 
-/* OPCIONES OPERATIVAS */
-.toggle-option{
-    position:relative;
-}
-
-.toggle-option input[type="checkbox"]{
-    position:absolute;
-    left:16px;
-    top:18px;
-    width:22px !important;
-    height:22px !important;
-    opacity:1 !important;
-    z-index:5;
-    cursor:pointer;
-    accent-color:#2563eb;
-}
-
-.toggle-card{
-    display:block;
-    min-height:64px;
-    padding:14px 14px 14px 52px;
-    border:2px solid #dbeafe;
-    background:#f8fbff;
-    border-radius:14px;
-    cursor:pointer;
-    transition:all .18s ease;
-}
-
-.toggle-card strong{
-    display:block;
-    font-size:15px;
-    color:#0f172a;
-    margin-bottom:4px;
-}
-
-.toggle-card small{
-    display:block;
+.help-text{
     color:#64748b;
     font-size:12px;
 }
 
-.toggle-option input[type="checkbox"]:checked + .toggle-card{
-    background:#2563eb;
-    border-color:#2563eb;
-    color:#fff;
-    box-shadow:0 8px 20px rgba(37,99,235,.18);
+.error-box{
+    background:#fef2f2;
+    border:1px solid #fecaca;
+    color:#991b1b;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:16px;
+    font-weight:700;
 }
 
-.toggle-option input[type="checkbox"]:checked + .toggle-card strong,
-.toggle-option input[type="checkbox"]:checked + .toggle-card small{
-    color:#fff;
+/* TABLA POR PERSONA */
+.person-table-wrap{
+    width:100%;
+    overflow-x:auto;
+    border:1px solid #dbeafe;
+    border-radius:14px;
+}
+
+.person-table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:1250px;
+}
+
+.person-table th{
+    background:#eff6ff;
+    color:#0f172a;
+    font-size:12px;
+    text-align:left;
+    padding:10px;
+    border-bottom:1px solid #dbeafe;
+    white-space:nowrap;
+}
+
+.person-table td{
+    padding:8px;
+    border-bottom:1px solid #e2e8f0;
+    vertical-align:middle;
+}
+
+.person-table tr:last-child td{
+    border-bottom:0;
+}
+
+.person-table input,
+.person-table select{
+    width:100%;
+    min-height:38px;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    padding:7px 9px;
+    font-size:13px;
+    background:#fff;
+}
+
+.person-table input[type="checkbox"]{
+    width:20px !important;
+    height:20px !important;
+    min-height:20px;
+    accent-color:#2563eb;
+}
+
+.person-table .check-cell{
+    text-align:center;
+}
+
+.person-total{
+    font-weight:900;
+    color:#166534;
+    white-space:nowrap;
+}
+
+.row-muted{
+    background:#f8fafc;
+}
+
+.badge-info{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:#eef2ff;
+    color:#3730a3;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:800;
+}
+
+/* BOTONES */
+.btn-mini{
+    border:0;
+    background:#e2e8f0;
+    color:#0f172a;
+    padding:8px 10px;
+    border-radius:10px;
+    font-size:12px;
+    font-weight:800;
+    cursor:pointer;
+}
+
+.btn-mini:hover{
+    background:#cbd5e1;
+}
+
+.btn-danger-mini{
+    background:#fee2e2;
+    color:#991b1b;
+}
+
+.btn-danger-mini:hover{
+    background:#fecaca;
 }
 
 .campo-total-preview{
@@ -153,6 +217,10 @@ textarea{
     textarea{
         min-height:100px;
     }
+
+    .campo-total-preview{
+        font-size:15px;
+    }
 }
 </style>
 
@@ -167,9 +235,17 @@ textarea{
     <div class="campo-help">
         Primero escribe las actividades realizadas. Ese texto alimenta el reporte para cliente.
         Los costos y bonos quedan separados para control interno.
+        El detalle por persona permite controlar alimentación, alojamiento, lavandería,
+        transporte personal y vuelos individualmente.
     </div>
 
-    <form method="post">
+    {% if form.non_field_errors %}
+        <div class="error-box">
+            {{ form.non_field_errors }}
+        </div>
+    {% endif %}
+
+    <form method="post" id="gasto-form">
         {% csrf_token %}
 
         <div class="form-section">
@@ -179,11 +255,13 @@ textarea{
                 <div class="field-box">
                     <label>{{ form.fecha.label }}</label>
                     {{ form.fecha }}
+                    {% if form.fecha.errors %}<small style="color:#dc2626;">{{ form.fecha.errors }}</small>{% endif %}
                 </div>
 
                 <div class="field-box">
                     <label>{{ form.dia_numero.label }}</label>
                     {{ form.dia_numero }}
+                    {% if form.dia_numero.errors %}<small style="color:#dc2626;">{{ form.dia_numero.errors }}</small>{% endif %}
                 </div>
             </div>
         </div>
@@ -194,118 +272,163 @@ textarea{
             <div class="field-box">
                 {{ form.actividades }}
                 {% if form.actividades.help_text %}
-                    <small style="color:#64748b;">{{ form.actividades.help_text }}</small>
+                    <small class="help-text">{{ form.actividades.help_text }}</small>
                 {% endif %}
+                {% if form.actividades.errors %}<small style="color:#dc2626;">{{ form.actividades.errors }}</small>{% endif %}
             </div>
         </div>
 
         <div class="form-section">
-            <h3>Clasificación operativa</h3>
+            <h3>Gastos operativos generales</h3>
 
-            <div class="grid-2">
-
-                <div class="toggle-option">
-                    {{ form.dia_trabajado_campo }}
-                    <label class="toggle-card" for="{{ form.dia_trabajado_campo.id_for_label }}">
-                        <strong>Día trabajado en campo</strong>
-                        <small>Aplica bono de campo según líder/apoyo.</small>
-                    </label>
-                </div>
-
-                <div class="toggle-option">
-                    {{ form.salida_despues_mediodia }}
-                    <label class="toggle-card" for="{{ form.salida_despues_mediodia.id_for_label }}">
-                        <strong>Salida después del mediodía</strong>
-                        <small>Aplica movilización por técnico.</small>
-                    </label>
-                </div>
-
-                <div class="toggle-option">
-                    {{ form.regreso_despues_6pm }}
-                    <label class="toggle-card" for="{{ form.regreso_despues_6pm.id_for_label }}">
-                        <strong>Regreso después de las 6:00 pm</strong>
-                        <small>Movilización adicional por técnico.</small>
-                    </label>
-                </div>
-
-                <div class="toggle-option">
-                    {{ form.solo_viaje_traslado }}
-                    <label class="toggle-card" for="{{ form.solo_viaje_traslado.id_for_label }}">
-                        <strong>Solo viaje / traslado</strong>
-                        <small>No aplica bono campo.</small>
-                    </label>
-                </div>
-
-            </div>
-        </div>
-
-        <div class="form-section">
-            <h3>Gastos operativos</h3>
-
-            <div class="grid-4">
+            <div class="grid-3">
                 <div class="field-box">
                     <label>{{ form.personas.label }}</label>
                     {{ form.personas }}
+                    {% if form.personas.help_text %}
+                        <small class="help-text">{{ form.personas.help_text }}</small>
+                    {% endif %}
+                    {% if form.personas.errors %}<small style="color:#dc2626;">{{ form.personas.errors }}</small>{% endif %}
                 </div>
 
                 <div class="field-box">
                     <label>{{ form.transporte.label }}</label>
                     {{ form.transporte }}
-                </div>
-
-                <div class="field-box">
-                    <label>{{ form.alojamiento.label }}</label>
-                    {{ form.alojamiento }}
-                </div>
-
-                <div class="field-box">
-                    <label>{{ form.tarifa_alimentacion.label }}</label>
-                    {{ form.tarifa_alimentacion }}
-                </div>
-            </div>
-
-            <div class="grid-3" style="margin-top:14px;">
-                <div class="field-box">
-                    <label>{{ form.hidratacion_por_persona.label }}</label>
-                    {{ form.hidratacion_por_persona }}
+                    {% if form.transporte.help_text %}
+                        <small class="help-text">{{ form.transporte.help_text }}</small>
+                    {% endif %}
+                    {% if form.transporte.errors %}<small style="color:#dc2626;">{{ form.transporte.errors }}</small>{% endif %}
                 </div>
 
                 <div class="field-box">
                     <label>{{ form.gastos_adicionales.label }}</label>
                     {{ form.gastos_adicionales }}
+                    {% if form.gastos_adicionales.help_text %}
+                        <small class="help-text">{{ form.gastos_adicionales.help_text }}</small>
+                    {% endif %}
+                    {% if form.gastos_adicionales.errors %}<small style="color:#dc2626;">{{ form.gastos_adicionales.errors }}</small>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top:14px;">
+                <div class="field-box">
+                    <label>{{ form.comprado_por.label }}</label>
+                    {{ form.comprado_por }}
+                    {% if form.comprado_por.help_text %}
+                        <small class="help-text">{{ form.comprado_por.help_text }}</small>
+                    {% endif %}
+                    {% if form.comprado_por.errors %}<small style="color:#dc2626;">{{ form.comprado_por.errors }}</small>{% endif %}
+                </div>
+
+                <div class="field-box">
+                    <label>{{ form.aprobado_por.label }}</label>
+                    {{ form.aprobado_por }}
+                    {% if form.aprobado_por.help_text %}
+                        <small class="help-text">{{ form.aprobado_por.help_text }}</small>
+                    {% endif %}
+                    {% if form.aprobado_por.errors %}<small style="color:#dc2626;">{{ form.aprobado_por.errors }}</small>{% endif %}
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h3>Vuelos</h3>
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                <h3 style="margin:0;">Relación de gastos por persona</h3>
+                <span class="badge-info">La cantidad de personas habilita las filas</span>
+            </div>
 
-            <div class="grid-4">
+            <div class="campo-help" style="margin-bottom:12px;">
+                La clasificación operativa ahora queda por persona. Para bonos:
+                <strong>Día trabajado</strong> aplica bono de campo;
+                <strong>Regreso después de 6 pm</strong> aplica bono de campo + movilización;
+                <strong>Salida después del mediodía</strong> y <strong>Solo viaje</strong> aplican solo movilización.
+            </div>
 
-                <div class="toggle-option">
-                    {{ form.vuelo_ida_aplica }}
-                    <label class="toggle-card" for="{{ form.vuelo_ida_aplica.id_for_label }}">
-                        <strong>Vuelo ida</strong>
-                    </label>
-                </div>
+            <div class="person-table-wrap">
+                <table class="person-table" id="person-table">
+                    <thead>
+                        <tr>
+                            <th style="width:180px;">Persona</th>
+                            <th style="width:220px;">Clasificación operativa</th>
+                            <th>Alojamiento</th>
+                            <th>Alimentación</th>
+                            <th>Lavandería</th>
+                            <th>Transporte personal</th>
+                            <th style="width:70px;">Vuelo ida</th>
+                            <th>Valor ida</th>
+                            <th style="width:90px;">Vuelo regreso</th>
+                            <th>Valor regreso</th>
+                            <th>Observación</th>
+                            <th>Total</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="person-body">
+                        {% for item in detalle_personas %}
+                        <tr class="person-row">
+                            <td>
+                                <input type="text" name="persona[]" value="{{ item.persona }}" placeholder="Nombre técnico" required>
+                            </td>
 
-                <div class="field-box">
-                    <label>{{ form.vuelo_ida_valor.label }}</label>
-                    {{ form.vuelo_ida_valor }}
-                </div>
+                            <td>
+                                <select name="clasificacion[]">
+                                    {% for value, label in clasificacion_choices %}
+                                        <option value="{{ value }}" {% if item.clasificacion == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
 
-                <div class="toggle-option">
-                    {{ form.vuelo_regreso_aplica }}
-                    <label class="toggle-card" for="{{ form.vuelo_regreso_aplica.id_for_label }}">
-                        <strong>Vuelo regreso</strong>
-                    </label>
-                </div>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="alojamiento_persona[]" value="{{ item.alojamiento|default:0 }}">
+                            </td>
 
-                <div class="field-box">
-                    <label>{{ form.vuelo_regreso_valor.label }}</label>
-                    {{ form.vuelo_regreso_valor }}
-                </div>
+                            <td>
+                                <input type="number" step="0.01" min="0" name="alimentacion_persona[]" value="{{ item.alimentacion|default:0 }}">
+                            </td>
 
+                            <td>
+                                <input type="number" step="0.01" min="0" name="lavanderia_persona[]" value="{{ item.lavanderia|default:0 }}">
+                            </td>
+
+                            <td>
+                                <input type="number" step="0.01" min="0" name="transporte_personal[]" value="{{ item.transporte_personal|default:0 }}">
+                            </td>
+
+                            <td class="check-cell">
+                                <input type="hidden" name="vuelo_ida_aplica[]" value="0">
+                                <input type="checkbox" class="check-vuelo" data-hidden-name="vuelo_ida_aplica[]" {% if item.vuelo_ida_aplica %}checked{% endif %}>
+                            </td>
+
+                            <td>
+                                <input type="number" step="0.01" min="0" name="vuelo_ida_valor[]" value="{{ item.vuelo_ida_valor|default:0 }}">
+                            </td>
+
+                            <td class="check-cell">
+                                <input type="hidden" name="vuelo_regreso_aplica[]" value="0">
+                                <input type="checkbox" class="check-vuelo" data-hidden-name="vuelo_regreso_aplica[]" {% if item.vuelo_regreso_aplica %}checked{% endif %}>
+                            </td>
+
+                            <td>
+                                <input type="number" step="0.01" min="0" name="vuelo_regreso_valor[]" value="{{ item.vuelo_regreso_valor|default:0 }}">
+                            </td>
+
+                            <td>
+                                <input type="text" name="observacion_persona[]" value="{{ item.observaciones }}" placeholder="Opcional">
+                            </td>
+
+                            <td class="person-total">$ 0</td>
+
+                            <td>
+                                <button type="button" class="btn-mini btn-danger-mini remove-row">Quitar</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top:12px;">
+                <button type="button" class="btn-mini" id="add-row">+ Agregar persona</button>
             </div>
         </div>
 
@@ -314,6 +437,7 @@ textarea{
 
             <div class="field-box">
                 {{ form.observaciones }}
+                {% if form.observaciones.errors %}<small style="color:#dc2626;">{{ form.observaciones.errors }}</small>{% endif %}
             </div>
         </div>
 
@@ -333,8 +457,11 @@ textarea{
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
-    function getNumber(name) {
-        const input = document.querySelector(`[name="${name}"]`);
+    const personBody = document.getElementById("person-body");
+    const personTable = document.getElementById("person-table");
+    const personasInput = document.getElementById("id_personas");
+
+    function getNumberFromElement(input) {
         if (!input) return 0;
 
         const raw = String(input.value || "0").replace(",", ".");
@@ -343,37 +470,66 @@ document.addEventListener("DOMContentLoaded", function () {
         return isNaN(value) ? 0 : value;
     }
 
-    function getChecked(name) {
+    function getNumber(name) {
         const input = document.querySelector(`[name="${name}"]`);
-        return input ? input.checked : false;
+        return getNumberFromElement(input);
     }
 
     function formatMoney(value) {
         return new Intl.NumberFormat("es-CO", {
             maximumFractionDigits: 0
-        }).format(value);
+        }).format(value || 0);
     }
 
-    function calcularTotal() {
-        const personas = getNumber("personas");
+    function syncCheckboxHidden(row) {
+        row.querySelectorAll(".check-vuelo").forEach(function(check) {
+            const hidden = check.previousElementSibling;
+            if (hidden && hidden.type === "hidden") {
+                hidden.value = check.checked ? "1" : "0";
+            }
+        });
+    }
 
-        const transporte = getNumber("transporte");
-        const alojamiento = getNumber("alojamiento") * personas;
-        const alimentacion = getNumber("tarifa_alimentacion") * personas;
-        const hidratacion = getNumber("hidratacion_por_persona") * personas;
-        const adicionales = getNumber("gastos_adicionales");
+    function calcularFila(row) {
+        const alojamiento = getNumberFromElement(row.querySelector('[name="alojamiento_persona[]"]'));
+        const alimentacion = getNumberFromElement(row.querySelector('[name="alimentacion_persona[]"]'));
+        const lavanderia = getNumberFromElement(row.querySelector('[name="lavanderia_persona[]"]'));
+        const transportePersonal = getNumberFromElement(row.querySelector('[name="transporte_personal[]"]'));
+
+        const vueloIdaCheck = row.querySelector('input[data-hidden-name="vuelo_ida_aplica[]"]');
+        const vueloRegresoCheck = row.querySelector('input[data-hidden-name="vuelo_regreso_aplica[]"]');
 
         let vuelos = 0;
 
-        if (getChecked("vuelo_ida_aplica")) {
-            vuelos += getNumber("vuelo_ida_valor");
+        if (vueloIdaCheck && vueloIdaCheck.checked) {
+            vuelos += getNumberFromElement(row.querySelector('[name="vuelo_ida_valor[]"]'));
         }
 
-        if (getChecked("vuelo_regreso_aplica")) {
-            vuelos += getNumber("vuelo_regreso_valor");
+        if (vueloRegresoCheck && vueloRegresoCheck.checked) {
+            vuelos += getNumberFromElement(row.querySelector('[name="vuelo_regreso_valor[]"]'));
         }
 
-        const total = transporte + alojamiento + alimentacion + hidratacion + adicionales + vuelos;
+        const total = alojamiento + alimentacion + lavanderia + transportePersonal + vuelos;
+
+        const totalCell = row.querySelector(".person-total");
+        if (totalCell) {
+            totalCell.innerText = "$ " + formatMoney(total);
+        }
+
+        return total;
+    }
+
+    function calcularTotal() {
+        let totalPersonas = 0;
+
+        document.querySelectorAll(".person-row").forEach(function(row) {
+            syncCheckboxHidden(row);
+            totalPersonas += calcularFila(row);
+        });
+
+        const transporteComunidad = getNumber("transporte");
+        const adicionales = getNumber("gastos_adicionales");
+        const total = transporteComunidad + adicionales + totalPersonas;
 
         const preview = document.getElementById("total-preview");
 
@@ -382,9 +538,134 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    function getRowTemplate() {
+        const firstRow = personBody.querySelector(".person-row");
+
+        if (firstRow) {
+            const clone = firstRow.cloneNode(true);
+
+            clone.querySelectorAll("input").forEach(function(input) {
+                if (input.type === "checkbox") {
+                    input.checked = false;
+                } else if (input.type === "hidden") {
+                    input.value = "0";
+                } else if (input.name === "persona[]") {
+                    input.value = "";
+                } else if (input.name === "observacion_persona[]") {
+                    input.value = "";
+                } else {
+                    input.value = "0";
+                }
+            });
+
+            clone.querySelectorAll("select").forEach(function(select) {
+                select.selectedIndex = 0;
+            });
+
+            const totalCell = clone.querySelector(".person-total");
+            if (totalCell) {
+                totalCell.innerText = "$ 0";
+            }
+
+            return clone;
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = "person-row";
+        tr.innerHTML = `
+            <td><input type="text" name="persona[]" value="" placeholder="Nombre técnico" required></td>
+            <td>
+                <select name="clasificacion[]">
+                    {% for value, label in clasificacion_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td><input type="number" step="0.01" min="0" name="alojamiento_persona[]" value="0"></td>
+            <td><input type="number" step="0.01" min="0" name="alimentacion_persona[]" value="0"></td>
+            <td><input type="number" step="0.01" min="0" name="lavanderia_persona[]" value="0"></td>
+            <td><input type="number" step="0.01" min="0" name="transporte_personal[]" value="0"></td>
+            <td class="check-cell">
+                <input type="hidden" name="vuelo_ida_aplica[]" value="0">
+                <input type="checkbox" class="check-vuelo" data-hidden-name="vuelo_ida_aplica[]">
+            </td>
+            <td><input type="number" step="0.01" min="0" name="vuelo_ida_valor[]" value="0"></td>
+            <td class="check-cell">
+                <input type="hidden" name="vuelo_regreso_aplica[]" value="0">
+                <input type="checkbox" class="check-vuelo" data-hidden-name="vuelo_regreso_aplica[]">
+            </td>
+            <td><input type="number" step="0.01" min="0" name="vuelo_regreso_valor[]" value="0"></td>
+            <td><input type="text" name="observacion_persona[]" value="" placeholder="Opcional"></td>
+            <td class="person-total">$ 0</td>
+            <td><button type="button" class="btn-mini btn-danger-mini remove-row">Quitar</button></td>
+        `;
+
+        return tr;
+    }
+
+    function ajustarFilasPorCantidad() {
+        const cantidad = Math.max(parseInt(personasInput.value || "1", 10), 1);
+        const actuales = personBody.querySelectorAll(".person-row").length;
+
+        if (cantidad > actuales) {
+            for (let i = actuales; i < cantidad; i++) {
+                personBody.appendChild(getRowTemplate());
+            }
+        }
+
+        if (cantidad < actuales) {
+            const rows = Array.from(personBody.querySelectorAll(".person-row"));
+            rows.slice(cantidad).forEach(function(row) {
+                row.remove();
+            });
+        }
+
+        calcularTotal();
+    }
+
+    function actualizarCantidadDesdeFilas() {
+        const rows = personBody.querySelectorAll(".person-row").length;
+        if (personasInput) {
+            personasInput.value = Math.max(rows, 1);
+        }
+    }
+
+    if (personasInput) {
+        personasInput.addEventListener("change", ajustarFilasPorCantidad);
+        personasInput.addEventListener("input", ajustarFilasPorCantidad);
+    }
+
+    document.getElementById("add-row").addEventListener("click", function() {
+        personBody.appendChild(getRowTemplate());
+        actualizarCantidadDesdeFilas();
+        calcularTotal();
+    });
+
+    personBody.addEventListener("click", function(event) {
+        if (event.target.classList.contains("remove-row")) {
+            const rows = personBody.querySelectorAll(".person-row");
+
+            if (rows.length <= 1) {
+                alert("Debe quedar al menos una persona.");
+                return;
+            }
+
+            event.target.closest(".person-row").remove();
+            actualizarCantidadDesdeFilas();
+            calcularTotal();
+        }
+    });
+
+    personTable.addEventListener("input", calcularTotal);
+    personTable.addEventListener("change", calcularTotal);
+
     document.querySelectorAll("input, textarea, select").forEach(function(el) {
         el.addEventListener("input", calcularTotal);
         el.addEventListener("change", calcularTotal);
+    });
+
+    document.getElementById("gasto-form").addEventListener("submit", function() {
+        document.querySelectorAll(".person-row").forEach(syncCheckboxHidden);
     });
 
     calcularTotal();
@@ -392,4 +673,3 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 {% endblock %}
-```
