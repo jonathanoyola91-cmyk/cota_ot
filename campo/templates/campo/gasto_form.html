@@ -177,6 +177,33 @@
     background:#fecaca;
 }
 
+.multi-classification{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    min-width:340px;
+}
+
+.multi-classification label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:#f8fafc;
+    border:1px solid #dbeafe;
+    border-radius:10px;
+    padding:7px 8px;
+    font-size:12px;
+    font-weight:800;
+    color:#0f172a;
+    white-space:nowrap;
+}
+
+.multi-classification input[type="checkbox"]{
+    width:16px;
+    height:16px;
+    accent-color:#2563eb;
+}
+
 .campo-total-preview{
     position:sticky;
     bottom:10px;
@@ -216,6 +243,11 @@ textarea{
 
     textarea{
         min-height:100px;
+    }
+
+    .multi-classification{
+        grid-template-columns:1fr;
+        min-width:260px;
     }
 
     .campo-total-preview{
@@ -338,10 +370,8 @@ textarea{
             </div>
 
             <div class="campo-help" style="margin-bottom:12px;">
-                La clasificación operativa ahora queda por persona. Para bonos:
-                <strong>Día trabajado</strong> aplica bono de campo;
-                <strong>Regreso después de 6 pm</strong> aplica bono de campo + movilización;
-                <strong>Salida después del mediodía</strong> y <strong>Solo viaje</strong> aplican solo movilización.
+                La clasificación operativa ahora queda por persona y permite selección múltiple. Ejemplo:
+                <strong>Día trabajado</strong> + <strong>Regreso después de 6 pm</strong> liquida bono de campo y movilización.
             </div>
 
             <div class="person-table-wrap">
@@ -349,7 +379,7 @@ textarea{
                     <thead>
                         <tr>
                             <th style="width:180px;">Persona</th>
-                            <th style="width:220px;">Clasificación operativa</th>
+                            <th style="min-width:360px;">Clasificación operativa</th>
                             <th>Alojamiento</th>
                             <th>Alimentación</th>
                             <th>Lavandería</th>
@@ -371,11 +401,12 @@ textarea{
                             </td>
 
                             <td>
-                                <select name="clasificacion[]">
-                                    {% for value, label in clasificacion_choices %}
-                                        <option value="{{ value }}" {% if item.clasificacion == value %}selected{% endif %}>{{ label }}</option>
-                                    {% endfor %}
-                                </select>
+                                <div class="multi-classification">
+                                    <label><input type="checkbox" class="cls-dia" name="dia_trabajado_campo_{{ forloop.counter0 }}" value="1" {% if item.dia_trabajado_campo %}checked{% endif %}> Día trabajado</label>
+                                    <label><input type="checkbox" class="cls-salida" name="salida_despues_mediodia_{{ forloop.counter0 }}" value="1" {% if item.salida_despues_mediodia %}checked{% endif %}> Salida mediodía</label>
+                                    <label><input type="checkbox" class="cls-regreso" name="regreso_despues_6pm_{{ forloop.counter0 }}" value="1" {% if item.regreso_despues_6pm %}checked{% endif %}> Regreso 6 pm</label>
+                                    <label><input type="checkbox" class="cls-solo" name="solo_viaje_traslado_{{ forloop.counter0 }}" value="1" {% if item.solo_viaje_traslado %}checked{% endif %}> Solo viaje</label>
+                                </div>
                             </td>
 
                             <td>
@@ -490,6 +521,36 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+
+    function reindexRows() {
+        document.querySelectorAll(".person-row").forEach(function(row, index) {
+            const dia = row.querySelector(".cls-dia");
+            const salida = row.querySelector(".cls-salida");
+            const regreso = row.querySelector(".cls-regreso");
+            const solo = row.querySelector(".cls-solo");
+
+            if (dia) dia.name = "dia_trabajado_campo_" + index;
+            if (salida) salida.name = "salida_despues_mediodia_" + index;
+            if (regreso) regreso.name = "regreso_despues_6pm_" + index;
+            if (solo) solo.name = "solo_viaje_traslado_" + index;
+        });
+    }
+
+    function aplicarReglaSoloViaje(row) {
+        const dia = row.querySelector(".cls-dia");
+        const salida = row.querySelector(".cls-salida");
+        const regreso = row.querySelector(".cls-regreso");
+        const solo = row.querySelector(".cls-solo");
+
+        if (!solo) return;
+
+        if (solo.checked) {
+            if (dia) dia.checked = false;
+            if (salida) salida.checked = false;
+            if (regreso) regreso.checked = false;
+        }
+    }
+
     function calcularFila(row) {
         const alojamiento = getNumberFromElement(row.querySelector('[name="alojamiento_persona[]"]'));
         const alimentacion = getNumberFromElement(row.querySelector('[name="alimentacion_persona[]"]'));
@@ -520,6 +581,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function calcularTotal() {
+        reindexRows();
         let totalPersonas = 0;
 
         document.querySelectorAll(".person-row").forEach(function(row) {
@@ -546,7 +608,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             clone.querySelectorAll("input").forEach(function(input) {
                 if (input.type === "checkbox") {
-                    input.checked = false;
+                    input.checked = input.classList.contains("cls-dia");
                 } else if (input.type === "hidden") {
                     input.value = "0";
                 } else if (input.name === "persona[]") {
@@ -556,10 +618,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 } else {
                     input.value = "0";
                 }
-            });
-
-            clone.querySelectorAll("select").forEach(function(select) {
-                select.selectedIndex = 0;
             });
 
             const totalCell = clone.querySelector(".person-total");
@@ -575,11 +633,12 @@ document.addEventListener("DOMContentLoaded", function () {
         tr.innerHTML = `
             <td><input type="text" name="persona[]" value="" placeholder="Nombre técnico" required></td>
             <td>
-                <select name="clasificacion[]">
-                    {% for value, label in clasificacion_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
-                </select>
+                <div class="multi-classification">
+                    <label><input type="checkbox" class="cls-dia" name="dia_trabajado_campo_0" value="1" checked> Día trabajado</label>
+                    <label><input type="checkbox" class="cls-salida" name="salida_despues_mediodia_0" value="1"> Salida mediodía</label>
+                    <label><input type="checkbox" class="cls-regreso" name="regreso_despues_6pm_0" value="1"> Regreso 6 pm</label>
+                    <label><input type="checkbox" class="cls-solo" name="solo_viaje_traslado_0" value="1"> Solo viaje</label>
+                </div>
             </td>
             <td><input type="number" step="0.01" min="0" name="alojamiento_persona[]" value="0"></td>
             <td><input type="number" step="0.01" min="0" name="alimentacion_persona[]" value="0"></td>
@@ -637,6 +696,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.getElementById("add-row").addEventListener("click", function() {
         personBody.appendChild(getRowTemplate());
+        reindexRows();
         actualizarCantidadDesdeFilas();
         calcularTotal();
     });
@@ -651,13 +711,24 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             event.target.closest(".person-row").remove();
+            reindexRows();
             actualizarCantidadDesdeFilas();
             calcularTotal();
         }
     });
 
     personTable.addEventListener("input", calcularTotal);
-    personTable.addEventListener("change", calcularTotal);
+    personTable.addEventListener("change", function(event) {
+        const row = event.target.closest(".person-row");
+        if (row && event.target.classList.contains("cls-solo")) {
+            aplicarReglaSoloViaje(row);
+        }
+        if (row && !event.target.classList.contains("cls-solo") && event.target.checked) {
+            const solo = row.querySelector(".cls-solo");
+            if (solo) solo.checked = false;
+        }
+        calcularTotal();
+    });
 
     document.querySelectorAll("input, textarea, select").forEach(function(el) {
         el.addEventListener("input", calcularTotal);
@@ -665,7 +736,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     document.getElementById("gasto-form").addEventListener("submit", function() {
-        document.querySelectorAll(".person-row").forEach(syncCheckboxHidden);
+        reindexRows();
+        document.querySelectorAll(".person-row").forEach(function(row) {
+            aplicarReglaSoloViaje(row);
+            syncCheckboxHidden(row);
+        });
     });
 
     calcularTotal();

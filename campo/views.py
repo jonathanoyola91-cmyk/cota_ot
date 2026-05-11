@@ -99,6 +99,33 @@ def _tecnicos_base(servicio, cantidad=None):
     return tecnicos[:cantidad]
 
 
+def _clasificacion_desde_flags(dia_trabajado, salida_tarde, regreso_tarde, solo_viaje):
+    if solo_viaje:
+        return FieldServicePersonExpense.Clasificacion.SOLO_VIAJE_TRASLADO
+    if dia_trabajado and regreso_tarde:
+        return FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM
+    if dia_trabajado:
+        return FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO
+    if regreso_tarde:
+        return FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM
+    if salida_tarde:
+        return FieldServicePersonExpense.Clasificacion.SALIDA_DESPUES_MEDIODIA
+    return FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO
+
+
+def _clasificacion_texto_item(item):
+    etiquetas = []
+    if item.get("dia_trabajado_campo"):
+        etiquetas.append("Día trabajado en campo")
+    if item.get("salida_despues_mediodia"):
+        etiquetas.append("Salida después del mediodía")
+    if item.get("regreso_despues_6pm"):
+        etiquetas.append("Regreso después de las 6:00 pm")
+    if item.get("solo_viaje_traslado"):
+        etiquetas.append("Solo viaje / traslado")
+    return " + ".join(etiquetas) if etiquetas else "Sin clasificación"
+
+
 def _detalle_personas_inicial(servicio, cantidad=None):
     detalle = []
 
@@ -106,6 +133,10 @@ def _detalle_personas_inicial(servicio, cantidad=None):
         detalle.append({
             "persona": tecnico,
             "clasificacion": FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO,
+            "dia_trabajado_campo": True,
+            "salida_despues_mediodia": False,
+            "regreso_despues_6pm": False,
+            "solo_viaje_traslado": False,
             "alojamiento": Decimal("0.00"),
             "alimentacion": Decimal("0.00"),
             "lavanderia": Decimal("0.00"),
@@ -127,6 +158,10 @@ def _detalle_personas_existente(gasto):
         detalle.append({
             "persona": linea.persona,
             "clasificacion": linea.clasificacion,
+            "dia_trabajado_campo": linea.dia_trabajado_campo,
+            "salida_despues_mediodia": linea.salida_despues_mediodia,
+            "regreso_despues_6pm": linea.regreso_despues_6pm,
+            "solo_viaje_traslado": linea.solo_viaje_traslado,
             "alojamiento": linea.alojamiento,
             "alimentacion": linea.alimentacion,
             "lavanderia": linea.lavanderia,
@@ -146,7 +181,6 @@ def _detalle_personas_existente(gasto):
 
 def _leer_detalle_personas_post(request):
     personas = request.POST.getlist("persona[]")
-    clasificaciones = request.POST.getlist("clasificacion[]")
     alojamientos = request.POST.getlist("alojamiento_persona[]")
     alimentaciones = request.POST.getlist("alimentacion_persona[]")
     lavanderias = request.POST.getlist("lavanderia_persona[]")
@@ -159,7 +193,6 @@ def _leer_detalle_personas_post(request):
 
     total = max(
         len(personas),
-        len(clasificaciones),
         len(alojamientos),
         len(alimentaciones),
         len(lavanderias),
@@ -177,19 +210,30 @@ def _leer_detalle_personas_post(request):
         if not persona:
             continue
 
-        clasificacion = (
-            clasificaciones[index]
-            if index < len(clasificaciones)
-            else FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO
-        )
+        dia_trabajado = _to_bool(request.POST.get(f"dia_trabajado_campo_{index}", False))
+        salida_tarde = _to_bool(request.POST.get(f"salida_despues_mediodia_{index}", False))
+        regreso_tarde = _to_bool(request.POST.get(f"regreso_despues_6pm_{index}", False))
+        solo_viaje = _to_bool(request.POST.get(f"solo_viaje_traslado_{index}", False))
 
-        opciones_validas = [opcion[0] for opcion in FieldServicePersonExpense.Clasificacion.choices]
-        if clasificacion not in opciones_validas:
-            clasificacion = FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO
+        if solo_viaje:
+            dia_trabajado = False
+            regreso_tarde = False
+            salida_tarde = False
+
+        clasificacion = _clasificacion_desde_flags(
+            dia_trabajado,
+            salida_tarde,
+            regreso_tarde,
+            solo_viaje,
+        )
 
         detalle.append({
             "persona": persona,
             "clasificacion": clasificacion,
+            "dia_trabajado_campo": dia_trabajado,
+            "salida_despues_mediodia": salida_tarde,
+            "regreso_despues_6pm": regreso_tarde,
+            "solo_viaje_traslado": solo_viaje,
             "alojamiento": _to_decimal(alojamientos[index] if index < len(alojamientos) else 0),
             "alimentacion": _to_decimal(alimentaciones[index] if index < len(alimentaciones) else 0),
             "lavanderia": _to_decimal(lavanderias[index] if index < len(lavanderias) else 0),
@@ -212,6 +256,10 @@ def _guardar_detalle_personas(gasto, detalle):
             gasto_diario=gasto,
             persona=item["persona"],
             clasificacion=item["clasificacion"],
+            dia_trabajado_campo=item["dia_trabajado_campo"],
+            salida_despues_mediodia=item["salida_despues_mediodia"],
+            regreso_despues_6pm=item["regreso_despues_6pm"],
+            solo_viaje_traslado=item["solo_viaje_traslado"],
             alojamiento=item["alojamiento"],
             alimentacion=item["alimentacion"],
             lavanderia=item["lavanderia"],
@@ -229,21 +277,14 @@ def _sincronizar_campos_legados_bonos(gasto, detalle):
     Mantiene los campos anteriores sincronizados para no romper pantallas/reportes
     que todavía miren los booleanos del gasto diario.
     """
-    clasificaciones = {item["clasificacion"] for item in detalle}
-
-    gasto.dia_trabajado_campo = bool(
-        FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO in clasificaciones
-        or FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM in clasificaciones
-    )
-    gasto.salida_despues_mediodia = bool(
-        FieldServicePersonExpense.Clasificacion.SALIDA_DESPUES_MEDIODIA in clasificaciones
-    )
-    gasto.regreso_despues_6pm = bool(
-        FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM in clasificaciones
-    )
+    gasto.dia_trabajado_campo = any(item["dia_trabajado_campo"] for item in detalle)
+    gasto.salida_despues_mediodia = any(item["salida_despues_mediodia"] for item in detalle)
+    gasto.regreso_despues_6pm = any(item["regreso_despues_6pm"] for item in detalle)
     gasto.solo_viaje_traslado = bool(
-        FieldServicePersonExpense.Clasificacion.SOLO_VIAJE_TRASLADO in clasificaciones
+        detalle
+        and all(item["solo_viaje_traslado"] for item in detalle)
         and not gasto.dia_trabajado_campo
+        and not gasto.regreso_despues_6pm
     )
 
     gasto.personas = max(len(detalle), 1)
@@ -258,11 +299,8 @@ def _sincronizar_campos_legados_bonos(gasto, detalle):
     ])
 
 
-def _bono_campo_persona(servicio, persona, clasificacion):
-    if clasificacion not in [
-        FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO,
-        FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM,
-    ]:
+def _bono_campo_persona(servicio, persona, dia_trabajado_campo):
+    if not dia_trabajado_campo:
         return Decimal("0.00")
 
     if persona == servicio.especialista_lider:
@@ -274,12 +312,8 @@ def _bono_campo_persona(servicio, persona, clasificacion):
     return Decimal("0.00")
 
 
-def _bono_movilizacion_persona(clasificacion):
-    if clasificacion in [
-        FieldServicePersonExpense.Clasificacion.SALIDA_DESPUES_MEDIODIA,
-        FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM,
-        FieldServicePersonExpense.Clasificacion.SOLO_VIAJE_TRASLADO,
-    ]:
+def _bono_movilizacion_persona(salida_despues_mediodia, regreso_despues_6pm, solo_viaje_traslado):
+    if salida_despues_mediodia or regreso_despues_6pm or solo_viaje_traslado:
         return BONO_MOVILIZACION_PERSONA
 
     return Decimal("0.00")
@@ -333,8 +367,8 @@ def reporte_bonos_empleado(request):
                 elif es_apoyo:
                     rol = "Especialista apoyo"
 
-                bono_campo = _bono_campo_persona(servicio, tecnico, linea.clasificacion)
-                bono_movilizacion = _bono_movilizacion_persona(linea.clasificacion)
+                bono_campo = _bono_campo_persona(servicio, tecnico, linea.dia_trabajado_campo)
+                bono_movilizacion = _bono_movilizacion_persona(linea.salida_despues_mediodia, linea.regreso_despues_6pm, linea.solo_viaje_traslado)
 
                 if bono_campo > 0:
                     if es_lider:
@@ -357,7 +391,7 @@ def reporte_bonos_empleado(request):
                     "nombre": paw.nombre_paw,
                     "campo": paw.campo,
                     "rol": rol,
-                    "clasificacion": linea.get_clasificacion_display(),
+                    "clasificacion": linea.clasificacion_texto,
                     "bono_campo": bono_campo,
                     "bono_movilizacion": bono_movilizacion,
                     "total_dia": total_dia,
@@ -540,7 +574,6 @@ def crear_gasto_diario(request, servicio_id):
         "servicio": servicio,
         "modo": "crear",
         "detalle_personas": detalle_personas,
-        "clasificacion_choices": FieldServicePersonExpense.Clasificacion.choices,
     })
 
 
@@ -589,7 +622,6 @@ def editar_gasto_diario(request, gasto_id):
         "gasto": gasto,
         "modo": "editar",
         "detalle_personas": detalle_personas,
-        "clasificacion_choices": FieldServicePersonExpense.Clasificacion.choices,
     })
 
 
@@ -718,14 +750,14 @@ def reporte_bonos(request):
                 if not tecnico:
                     continue
 
-                bono_campo = _bono_campo_persona(servicio, tecnico, linea.clasificacion)
-                bono_movilizacion = _bono_movilizacion_persona(linea.clasificacion)
+                bono_campo = _bono_campo_persona(servicio, tecnico, linea.dia_trabajado_campo)
+                bono_movilizacion = _bono_movilizacion_persona(linea.salida_despues_mediodia, linea.regreso_despues_6pm, linea.solo_viaje_traslado)
 
                 if bono_campo <= 0 and bono_movilizacion <= 0:
                     continue
 
                 rol = "Técnico"
-                concepto = linea.get_clasificacion_display()
+                concepto = linea.clasificacion_texto
 
                 if tecnico == servicio.especialista_lider:
                     rol = "Especialista líder"

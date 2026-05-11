@@ -250,12 +250,7 @@ class FieldServiceDailyExpense(models.Model):
     @property
     def aplica_bono_campo(self):
         if self._tiene_detalle_personas():
-            return self.detalle_personas.filter(
-                clasificacion__in=[
-                    FieldServicePersonExpense.Clasificacion.DIA_TRABAJADO_CAMPO,
-                    FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM,
-                ]
-            ).exists()
+            return self.detalle_personas.filter(dia_trabajado_campo=True).exists()
 
         if self.solo_viaje_traslado:
             return False
@@ -267,11 +262,9 @@ class FieldServiceDailyExpense(models.Model):
     def aplica_bono_movilizacion(self):
         if self._tiene_detalle_personas():
             return self.detalle_personas.filter(
-                clasificacion__in=[
-                    FieldServicePersonExpense.Clasificacion.SALIDA_DESPUES_MEDIODIA,
-                    FieldServicePersonExpense.Clasificacion.REGRESO_DESPUES_6PM,
-                    FieldServicePersonExpense.Clasificacion.SOLO_VIAJE_TRASLADO,
-                ]
+                models.Q(salida_despues_mediodia=True)
+                | models.Q(regreso_despues_6pm=True)
+                | models.Q(solo_viaje_traslado=True)
             ).exists()
 
         return bool(
@@ -453,12 +446,20 @@ class FieldServicePersonExpense(models.Model):
     )
 
     persona = models.CharField("Persona / técnico", max_length=120)
+
+    # Campo legado: se conserva porque la migración 0007 lo creó.
+    # En el formulario nuevo se usan casillas múltiples.
     clasificacion = models.CharField(
         "Clasificación operativa",
         max_length=40,
         choices=Clasificacion.choices,
         default=Clasificacion.DIA_TRABAJADO_CAMPO,
     )
+
+    dia_trabajado_campo = models.BooleanField("Día trabajado en campo", default=True)
+    salida_despues_mediodia = models.BooleanField("Salida después del mediodía", default=False)
+    regreso_despues_6pm = models.BooleanField("Regreso después de las 6:00 pm", default=False)
+    solo_viaje_traslado = models.BooleanField("Solo viaje / traslado", default=False)
 
     alojamiento = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     alimentacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -487,6 +488,48 @@ class FieldServicePersonExpense(models.Model):
         verbose_name = "Gasto por persona de campo"
         verbose_name_plural = "Gastos por persona de campo"
 
+    def save(self, *args, **kwargs):
+        # Evita combinaciones inválidas.
+        if self.solo_viaje_traslado:
+            self.dia_trabajado_campo = False
+            self.regreso_despues_6pm = False
+            # Solo viaje siempre implica movilización.
+            self.salida_despues_mediodia = False
+
+        self.clasificacion = self.clasificacion_principal
+        super().save(*args, **kwargs)
+
+    @property
+    def clasificacion_principal(self):
+        """
+        Mantiene un valor principal para compatibilidad con registros/reportes anteriores.
+        La lógica nueva usa los booleanos múltiples.
+        """
+        if self.solo_viaje_traslado:
+            return self.Clasificacion.SOLO_VIAJE_TRASLADO
+        if self.dia_trabajado_campo and self.regreso_despues_6pm:
+            return self.Clasificacion.REGRESO_DESPUES_6PM
+        if self.dia_trabajado_campo:
+            return self.Clasificacion.DIA_TRABAJADO_CAMPO
+        if self.regreso_despues_6pm:
+            return self.Clasificacion.REGRESO_DESPUES_6PM
+        if self.salida_despues_mediodia:
+            return self.Clasificacion.SALIDA_DESPUES_MEDIODIA
+        return self.Clasificacion.DIA_TRABAJADO_CAMPO
+
+    @property
+    def clasificacion_texto(self):
+        etiquetas = []
+        if self.dia_trabajado_campo:
+            etiquetas.append("Día trabajado en campo")
+        if self.salida_despues_mediodia:
+            etiquetas.append("Salida después del mediodía")
+        if self.regreso_despues_6pm:
+            etiquetas.append("Regreso después de las 6:00 pm")
+        if self.solo_viaje_traslado:
+            etiquetas.append("Solo viaje / traslado")
+        return " + ".join(etiquetas) if etiquetas else "Sin clasificación"
+
     @property
     def es_lider(self):
         if not self.gasto_diario_id:
@@ -501,18 +544,15 @@ class FieldServicePersonExpense(models.Model):
 
     @property
     def aplica_bono_campo(self):
-        return self.clasificacion in [
-            self.Clasificacion.DIA_TRABAJADO_CAMPO,
-            self.Clasificacion.REGRESO_DESPUES_6PM,
-        ]
+        return bool(self.dia_trabajado_campo)
 
     @property
     def aplica_bono_movilizacion(self):
-        return self.clasificacion in [
-            self.Clasificacion.SALIDA_DESPUES_MEDIODIA,
-            self.Clasificacion.REGRESO_DESPUES_6PM,
-            self.Clasificacion.SOLO_VIAJE_TRASLADO,
-        ]
+        return bool(
+            self.salida_despues_mediodia
+            or self.regreso_despues_6pm
+            or self.solo_viaje_traslado
+        )
 
     @property
     def bono_campo(self):
@@ -558,3 +598,4 @@ class FieldServicePersonExpense(models.Model):
 
     def __str__(self):
         return f"{self.persona} - Día {self.gasto_diario.dia_numero}"
+
