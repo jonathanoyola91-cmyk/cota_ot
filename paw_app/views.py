@@ -10,13 +10,20 @@ from quotes.models import Quotation
 
 
 def obtener_siguiente_numero_paw():
-    ultimo_numero = Paw.objects.aggregate(max_numero=Max("numero_paw"))["max_numero"] or 0
-    siguiente = ultimo_numero + 1
+    ultimo = Paw.objects.exclude(numero_paw__isnull=True).order_by("-id").first()
 
-    while Paw.objects.filter(numero_paw=siguiente).exists():
+    if not ultimo or not ultimo.numero_paw:
+        siguiente = 1
+    else:
+        try:
+            siguiente = int(ultimo.numero_paw) + 1
+        except (TypeError, ValueError):
+            siguiente = 1
+
+    while Paw.objects.filter(numero_paw=str(siguiente)).exists():
         siguiente += 1
 
-    return siguiente
+    return str(siguiente)
 
 
 @login_required
