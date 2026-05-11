@@ -320,7 +320,7 @@ def purchase_request_pdf(request, pk: int):
         cell_style.fontSize = 8
         cell_style.leading = 9
 
-        for ln in pr.lineas.all():
+        for ln in pr.lineas.filter(cantidad_requerida__gt=0):
             a = Decimal(ln.cantidad_a_comprar or 0)
             p = Decimal(ln.precio_unitario or 0)
             subtotal = a * p
@@ -414,7 +414,7 @@ def purchase_request_excel(request, pk: int):
 
     total = Decimal("0")
 
-    for ln in pr.lineas.all():
+    for ln in pr.lineas.filter(cantidad_requerida__gt=0):
         a = Decimal(ln.cantidad_a_comprar or 0)
         p = Decimal(ln.precio_unitario or 0)
         subtotal = a * p

@@ -26,8 +26,12 @@ def inventario_dashboard(request):
     )
 
     for r in recepciones:
-        total = r.lineas.count()
-        listas = r.lineas.filter(cantidad_recibida__gte=F("cantidad_esperada")).count()
+        total = r.lineas.filter(cantidad_esperada__gt=0).count()
+
+        listas = r.lineas.filter(
+            cantidad_esperada__gt=0,
+            cantidad_recibida__gte=F("cantidad_esperada")
+        ).count()
 
         r.total_lineas = total
         r.lineas_listas = listas
@@ -49,9 +53,21 @@ def inventario_dashboard(request):
         "entregas": entregas,
         "total_recepciones": recepciones.count(),
         "total_entregas": entregas.count(),
-        "lineas_pendientes": InventoryReceptionLine.objects.filter(estado="PENDIENTE").count(),
-        "lineas_parciales": InventoryReceptionLine.objects.filter(estado="PARCIAL").count(),
-        "lineas_listas": InventoryReceptionLine.objects.filter(estado="LISTO").count(),
+
+        "lineas_pendientes": InventoryReceptionLine.objects.filter(
+            cantidad_esperada__gt=0,
+            estado="PENDIENTE"
+        ).count(),
+
+        "lineas_parciales": InventoryReceptionLine.objects.filter(
+            cantidad_esperada__gt=0,
+            estado="PARCIAL"
+        ).count(),
+
+        "lineas_listas": InventoryReceptionLine.objects.filter(
+            cantidad_esperada__gt=0,
+            estado="LISTO"
+        ).count(),
     })
 
 
@@ -64,8 +80,12 @@ def recepcion_detail(request, pk):
         pk=pk
     )
 
-    # Corrige recepciones antiguas que fueron creadas sin código/descripcion/unidad.
-    for linea in recepcion.lineas.all():
+    # Elimina líneas en 0 heredadas del BOM
+    recepcion.lineas.filter(cantidad_esperada__lte=0).delete()
+
+    # Corrige líneas antiguas
+    for linea in recepcion.lineas.filter(cantidad_esperada__gt=0):
+
         if linea.purchase_line:
             actualizado = False
 
@@ -82,19 +102,32 @@ def recepcion_detail(request, pk):
                 actualizado = True
 
             if actualizado:
-                linea.save(update_fields=["codigo", "descripcion", "unidad"])
+                linea.save(update_fields=[
+                    "codigo",
+                    "descripcion",
+                    "unidad"
+                ])
 
     if request.method == "POST":
-        for linea in recepcion.lineas.all():
-            raw = request.POST.get(f"cantidad_recibida_{linea.id}") or "0"
+
+        for linea in recepcion.lineas.filter(cantidad_esperada__gt=0):
+
+            raw = request.POST.get(
+                f"cantidad_recibida_{linea.id}"
+            ) or "0"
 
             try:
                 cantidad = Decimal(raw.replace(",", "."))
             except Exception:
                 cantidad = Decimal("0")
 
-            fecha = request.POST.get(f"fecha_llegada_{linea.id}") or None
-            observacion = request.POST.get(f"observacion_{linea.id}") or ""
+            fecha = request.POST.get(
+                f"fecha_llegada_{linea.id}"
+            ) or None
+
+            observacion = request.POST.get(
+                f"observacion_{linea.id}"
+            ) or ""
 
             linea.cantidad_recibida = cantidad
             linea.fecha_llegada = fecha
@@ -111,24 +144,43 @@ def recepcion_detail(request, pk):
 
             linea.save()
 
-        total = recepcion.lineas.count()
-        listas = recepcion.lineas.filter(estado="LISTO").count()
-        parciales = recepcion.lineas.filter(estado="PARCIAL").count()
+        total = recepcion.lineas.filter(
+            cantidad_esperada__gt=0
+        ).count()
+
+        listas = recepcion.lineas.filter(
+            cantidad_esperada__gt=0,
+            estado="LISTO"
+        ).count()
+
+        parciales = recepcion.lineas.filter(
+            cantidad_esperada__gt=0,
+            estado="PARCIAL"
+        ).count()
 
         try:
             paw = recepcion.purchase_request.bom.workorder.paw
 
             if total > 0 and listas == total:
                 paw.estado_operativo = "MATERIAL_RECIBIDO"
+
             elif listas > 0 or parciales > 0:
                 paw.estado_operativo = "MATERIAL_PARCIAL"
 
             paw.save(update_fields=["estado_operativo"])
+
         except Exception:
             pass
 
-        messages.success(request, "Recepción de inventario actualizada correctamente.")
-        return redirect("inventario:recepcion_detail", pk=recepcion.pk)
+        messages.success(
+            request,
+            "Recepción de inventario actualizada correctamente."
+        )
+
+        return redirect(
+            "inventario:recepcion_detail",
+            pk=recepcion.pk
+        )
 
     return render(request, "inventario/recepcion_detail.html", {
         "recepcion": recepcion
@@ -137,6 +189,7 @@ def recepcion_detail(request, pk):
 
 @login_required
 def entrega_taller_detail(request, pk):
+
     entrega = get_object_or_404(
         WorkshopDelivery.objects
         .select_related("purchase_request", "creado_por")
@@ -144,10 +197,18 @@ def entrega_taller_detail(request, pk):
         pk=pk
     )
 
+    # Limpia líneas en 0 heredadas
+    entrega.lineas.filter(cantidad_requerida__lte=0).delete()
+
     if request.method == "POST":
 
-        for linea in entrega.lineas.all():
-            raw = request.POST.get(f"cantidad_entregada_{linea.id}") or "0"
+        for linea in entrega.lineas.filter(
+            cantidad_requerida__gt=0
+        ):
+
+            raw = request.POST.get(
+                f"cantidad_entregada_{linea.id}"
+            ) or "0"
 
             try:
                 cantidad = Decimal(raw.replace(",", "."))
@@ -156,29 +217,46 @@ def entrega_taller_detail(request, pk):
 
             linea.cantidad_entregada = cantidad
 
-            requerida = Decimal(linea.cantidad_requerida or 0)
+            requerida = Decimal(
+                linea.cantidad_requerida or 0
+            )
 
             if cantidad <= 0:
                 linea.estado = "PENDIENTE"
+
             elif cantidad < requerida:
                 linea.estado = "PARCIAL"
+
             else:
                 linea.estado = "ENTREGADO"
 
             linea.save()
 
-        entrega.comentarios = request.POST.get("comentarios", "")
+        entrega.comentarios = request.POST.get(
+            "comentarios",
+            ""
+        )
+
         entrega.save(update_fields=["comentarios"])
 
-        messages.success(request, "Entrega a taller actualizada correctamente.")
-        return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+        messages.success(
+            request,
+            "Entrega a taller actualizada correctamente."
+        )
+
+        return redirect(
+            "inventario:entrega_taller_detail",
+            pk=entrega.pk
+        )
 
     return render(request, "inventario/entrega_taller_detail.html", {
         "entrega": entrega
     })
 
+
 @login_required
 def entrega_taller_pdf(request, pk):
+
     entrega = get_object_or_404(
         WorkshopDelivery.objects
         .select_related("purchase_request")
@@ -200,17 +278,24 @@ def entrega_taller_pdf(request, pk):
     styles = getSampleStyleSheet()
     story = []
 
-    story.append(Paragraph("<b>ENTREGA TALLER</b>", styles["Title"]))
+    story.append(
+        Paragraph("<b>ENTREGA TALLER</b>", styles["Title"])
+    )
+
     story.append(Spacer(1, 8))
 
     story.append(Paragraph(
-        f"<b>Paw #:</b> {entrega.purchase_request.paw_numero} "
-        f"&nbsp;&nbsp;&nbsp; <b>Nombre PAW:</b> {entrega.purchase_request.paw_nombre}",
+        f"<b>Paw #:</b> "
+        f"{entrega.purchase_request.paw_numero} "
+        f"&nbsp;&nbsp;&nbsp; "
+        f"<b>Nombre PAW:</b> "
+        f"{entrega.purchase_request.paw_nombre}",
         styles["Normal"]
     ))
 
     story.append(Paragraph(
-        f"<b>Fecha impresión:</b> {timezone.now().date()}",
+        f"<b>Fecha impresión:</b> "
+        f"{timezone.now().date()}",
         styles["Normal"]
     ))
 
@@ -224,12 +309,23 @@ def entrega_taller_pdf(request, pk):
         "CANT. ENT",
     ]]
 
-    for linea in entrega.lineas.all():
+    # SOLO líneas > 0
+    for linea in entrega.lineas.filter(
+        cantidad_requerida__gt=0
+    ):
+
         data.append([
             linea.codigo or "",
-            Paragraph(linea.descripcion or "", styles["Normal"]),
+
+            Paragraph(
+                linea.descripcion or "",
+                styles["Normal"]
+            ),
+
             linea.unidad or "",
+
             f"{Decimal(linea.cantidad_requerida or 0):.0f}",
+
             f"{Decimal(linea.cantidad_entregada or 0):.0f}",
         ])
 
@@ -250,16 +346,32 @@ def entrega_taller_pdf(request, pk):
     story.append(table)
 
     story.append(Spacer(1, 18))
-    story.append(Paragraph("<b>Comentarios</b>", styles["Heading3"]))
-    story.append(Paragraph(entrega.comentarios or " ", styles["Normal"]))
+
+    story.append(
+        Paragraph("<b>Comentarios</b>", styles["Heading3"])
+    )
+
+    story.append(
+        Paragraph(entrega.comentarios or " ", styles["Normal"])
+    )
 
     story.append(Spacer(1, 36))
-    story.append(Paragraph("<b>Firmas</b>", styles["Heading3"]))
+
+    story.append(
+        Paragraph("<b>Firmas</b>", styles["Heading3"])
+    )
+
     story.append(Spacer(1, 32))
 
     firmas = Table([
-        ["__________________________", "__________________________"],
-        ["Firma entrega", "Firma recibe (Taller)"],
+        [
+            "__________________________",
+            "__________________________"
+        ],
+        [
+            "Firma entrega",
+            "Firma recibe (Taller)"
+        ],
         ["", ""],
         ["Fecha", "Fecha"],
     ], colWidths=[250, 250])
@@ -270,11 +382,19 @@ def entrega_taller_pdf(request, pk):
     ]))
 
     story.append(firmas)
+
     doc.build(story)
 
     buffer.seek(0)
-    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-    response["Content-Disposition"] = (
-        f'inline; filename="ENTREGA_TALLER_{entrega.purchase_request.paw_numero}.pdf"'
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/pdf"
     )
+
+    response["Content-Disposition"] = (
+        f'inline; filename="ENTREGA_TALLER_'
+        f'{entrega.purchase_request.paw_numero}.pdf"'
+    )
+
     return response
