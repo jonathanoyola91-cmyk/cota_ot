@@ -1,10 +1,22 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import IntegrityError, transaction
+from django.db.models import Max
 
 from core.roles import tiene_rol
 from .models import Paw
 from quotes.models import Quotation
+
+
+def obtener_siguiente_numero_paw():
+    ultimo_numero = Paw.objects.aggregate(max_numero=Max("numero_paw"))["max_numero"] or 0
+    siguiente = ultimo_numero + 1
+
+    while Paw.objects.filter(numero_paw=siguiente).exists():
+        siguiente += 1
+
+    return siguiente
 
 
 @login_required
@@ -32,6 +44,7 @@ def cambiar_tipo_operacion(request, paw_id):
         return redirect("paw_detail", paw_id=paw.id)
 
     return redirect("paw_detail", paw_id=paw.id)
+
 
 @login_required
 def paw_list(request):
@@ -65,8 +78,8 @@ def crear_paw(request, cotizacion_id):
         return redirect("/paw/")
 
     cotizacion = get_object_or_404(Quotation, id=cotizacion_id)
-    paw_existente = Paw.objects.filter(cotizacion=cotizacion).first()
 
+    paw_existente = Paw.objects.filter(cotizacion=cotizacion).first()
     if paw_existente:
         messages.warning(request, "Esta cotización ya tiene un PAW generado.")
         return redirect("paw_detail", paw_id=paw_existente.id)
@@ -78,13 +91,25 @@ def crear_paw(request, cotizacion_id):
         if tipo_operacion not in tipos_validos:
             tipo_operacion = Paw.TipoOperacion.ENSAMBLE
 
-        paw = Paw.objects.create(
-            cotizacion=cotizacion,
-            creado_por=request.user,
-            tipo_operacion=tipo_operacion,
-        )
+        try:
+            with transaction.atomic():
+                numero_paw = obtener_siguiente_numero_paw()
 
-        messages.success(request, "PAW creado correctamente.")
+                paw = Paw.objects.create(
+                    numero_paw=numero_paw,
+                    cotizacion=cotizacion,
+                    creado_por=request.user,
+                    tipo_operacion=tipo_operacion,
+                )
+
+        except IntegrityError:
+            messages.error(
+                request,
+                "No se pudo generar el PAW porque el consecutivo ya existía. Intente nuevamente.",
+            )
+            return redirect("crear_paw", cotizacion_id=cotizacion.id)
+
+        messages.success(request, f"PAW {paw.numero_paw} creado correctamente.")
         return redirect("paw_detail", paw_id=paw.id)
 
     return render(request, "paw_app/crear_paw.html", {
