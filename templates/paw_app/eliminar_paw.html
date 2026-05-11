@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="card shadow border-0">
+        <div class="card-body">
+
+            <h3 class="text-danger">
+                Eliminar PAW {{ paw.numero_paw }}
+            </h3>
+
+            <p>
+                Esta acción eliminará permanentemente el PAW.
+            </p>
+
+            <p>
+                <strong>Cotización:</strong> {{ paw.cotizacion }}
+            </p>
+
+            <form method="post">
+                {% csrf_token %}
+
+                <button type="submit" class="btn btn-danger">
+                    Sí, eliminar
+                </button>
+
+                <a href="{% url 'paw_detail' paw.id %}" class="btn btn-secondary">
+                    Cancelar
+                </a>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

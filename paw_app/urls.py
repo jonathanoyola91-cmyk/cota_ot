@@ -9,4 +9,5 @@ urlpatterns = [
     path("<int:paw_id>/producto-ok/", views.marcar_producto_ok, name="marcar_producto_ok"),
     path("<int:paw_id>/iniciar-servicio-campo/", views.iniciar_servicio_campo, name="iniciar_servicio_campo"),
     path("<int:paw_id>/cambiar-tipo-operacion/", views.cambiar_tipo_operacion, name="cambiar_tipo_operacion"),
+    path("eliminar/<int:paw_id>/", views.eliminar_paw, name="eliminar_paw"),
 ]

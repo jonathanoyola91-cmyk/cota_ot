@@ -262,6 +262,19 @@
         font-weight:800;
     }
 
+.btn-danger{
+    background:#dc2626;
+    color:white;
+    padding:10px 14px;
+    border-radius:10px;
+    text-decoration:none;
+    font-weight:700;
+}
+
+.btn-danger:hover{
+    background:#b91c1c;
+}
+
     @media (max-width:1200px) {
         .progress-grid { grid-template-columns:repeat(4,1fr); }
         .summary-grid,
@@ -855,6 +868,14 @@
         <a class="btn btn-secondary" href="{% url 'paw_list' %}">
             Volver al listado
         </a>
+
+        {% if request.user.is_superuser or es_admin %}
+        <a class="btn btn-danger"
+           href="{% url 'eliminar_paw' paw.id %}" 
+           onclick="return confirm('¿Seguro que desea eliminar este PAW?');">
+            Eliminar PAW
+        </a>
+        {% endif %}
     </div>
 
 </div>

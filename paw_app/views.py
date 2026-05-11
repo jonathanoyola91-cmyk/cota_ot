@@ -10,15 +10,23 @@ from quotes.models import Quotation
 
 
 def obtener_siguiente_numero_paw():
-    ultimo = Paw.objects.exclude(numero_paw__isnull=True).order_by("-id").first()
+    numeros = Paw.objects.exclude(
+        numero_paw__isnull=True
+    ).exclude(
+        numero_paw=""
+    ).values_list("numero_paw", flat=True)
 
-    if not ultimo or not ultimo.numero_paw:
-        siguiente = 1
-    else:
+    mayor = 0
+
+    for numero in numeros:
         try:
-            siguiente = int(ultimo.numero_paw) + 1
+            numero_int = int(str(numero).strip())
+            if numero_int > mayor:
+                mayor = numero_int
         except (TypeError, ValueError):
-            siguiente = 1
+            continue
+
+    siguiente = mayor + 1
 
     while Paw.objects.filter(numero_paw=str(siguiente)).exists():
         siguiente += 1
@@ -205,3 +213,22 @@ def registrar_ensamble(request, paw_id):
 
     messages.success(request, "Ensamble registrado correctamente.")
     return redirect("paw_detail", paw_id=paw.id)
+
+@login_required
+def eliminar_paw(request, paw_id):
+    if not tiene_rol(request.user, ["ADMIN"]):
+        messages.error(request, "No tienes permisos para eliminar PAW.")
+        return redirect("paw_detail", paw_id=paw_id)
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+        numero = paw.numero_paw
+        paw.delete()
+
+        messages.success(request, f"PAW {numero} eliminado correctamente.")
+        return redirect("paw_list")
+
+    return render(request, "paw_app/eliminar_paw.html", {
+        "paw": paw
+    })
