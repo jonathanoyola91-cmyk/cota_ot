@@ -153,6 +153,12 @@ def _retencion_por_linea(linea):
     if tipo_operacion == "COMPRA":
         return subtotal * Decimal("0.025"), "Compra 2.5%"
 
+    if tipo_operacion == "CARGA":
+        return subtotal * Decimal("0.01"), "Carga 1%"
+
+    if tipo_operacion == "PASAJERO":
+        return subtotal * Decimal("0.035"), "Pasajero 3.5%"
+
     return Decimal("0.00"), "N/A sin retención"
 
 
@@ -350,7 +356,7 @@ def actualizar_tipo_operacion(request, linea_id):
 
     tipo_operacion = request.POST.get("tipo_operacion")
 
-    if tipo_operacion not in ["COMPRA", "SERVICIO", "NA"]:
+    if tipo_operacion not in ["COMPRA", "SERVICIO", "CARGA", "PASAJERO", "NA"]:
         messages.error(request, "Tipo de operación no válido.")
         return redirect("finanzas:detalle", pk=linea.approval.id)
 

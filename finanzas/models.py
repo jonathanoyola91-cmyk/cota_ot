@@ -198,6 +198,8 @@ class SupplierInvoice(models.Model):
     class TipoOperacion(models.TextChoices):
         COMPRA = "COMPRA", "Compra - retención 2.5%"
         SERVICIO = "SERVICIO", "Servicio - retención 4%"
+        CARGA = "CARGA", "Carga - retención 1%"
+        PASAJERO = "PASAJERO", "Pasajero - retención 3.5%"
         NA = "NA", "N/A - sin retención"
 
     supplier = models.ForeignKey(
