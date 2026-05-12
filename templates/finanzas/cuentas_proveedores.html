@@ -97,20 +97,20 @@
                     <td>Compra #{{ inv.purchase_request.id }}</td>
                     <td>{{ inv.supplier.nombre }}</td>
                     <td>
-                        {% if inv.tipo_pago == "CONTADO" %}
+                        {% if inv.tipo_pago_calc == "CONTADO" %}
                             <span class="badge badge-ok">Contado</span>
                         {% else %}
                             <span class="badge badge-warn">Crédito</span>
                         {% endif %}
                     </td>
                     <td>{{ inv.numero_factura_proveedor|default:"Pendiente" }}</td>
-                    <td>$ {{ inv.base_compra|floatformat:0 }}</td>
-                    <td>$ {{ inv.iva|floatformat:0 }}</td>
-                    <td><strong>$ {{ inv.total_con_iva|floatformat:0 }}</strong></td>
-                    <td>$ {{ inv.total_abonado|floatformat:0 }}</td>
+                    <td>$ {{ inv.base_compra_calc|floatformat:0 }}</td>
+                    <td>$ {{ inv.iva_calc|floatformat:0 }}</td>
+                    <td><strong>$ {{ inv.total_con_iva_calc|floatformat:0 }}</strong></td>
+                    <td>$ {{ inv.total_abonado_calc|floatformat:0 }}</td>
                     <td>
-                        {% if inv.saldo > 0 %}
-                            <strong style="color:#b91c1c;">$ {{ inv.saldo|floatformat:0 }}</strong>
+                        {% if inv.saldo_calc > 0 %}
+                            <strong style="color:#b91c1c;">$ {{ inv.saldo_calc|floatformat:0 }}</strong>
                         {% else %}
                             <strong style="color:#15803d;">$ 0</strong>
                         {% endif %}

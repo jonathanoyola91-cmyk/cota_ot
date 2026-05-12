@@ -10,25 +10,46 @@
 </div>
 
 <div class="cards">
+
     <div class="card">
         <small>Base compra</small>
-        <strong>$ {{ invoice.base_compra|floatformat:0 }}</strong>
+        <strong>$ {{ invoice.base_compra_calc|floatformat:0 }}</strong>
     </div>
 
     <div class="card">
         <small>IVA</small>
-        <strong>$ {{ invoice.iva|floatformat:0 }}</strong>
+        <strong>$ {{ invoice.iva_calc|floatformat:0 }}</strong>
     </div>
 
     <div class="card">
         <small>Retención</small>
-        <strong>$ {{ invoice.retencion|floatformat:0 }}</strong>
+        <strong>$ {{ invoice.retencion_calc|floatformat:0 }}</strong>
     </div>
 
     <div class="card">
         <small>Total a pagar</small>
-        <strong>$ {{ invoice.total_con_iva|floatformat:0 }}</strong>
+        <strong>$ {{ invoice.total_con_iva_calc|floatformat:0 }}</strong>
     </div>
+
+    <div class="card">
+        <small>Total abonado</small>
+        <strong>$ {{ invoice.total_abonado_calc|floatformat:0 }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Saldo pendiente</small>
+
+        {% if invoice.saldo_calc > 0 %}
+            <strong style="color:#b91c1c;">
+                $ {{ invoice.saldo_calc|floatformat:0 }}
+            </strong>
+        {% else %}
+            <strong style="color:#15803d;">
+                $ 0
+            </strong>
+        {% endif %}
+    </div>
+
 </div>
 
 <div class="panel" style="margin-bottom:24px;">
@@ -162,7 +183,7 @@
 <div class="panel">
     <h2>Registrar abono</h2>
 
-    {% if invoice.tipo_pago == "CONTADO" %}
+    {% if invoice.saldo_calc <= 0 %}
         <div style="margin-top:12px;background:#dcfce7;color:#166534;padding:14px;border-radius:12px;font-weight:700;">
             Esta compra es de contado. El sistema la muestra como comprada y con saldo $0 automáticamente.
         </div>

@@ -576,8 +576,10 @@ def cuenta_proveedor_detalle(request, pk):
                 return redirect("finanzas:cuenta_proveedor_detalle", pk=invoice.pk)
 
         elif action == "registrar_abono":
-            if invoice.tipo_pago == "CONTADO":
-                messages.info(request, "Esta compra es de contado. El saldo ya queda en cero automáticamente.")
+            calc_actual = _calcular_cuenta_proveedor(invoice)
+
+            if calc_actual["saldo"] <= 0:
+                messages.info(request, "Esta cuenta no tiene saldo pendiente para registrar abonos.")
                 return redirect("finanzas:cuenta_proveedor_detalle", pk=invoice.pk)
 
             invoice_form = SupplierInvoiceForm(instance=invoice)
@@ -604,6 +606,20 @@ def cuenta_proveedor_detalle(request, pk):
     ).select_related("proveedor")
 
     abonos = invoice.abonos.all()
+
+    calc = _calcular_cuenta_proveedor(invoice)
+
+    invoice.base_compra_calc = calc["base"]
+    invoice.iva_calc = calc["iva"]
+    invoice.retencion_calc = calc["retencion"]
+    invoice.total_con_iva_calc = calc["total_neto"]
+    invoice.pagado_contado_calc = calc["pagado_contado"]
+    invoice.total_abonado_real_calc = calc["abonos_reales"]
+    invoice.total_abonado_calc = calc["total_abonado"]
+    invoice.saldo_calc = calc["saldo"]
+    invoice.tipo_pago_calc = calc["tipo_pago"]
+    invoice.trazabilidad_calc = calc["trazabilidad"]
+
 
     return render(request, "finanzas/cuenta_proveedor_detalle.html", {
         "invoice": invoice,
