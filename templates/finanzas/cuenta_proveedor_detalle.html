@@ -11,63 +11,68 @@
 
 <div class="cards">
     <div class="card">
-        <small>Proveedor</small>
-        <strong>{{ invoice.supplier.nombre }}</strong>
-    </div>
-    <div class="card">
-        <small>PAW</small>
-        <strong>{{ invoice.purchase_request.paw_numero|default:"-" }}</strong>
-    </div>
-    <div class="card">
-        <small>Tipo de pago</small>
-        <strong>{{ invoice.tipo_pago }}</strong>
-    </div>
-    <div class="card">
-        <small>Saldo pendiente</small>
-        <strong>$ {{ invoice.saldo|floatformat:0 }}</strong>
-    </div>
-</div>
-
-<div class="cards">
-    <div class="card">
         <small>Base compra</small>
         <strong>$ {{ invoice.base_compra|floatformat:0 }}</strong>
     </div>
+
     <div class="card">
-        <small>IVA 19%</small>
+        <small>IVA</small>
         <strong>$ {{ invoice.iva|floatformat:0 }}</strong>
     </div>
+
     <div class="card">
-        <small>Total con IVA</small>
-        <strong>$ {{ invoice.total_con_iva|floatformat:0 }}</strong>
+        <small>Retención</small>
+        <strong>$ {{ invoice.retencion|floatformat:0 }}</strong>
     </div>
+
     <div class="card">
-        <small>Total abonado</small>
-        <strong>$ {{ invoice.total_abonado|floatformat:0 }}</strong>
+        <small>Total a pagar</small>
+        <strong>$ {{ invoice.total_con_iva|floatformat:0 }}</strong>
     </div>
 </div>
 
 <div class="panel" style="margin-bottom:24px;">
     <h2>Factura del proveedor</h2>
-    <p style="color:#64748b;margin-top:6px;">Finanzas puede registrar el número y fecha de la factura emitida por el proveedor.</p>
+
+    <p style="color:#64748b;margin-top:6px;">
+        Finanzas puede registrar factura, fecha,
+        tipo de operación y si aplica IVA.
+    </p>
 
     <form method="post" style="margin-top:18px;">
         {% csrf_token %}
+
         <input type="hidden" name="accion" value="guardar_factura">
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
             <div>
                 <label>Número factura proveedor</label>
                 {{ invoice_form.numero_factura_proveedor }}
             </div>
+
             <div>
                 <label>Fecha factura proveedor</label>
                 {{ invoice_form.fecha_factura_proveedor }}
             </div>
+
+            <div>
+                <label>Tipo operación</label>
+                {{ invoice_form.tipo_operacion }}
+            </div>
+
+            <div style="display:flex;align-items:center;padding-top:30px;">
+                <label style="display:flex;gap:8px;align-items:center;">
+                    {{ invoice_form.aplica_iva }}
+                    Aplica IVA 19%
+                </label>
+            </div>
+
             <div style="grid-column:1 / -1;">
                 <label>Observación</label>
                 {{ invoice_form.observacion }}
             </div>
+
         </div>
 
         {% if invoice_form.errors %}
@@ -76,7 +81,10 @@
             </div>
         {% endif %}
 
-        <button class="btn" type="submit" style="margin-top:18px;">Guardar factura proveedor</button>
+        <button class="btn" type="submit" style="margin-top:18px;">
+            Guardar factura proveedor
+        </button>
+
     </form>
 </div>
 
