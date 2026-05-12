@@ -10,6 +10,7 @@ class SupplierInvoiceForm(forms.ModelForm):
         fields = [
             "numero_factura_proveedor",
             "fecha_factura_proveedor",
+            "fecha_vencimiento",
             "observacion",
             "tipo_operacion",
             "aplica_iva",
@@ -19,6 +20,10 @@ class SupplierInvoiceForm(forms.ModelForm):
             "fecha_factura_proveedor": forms.DateInput(
                 attrs={"class": "form-control", "type": "date"},
                 format="%Y-%m-%d"
+            ),
+            "fecha_vencimiento": forms.DateInput(
+                attrs={"class": "form-control", "type": "date"},
+                format="%Y-%m-%d",
             ),
             "observacion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "tipo_operacion": forms.Select(attrs={"class": "form-control"}),

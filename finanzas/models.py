@@ -74,6 +74,8 @@ class FinanceApprovalLine(models.Model):
     class TipoOperacion(models.TextChoices):
         COMPRA = "COMPRA", "Compra - retención 2.5%"
         SERVICIO = "SERVICIO", "Servicio - retención 4%"
+        CARGA = "CARGA", "Carga - retención 1%"
+        PASAJERO = "PASAJERO", "Pasajero - retención 3.5%"
         NA = "NA", "N/A - sin retención"
 
     approval = models.ForeignKey(
@@ -223,7 +225,12 @@ class SupplierInvoice(models.Model):
         null=True,
         blank=True,
     )
-
+    
+    fecha_vencimiento = models.DateField(
+        "Fecha vencimiento",
+        null=True,
+        blank=True,
+    )
     observacion = models.TextField(
         "Observación",
         blank=True,
@@ -302,6 +309,12 @@ class SupplierInvoice(models.Model):
 
         if self.tipo_operacion == "COMPRA":
             return self.base_compra * Decimal("0.025")
+
+        if self.tipo_operacion == "CARGA":
+            return self.base_compra * Decimal("0.01")
+
+        if self.tipo_operacion == "PASAJERO":
+            return self.base_compra * Decimal("0.035")
 
         return Decimal("0")
 
