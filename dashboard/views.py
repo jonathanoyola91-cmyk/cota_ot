@@ -26,10 +26,22 @@ def dashboard_home(request):
     paw_material_recibido = paws.filter(estado_operativo="MATERIAL_RECIBIDO").count()
     paw_taller = paws.filter(estado_operativo="ENTREGADO_TALLER").count()
     producto_listo = paws.filter(estado_operativo="PRODUCTO_OK").count()
-    pendientes_facturar = paws.filter(estado_operativo="PRODUCTO_OK").count()
-    paws_pendientes_facturar = paws.filter(estado_operativo="PRODUCTO_OK").order_by("-actualizado_en")[:5]
-    bloqueos_finanzas = paws.filter(estado_operativo__in=["EN_FINANZAS", "EN_APROBACION"]).order_by("-actualizado_en")[:5]
-    bloqueos_facturacion = paws.filter(estado_operativo="PRODUCTO_OK").order_by("-actualizado_en")[:5]
+
+    pendientes_facturar = paws.filter(
+        estado_operativo="PRODUCTO_OK"
+    ).count()
+
+    paws_pendientes_facturar = paws.filter(
+        estado_operativo="PRODUCTO_OK"
+    ).order_by("-actualizado_en")[:5]
+
+    bloqueos_finanzas = paws.filter(
+        estado_operativo__in=["EN_FINANZAS", "EN_APROBACION"]
+    ).order_by("-actualizado_en")[:5]
+
+    bloqueos_facturacion = paws.filter(
+        estado_operativo="PRODUCTO_OK"
+    ).order_by("-actualizado_en")[:5]
 
     paws_criticos = paws.filter(
         estado_operativo__in=[
@@ -42,21 +54,25 @@ def dashboard_home(request):
     ).order_by("-actualizado_en")[:10]
 
     hoy = date.today()
+
     paws_atrasados = 0
     paws_proximos = 0
     paws_entregas = []
 
     for paw in paws.exclude(fecha_entrega=None).order_by("fecha_entrega"):
+
         dias = (paw.fecha_entrega - hoy).days
 
         if dias < 0:
             semaforo = "rojo"
             texto = "Atrasado"
             paws_atrasados += 1
+
         elif dias <= 3:
             semaforo = "amarillo"
             texto = "Próximo"
             paws_proximos += 1
+
         else:
             semaforo = "verde"
             texto = "En tiempo"
@@ -71,13 +87,64 @@ def dashboard_home(request):
     ultimas_cotizaciones = cotizaciones.order_by("-creado_en")[:5]
     ultimos_paws = paws.order_by("-creado_en")[:5]
 
-    es_compras = request.user.is_superuser or request.user.groups.filter(name="COMPRAS").exists()
-    es_finanzas = request.user.is_superuser or request.user.groups.filter(name="FINANZAS").exists()
-    es_gerente = request.user.is_superuser or request.user.groups.filter(name="GERENTE").exists()
-    es_inventario = request.user.is_superuser or request.user.groups.filter(name="INVENTARIO").exists()
-    es_comercial = request.user.is_superuser or request.user.groups.filter(name="COMERCIAL").exists()
+    es_compras = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name__in=["COMPRAS", "COMPRAS_OIL"]
+        ).exists()
+    )
+
+    es_finanzas = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name="FINANZAS"
+        ).exists()
+    )
+
+    es_gerente = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name__in=["GERENTE", "gerencia"]
+        ).exists()
+    )
+
+    es_inventario = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name="INVENTARIO"
+        ).exists()
+    )
+
+    es_comercial = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name__in=["COMERCIAL", "Comercial"]
+        ).exists()
+    )
+
+    es_taller = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name__in=["TALLER", "Taller"]
+        ).exists()
+    )
+
+    es_ingenieria = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name__in=["INGENIERIA", "Ingeniería"]
+        ).exists()
+    )
+
+    es_campo = (
+        request.user.is_superuser
+        or request.user.groups.filter(
+            name="CAMPO"
+        ).exists()
+    )
 
     return render(request, "dashboard/index.html", {
+
         "total_cotizaciones": total_cotizaciones,
         "cotizaciones_adjudicadas": cotizaciones_adjudicadas,
         "cotizaciones_evaluacion": cotizaciones_evaluacion,
@@ -90,6 +157,7 @@ def dashboard_home(request):
         "paw_material_recibido": paw_material_recibido,
         "paw_taller": paw_taller,
         "producto_listo": producto_listo,
+
         "pendientes_facturar": pendientes_facturar,
         "bloqueos_finanzas": bloqueos_finanzas,
         "bloqueos_facturacion": bloqueos_facturacion,
@@ -108,4 +176,7 @@ def dashboard_home(request):
         "es_gerente": es_gerente,
         "es_inventario": es_inventario,
         "es_comercial": es_comercial,
+        "es_taller": es_taller,
+        "es_ingenieria": es_ingenieria,
+        "es_campo": es_campo,
     })
