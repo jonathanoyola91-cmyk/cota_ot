@@ -561,9 +561,12 @@ def enviar_finanzas(request, pk):
         messages.error(request, "No tienes permiso para enviar a Finanzas.")
         return redirect("/")
 
-    from finanzas.models import FinanceApproval
+    from finanzas.models import FinanceApproval, FinanceApprovalLine
 
-    compra = get_object_or_404(PurchaseRequest.objects.prefetch_related("lineas"), pk=pk)
+    compra = get_object_or_404(
+        PurchaseRequest.objects.prefetch_related("lineas"),
+        pk=pk
+    )
 
     if compra.estado == "CERRADA":
         messages.error(request, "No puedes modificar una compra cerrada.")
@@ -582,7 +585,7 @@ def enviar_finanzas(request, pk):
         paw.estado_operativo = "EN_FINANZAS"
         paw.save(update_fields=["estado_operativo"])
 
-    FinanceApproval.objects.get_or_create(
+    finanza, created = FinanceApproval.objects.get_or_create(
         purchase_request=compra,
         defaults={
             "estado": FinanceApproval.Estado.PENDIENTE,
@@ -590,7 +593,29 @@ def enviar_finanzas(request, pk):
         },
     )
 
-    messages.success(request, "PAW enviado a Finanzas correctamente.")
+    lineas_contado = compra.lineas.filter(
+        tipo_pago="CONTADO",
+        cantidad_requerida__gt=0,
+        cantidad_a_comprar__gt=0,
+        proveedor__isnull=False,
+    )
+
+    creadas = 0
+
+    for linea in lineas_contado:
+        _, linea_creada = FinanceApprovalLine.objects.get_or_create(
+            approval=finanza,
+            purchase_line=linea,
+        )
+
+        if linea_creada:
+            creadas += 1
+
+    messages.success(
+        request,
+        f"PAW enviado a Finanzas correctamente. Líneas nuevas sincronizadas: {creadas}."
+    )
+
     return redirect("compras_oil:paw_detail", pk=compra.pk)
 
 
