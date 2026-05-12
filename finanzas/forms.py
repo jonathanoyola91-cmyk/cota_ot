@@ -11,21 +11,18 @@ class SupplierInvoiceForm(forms.ModelForm):
             "numero_factura_proveedor",
             "fecha_factura_proveedor",
             "observacion",
+            "tipo_operacion",
+            "aplica_iva",
         ]
         widgets = {
-            "numero_factura_proveedor": forms.TextInput(attrs={
-                "class": "form-control",
-                "placeholder": "Ej: FV-12345",
-            }),
-            "fecha_factura_proveedor": forms.DateInput(attrs={
-                "class": "form-control",
-                "type": "date",
-            }),
-            "observacion": forms.Textarea(attrs={
-                "class": "form-control",
-                "rows": 3,
-                "placeholder": "Notas internas de Finanzas",
-            }),
+            "numero_factura_proveedor": forms.TextInput(attrs={"class": "form-control"}),
+            "fecha_factura_proveedor": forms.DateInput(
+                attrs={"class": "form-control", "type": "date"},
+                format="%Y-%m-%d"
+            ),
+            "observacion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "tipo_operacion": forms.Select(attrs={"class": "form-control"}),
+            "aplica_iva": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 

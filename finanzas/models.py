@@ -192,15 +192,11 @@ class FinanceApprovalLine(models.Model):
 # =======================================
 
 class SupplierInvoice(models.Model):
-    """
-    Factura emitida por proveedor para una solicitud de compra.
 
-    Se usa para controlar cuentas por pagar:
-    - El valor comprado se calcula desde líneas de compra del proveedor.
-    - El IVA se calcula al 19%.
-    - Si la compra es CONTADO, el saldo queda en 0.
-    - Si la compra es CRÉDITO, el saldo se calcula contra los abonos registrados.
-    """
+    class TipoOperacion(models.TextChoices):
+        COMPRA = "COMPRA", "Compra - retención 2.5%"
+        SERVICIO = "SERVICIO", "Servicio - retención 4%"
+        NA = "NA", "N/A - sin retención"
 
     supplier = models.ForeignKey(
         "compras_oil.Supplier",
@@ -208,6 +204,7 @@ class SupplierInvoice(models.Model):
         related_name="supplier_invoices",
         verbose_name="Proveedor",
     )
+
     purchase_request = models.ForeignKey(
         "compras_oil.PurchaseRequest",
         on_delete=models.PROTECT,
@@ -220,12 +217,25 @@ class SupplierInvoice(models.Model):
         max_length=80,
         blank=True,
     )
+
     fecha_factura_proveedor = models.DateField(
         "Fecha factura proveedor",
         null=True,
         blank=True,
     )
-    observacion = models.TextField("Observación", blank=True)
+
+    observacion = models.TextField(
+        "Observación",
+        blank=True,
+    )
+
+    tipo_operacion = models.CharField(
+        max_length=20,
+        choices=TipoOperacion.choices,
+        default=TipoOperacion.COMPRA,
+    )
+
+    aplica_iva = models.BooleanField(default=True)
 
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -234,17 +244,23 @@ class SupplierInvoice(models.Model):
         blank=True,
         related_name="supplier_invoices_creadas",
     )
+
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-actualizado_en"]
-        unique_together = [("supplier", "purchase_request")]
+
+        unique_together = [
+            ("supplier", "purchase_request")
+        ]
+
         indexes = [
             models.Index(fields=["supplier"]),
             models.Index(fields=["purchase_request"]),
             models.Index(fields=["numero_factura_proveedor"]),
         ]
+
         verbose_name = "Cuenta por pagar proveedor"
         verbose_name_plural = "Cuentas por pagar proveedores"
 
@@ -257,54 +273,81 @@ class SupplierInvoice(models.Model):
         return self.purchase_request.paw_numero or f"Compra #{self.purchase_request_id}"
 
     @property
-    def tipo_pago(self):
-        qs = self.purchase_request.lineas.filter(
-            proveedor=self.supplier,
-            cantidad_requerida__gt=0,
-        )
-        if qs.filter(tipo_pago="CONTADO").exists():
-            return "CONTADO"
-        return "CREDITO"
-
-    @property
     def base_compra(self):
         total = Decimal("0")
+
         lineas = self.purchase_request.lineas.filter(
             proveedor=self.supplier,
             cantidad_requerida__gt=0,
         )
+
         for linea in lineas:
             cantidad = Decimal(linea.cantidad_a_comprar or 0)
             precio = Decimal(linea.precio_unitario or 0)
             total += cantidad * precio
+
         return total
 
     @property
     def iva(self):
+        if not self.aplica_iva:
+            return Decimal("0")
         return self.base_compra * Decimal("0.19")
 
     @property
+    def retencion(self):
+
+        if self.tipo_operacion == "SERVICIO":
+            return self.base_compra * Decimal("0.04")
+
+        if self.tipo_operacion == "COMPRA":
+            return self.base_compra * Decimal("0.025")
+
+        return Decimal("0")
+
+    @property
     def total_con_iva(self):
-        return self.base_compra + self.iva
+        return self.base_compra + self.iva - self.retencion
 
     @property
     def total_abonado_real(self):
+
         total = Decimal("0")
+
         for abono in self.abonos.all():
             total += Decimal(abono.valor or 0)
+
         return total
 
     @property
     def total_abonado(self):
+
         if self.tipo_pago == "CONTADO":
             return self.total_con_iva
+
         return self.total_abonado_real
 
     @property
+    def tipo_pago(self):
+
+        qs = self.purchase_request.lineas.filter(
+            proveedor=self.supplier,
+            cantidad_requerida__gt=0,
+        )
+
+        if qs.filter(tipo_pago="CONTADO").exists():
+            return "CONTADO"
+
+        return "CREDITO"
+
+    @property
     def saldo(self):
+
         if self.tipo_pago == "CONTADO":
             return Decimal("0")
+
         saldo = self.total_con_iva - self.total_abonado_real
+
         return saldo if saldo > 0 else Decimal("0")
 
 

@@ -558,7 +558,7 @@ def cuenta_proveedor_detalle(request, pk):
     )
 
     if request.method == "POST":
-        action = request.POST.get("action")
+        action = request.POST.get("accion")
 
         if action == "guardar_factura":
             invoice_form = SupplierInvoiceForm(request.POST, instance=invoice)
