@@ -77,20 +77,11 @@ def bom_detail(request, bom_id):
     return render(request, "bom/bom_detail.html", {"bom": bom})
 
 
+@login_required
 def agregar_item_bom(request, bom_id):
     bom = get_object_or_404(Bom, id=bom_id)
 
     if request.method == "POST":
-        BomItem.objects.create(
-            bom=bom,
-            plano=request.POST.get("plano", ""),
-            codigo=request.POST.get("codigo", ""),
-            descripcion=request.POST.get("descripcion", ""),
-            unidad=request.POST.get("unidad", ""),
-            cantidad_estandar=request.POST.get("cantidad_estandar") or 0,
-            cantidad_solicitada=request.POST.get("cantidad_solicitada") or 0,
-            observaciones=request.POST.get("observaciones", ""),
-        )
         nuevo_item = BomItem.objects.create(
             bom=bom,
             plano=request.POST.get("plano", ""),
@@ -112,6 +103,7 @@ def agregar_item_bom(request, bom_id):
                     "descripcion": nuevo_item.descripcion,
                 }
             )
+
         return redirect("agregar_item_bom", bom_id=bom.id)
 
     return render(request, "bom/agregar_item_bom.html", {"bom": bom})
