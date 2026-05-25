@@ -5,7 +5,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 
 from core.roles import tiene_rol
-from .models import Paw
+from .models import Paw, Criticidad, EstadoGestion
 from quotes.models import Quotation
 
 
@@ -70,6 +70,31 @@ def paw_list(request):
 
     return render(request, "paw_app/paw_list.html", {"paws": paws})
 
+@login_required
+def actualizar_gestion_paw(request, paw_id):
+    if not tiene_rol(request.user, ["ADMIN", "GERENTE", "INGENIERIA", "TALLER"]):
+        messages.error(request, "No tienes permiso para actualizar la gestión del PAW.")
+        return redirect("paw_list")
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+        criticidad = request.POST.get("criticidad")
+        estado_gestion = request.POST.get("estado_gestion")
+
+        criticidades_validas = [choice[0] for choice in Criticidad.choices]
+        estados_validos = [choice[0] for choice in EstadoGestion.choices]
+
+        if criticidad in criticidades_validas:
+            paw.criticidad = criticidad
+
+        if estado_gestion in estados_validos:
+            paw.estado_gestion = estado_gestion
+
+        paw.save(update_fields=["criticidad", "estado_gestion", "actualizado_en"])
+        messages.success(request, f"PAW {paw.numero_paw} actualizado correctamente.")
+
+    return redirect("paw_list")
 
 @login_required
 def paw_detail(request, paw_id):

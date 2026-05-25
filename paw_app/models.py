@@ -1,6 +1,17 @@
-# paw_app/models.py
 from django.conf import settings
 from django.db import models
+
+
+class Criticidad(models.TextChoices):
+    ALTA = "ALTA", "Alta"
+    MEDIA = "MEDIA", "Media"
+    BAJA = "BAJA", "Baja"
+
+
+class EstadoGestion(models.TextChoices):
+    ASIGNADO = "ASIGNADO", "Asignado"
+    EN_PROCESO = "EN_PROCESO", "En proceso"
+    PENDIENTE = "PENDIENTE", "Pendiente"
 
 
 class EstadoOperativo(models.TextChoices):
@@ -20,6 +31,7 @@ class EstadoOperativo(models.TextChoices):
 
 
 class Paw(models.Model):
+
     class TipoOperacion(models.TextChoices):
         ENSAMBLE = "ENSAMBLE", "Ensamble / Taller"
         SERVICIO_CAMPO = "SERVICIO_CAMPO", "Servicio técnico en campo"
@@ -63,6 +75,22 @@ class Paw(models.Model):
         max_length=30,
         choices=EstadoOperativo.choices,
         default=EstadoOperativo.PAW_CREADO,
+    )
+
+    criticidad = models.CharField(
+        "Criticidad",
+        max_length=10,
+        choices=Criticidad.choices,
+        default=Criticidad.MEDIA,
+        help_text="Prioridad manual para revisión en reunión de operaciones.",
+    )
+
+    estado_gestion = models.CharField(
+        "Estado de gestión",
+        max_length=20,
+        choices=EstadoGestion.choices,
+        default=EstadoGestion.ASIGNADO,
+        help_text="Estado manual para reunión: asignado, en proceso o pendiente.",
     )
 
     creado_por = models.ForeignKey(

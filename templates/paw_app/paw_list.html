@@ -9,7 +9,8 @@
         overflow-x: auto;
     }
 
-    .paw-status {
+    .paw-status,
+    .meeting-badge {
         display: inline-block;
         padding: 7px 11px;
         border-radius: 999px;
@@ -18,44 +19,53 @@
         white-space: nowrap;
     }
 
-    .status-paw {
-        background: #f1f5f9;
-        color: #475569;
+    .status-paw { background: #f1f5f9; color: #475569; }
+    .status-ot { background: #e0f2fe; color: #0369a1; }
+    .status-bom { background: #dbeafe; color: #1d4ed8; }
+    .status-compras { background: #ede9fe; color: #5b21b6; }
+    .status-finanzas { background: #fef3c7; color: #92400e; }
+    .status-taller { background: #e0e7ff; color: #3730a3; }
+    .status-producto { background: #dcfce7; color: #166534; }
+    .status-factura { background: #bbf7d0; color: #14532d; }
+
+    .criticidad-alta { background: #fee2e2; color: #991b1b; }
+    .criticidad-media { background: #fef3c7; color: #92400e; }
+    .criticidad-baja { background: #dcfce7; color: #166534; }
+
+    .gestion-asignado { background: #dbeafe; color: #1d4ed8; }
+    .gestion-en_proceso { background: #ffedd5; color: #9a3412; }
+    .gestion-pendiente { background: #f1f5f9; color: #334155; }
+
+    .meeting-form {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        min-width: 330px;
     }
 
-    .status-ot {
-        background: #e0f2fe;
-        color: #0369a1;
+    .meeting-form select {
+        min-width: 120px;
+        padding: 7px 9px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #fff;
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 700;
     }
 
-    .status-bom {
-        background: #dbeafe;
-        color: #1d4ed8;
+    .meeting-save {
+        border: none;
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 900;
+        cursor: pointer;
     }
 
-    .status-compras {
-        background: #ede9fe;
-        color: #5b21b6;
-    }
-
-    .status-finanzas {
-        background: #fef3c7;
-        color: #92400e;
-    }
-
-    .status-taller {
-        background: #e0e7ff;
-        color: #3730a3;
-    }
-
-    .status-producto {
-        background: #dcfce7;
-        color: #166534;
-    }
-
-    .status-factura {
-        background: #bbf7d0;
-        color: #14532d;
+    .meeting-save:hover {
+        background: #1d4ed8;
     }
 
     .mini-progress {
@@ -88,6 +98,34 @@
     .action-cell {
         white-space: nowrap;
     }
+
+    .meeting-help {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(180px, 1fr));
+        gap: 10px;
+        margin: 14px 0 18px;
+    }
+
+    .meeting-help-card {
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        border-radius: 16px;
+        padding: 12px;
+        font-size: 13px;
+        color: #475569;
+    }
+
+    .meeting-help-card strong {
+        display: block;
+        color: #0f172a;
+        margin-bottom: 4px;
+    }
+
+    @media (max-width: 900px) {
+        .meeting-help {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <div class="panel">
@@ -95,8 +133,23 @@
         <div>
             <h3 style="margin:0;">PAW creados</h3>
             <p style="margin:6px 0 0;color:#64748b;">
-                Seguimiento general del estado operativo sin entrar PAW por PAW.
+                Seguimiento general del estado operativo y control para reunión de operaciones.
             </p>
+        </div>
+    </div>
+
+    <div class="meeting-help">
+        <div class="meeting-help-card">
+            <strong>Criticidad</strong>
+            Alta, media o baja según prioridad de atención.
+        </div>
+        <div class="meeting-help-card">
+            <strong>Gestión</strong>
+            Asignado, en proceso o pendiente para seguimiento manual.
+        </div>
+        <div class="meeting-help-card">
+            <strong>Uso en reunión</strong>
+            Alta + pendiente debe revisarse primero.
         </div>
     </div>
 
@@ -110,6 +163,9 @@
                     <th>Campo</th>
                     <th>Cotización</th>
                     <th>Fecha entrega</th>
+                    <th>Criticidad</th>
+                    <th>Gestión</th>
+                    <th>Actualizar reunión</th>
                     <th>Estado PAW</th>
                     <th>Avance</th>
                     <th>Creado por</th>
@@ -141,6 +197,38 @@
                     </td>
 
                     <td>{{ paw.fecha_entrega|default:"Pendiente" }}</td>
+
+                    <td>
+                        <span class="meeting-badge criticidad-{{ paw.criticidad|lower }}">
+                            {{ paw.get_criticidad_display }}
+                        </span>
+                    </td>
+
+                    <td>
+                        <span class="meeting-badge gestion-{{ paw.estado_gestion|lower }}">
+                            {{ paw.get_estado_gestion_display }}
+                        </span>
+                    </td>
+
+                    <td>
+                        <form method="post" action="{% url 'actualizar_gestion_paw' paw.id %}" class="meeting-form">
+                            {% csrf_token %}
+
+                            <select name="criticidad" aria-label="Criticidad PAW {{ paw.numero_paw }}">
+                                <option value="ALTA" {% if paw.criticidad == "ALTA" %}selected{% endif %}>Alta</option>
+                                <option value="MEDIA" {% if paw.criticidad == "MEDIA" %}selected{% endif %}>Media</option>
+                                <option value="BAJA" {% if paw.criticidad == "BAJA" %}selected{% endif %}>Baja</option>
+                            </select>
+
+                            <select name="estado_gestion" aria-label="Gestión PAW {{ paw.numero_paw }}">
+                                <option value="ASIGNADO" {% if paw.estado_gestion == "ASIGNADO" %}selected{% endif %}>Asignado</option>
+                                <option value="EN_PROCESO" {% if paw.estado_gestion == "EN_PROCESO" %}selected{% endif %}>En proceso</option>
+                                <option value="PENDIENTE" {% if paw.estado_gestion == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
+                            </select>
+
+                            <button type="submit" class="meeting-save" title="Guardar cambios">✓</button>
+                        </form>
+                    </td>
 
                     <td>
                         {% with ot=paw.ots.first %}
@@ -178,19 +266,12 @@
                         {% with ot=paw.ots.first %}
                             <div class="mini-progress" title="PAW · OT · BOM · Compras · Finanzas · Taller · Producto · Factura">
                                 <span class="mini-step done"></span>
-
                                 <span class="mini-step {% if paw.ots.count %}done{% endif %}"></span>
-
                                 <span class="mini-step {% if ot and ot.bom %}done{% endif %}"></span>
-
                                 <span class="mini-step {% if paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
-
                                 <span class="mini-step {% if paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
-
                                 <span class="mini-step {% if paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
-
                                 <span class="mini-step {% if paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
-
                                 <span class="mini-step {% if paw.factura %}done{% endif %}"></span>
                             </div>
                         {% endwith %}
@@ -205,7 +286,7 @@
 
                 {% empty %}
                 <tr>
-                    <td colspan="10">No hay PAW creados.</td>
+                    <td colspan="13">No hay PAW creados.</td>
                 </tr>
                 {% endfor %}
             </tbody>
