@@ -301,6 +301,7 @@
                         <th>Req.</th>
                         <th>Disp.</th>
                         <th>A Comprar</th>
+                        <th style="min-width:220px; max-width:260px;">Observaciones BOM</th>
                         <th>Proveedor</th>
                         <th>P.Unit</th>
                         <th>Tipo Pago</th>
@@ -332,6 +333,11 @@
 
                         <td>
                             <strong>{{ form.instance.cantidad_a_comprar }}</strong>
+                        </td>
+
+                        
+                        <td style="min-width:220px; max-width:260px; white-space:normal; word-break:break-word; font-size:13px; color:#475569;">
+                                {{ form.instance.bom_item.observaciones|default:"-" }}
                         </td>
 
                         <td style="min-width:180px;">
