@@ -58,9 +58,22 @@ def crear_bom_desde_ot(request, ot_numero):
 @login_required
 def bom_detail(request, bom_id):
     bom = get_object_or_404(
-        Bom.objects.select_related("workorder", "template"),
+        Bom.objects.select_related("workorder", "template").prefetch_related("items"),
         id=bom_id
     )
+
+    if request.method == "POST" and bom.estado == Bom.Estado.BORRADOR:
+        for item in bom.items.all():
+            cantidad = request.POST.get(f"cantidad_solicitada_{item.id}")
+            observacion = request.POST.get(f"observaciones_{item.id}", "")
+
+            if cantidad is not None:
+                item.cantidad_solicitada = cantidad or 0
+                item.observaciones = observacion
+                item.save(update_fields=["cantidad_solicitada", "observaciones"])
+
+        return redirect("bom_detail", bom_id=bom.id)
+
     return render(request, "bom/bom_detail.html", {"bom": bom})
 
 
@@ -78,6 +91,27 @@ def agregar_item_bom(request, bom_id):
             cantidad_solicitada=request.POST.get("cantidad_solicitada") or 0,
             observaciones=request.POST.get("observaciones", ""),
         )
+        nuevo_item = BomItem.objects.create(
+            bom=bom,
+            plano=request.POST.get("plano", ""),
+            codigo=request.POST.get("codigo", ""),
+            descripcion=request.POST.get("descripcion", ""),
+            unidad=request.POST.get("unidad", ""),
+            cantidad_estandar=request.POST.get("cantidad_estandar") or 0,
+            cantidad_solicitada=request.POST.get("cantidad_solicitada") or 0,
+            observaciones=request.POST.get("observaciones", ""),
+        )
+
+        compra = PurchaseRequest.objects.filter(bom=bom).first()
+
+        if compra:
+            PurchaseLine.objects.get_or_create(
+                request=compra,
+                bom_item=nuevo_item,
+                defaults={
+                    "descripcion": nuevo_item.descripcion,
+                }
+            )
         return redirect("agregar_item_bom", bom_id=bom.id)
 
     return render(request, "bom/agregar_item_bom.html", {"bom": bom})
