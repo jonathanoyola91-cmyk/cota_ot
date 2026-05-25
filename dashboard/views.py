@@ -5,11 +5,18 @@ from django.db.models import Sum
 
 from quotes.models import Quotation
 from paw_app.models import Paw
+from django.db.models import Q
 
 
 def dashboard_home(request):
     cotizaciones = Quotation.objects.all()
-    paws = Paw.objects.all().select_related("cotizacion", "creado_por")
+    paws = Paw.objects.select_related("cotizacion", "creado_por").exclude(
+        Q(estado_operativo__in=[
+            "EN_FACTURACION",
+            "FACTURADO",
+            "RADICADO",
+        ]) | Q(factura__isnull=False)
+    )
 
     total_cotizaciones = cotizaciones.count()
     cotizaciones_adjudicadas = cotizaciones.filter(estado="ADJUDICADA").count()

@@ -876,6 +876,18 @@
             Eliminar PAW
         </a>
         {% endif %}
+
+        {% if request.user.is_superuser or es_admin %}
+        <form method="post"
+              action="{% url 'cerrar_paw_antiguo' paw.id %}"
+              style="display:inline;"
+              onsubmit="return confirm('¿Seguro que desea cerrar este PAW antiguo y enviarlo al historial?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary">
+                Cerrar PAW antiguo
+            </button>
+        </form>
+        {% endif %}
     </div>
 
 </div>

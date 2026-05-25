@@ -34,6 +34,23 @@ def obtener_siguiente_numero_paw():
     return str(siguiente)
 
 @login_required
+def cerrar_paw_antiguo(request, paw_id):
+    if not tiene_rol(request.user, ["ADMIN"]):
+        messages.error(request, "No tienes permiso para cerrar PAW antiguos.")
+        return redirect("paw_detail", paw_id=paw_id)
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+        paw.estado_operativo = "FACTURADO"
+        paw.save(update_fields=["estado_operativo", "actualizado_en"])
+
+        messages.success(request, f"PAW {paw.numero_paw} cerrado y enviado al historial.")
+        return redirect("paw_historial")
+
+    return redirect("paw_detail", paw_id=paw.id)
+
+@login_required
 def paw_historial(request):
     query = request.GET.get("q", "").strip()
     estado = request.GET.get("estado", "").strip()

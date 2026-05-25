@@ -12,4 +12,5 @@ urlpatterns = [
     path("eliminar/<int:paw_id>/", views.eliminar_paw, name="eliminar_paw"),
     path("<int:paw_id>/actualizar-gestion/", views.actualizar_gestion_paw, name="actualizar_gestion_paw"),
     path("historial/", views.paw_historial, name="paw_historial"),
+    path("<int:paw_id>/cerrar-antiguo/", views.cerrar_paw_antiguo, name="cerrar_paw_antiguo"),
 ]
