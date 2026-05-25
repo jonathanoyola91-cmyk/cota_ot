@@ -100,7 +100,9 @@ def agregar_item_bom(request, bom_id):
                 request=compra,
                 bom_item=nuevo_item,
                 defaults={
+                    "codigo": nuevo_item.codigo,
                     "descripcion": nuevo_item.descripcion,
+                    "cantidad_requerida": nuevo_item.cantidad_solicitada,
                 }
             )
 
@@ -165,19 +167,33 @@ def enviar_bom_compras(request, bom_id):
             paw.estado_operativo = "EN_COMPRAS"
             paw.save(update_fields=["estado_operativo"])
 
-        for item in bom.items.all():
+        items_bom = bom.items.all()
+        ids_bom_actuales = list(items_bom.values_list("id", flat=True))
+
+        # Eliminar de compras líneas que ya no existen en el BOM actual
+        PurchaseLine.objects.filter(request=compra).exclude(
+            bom_item_id__in=ids_bom_actuales
+        ).delete()
+
+        for item in items_bom:
             linea, created = PurchaseLine.objects.get_or_create(
                 request=compra,
                 bom_item=item,
                 defaults={
+                    "codigo": item.codigo,
                     "descripcion": item.descripcion,
+                    "cantidad_requerida": item.cantidad_solicitada,
                 }
             )
 
-            # 🔁 actualizar si ya existe
-            if not created:
-                linea.descripcion = item.descripcion
-                linea.save(update_fields=["descripcion"])
+            linea.codigo = item.codigo
+            linea.descripcion = item.descripcion
+            linea.cantidad_requerida = item.cantidad_solicitada
+            linea.save(update_fields=[
+                "codigo",
+                "descripcion",
+                "cantidad_requerida",
+            ])
 
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
