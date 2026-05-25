@@ -33,6 +33,31 @@ def obtener_siguiente_numero_paw():
 
     return str(siguiente)
 
+@login_required
+def paw_historial(request):
+    query = request.GET.get("q", "")
+
+    paws = Paw.objects.all()
+
+    if query:
+        paws = paws.filter(
+            numero_paw__icontains=query
+        ) | paws.filter(
+            cliente__icontains=query
+        )
+
+    paws = paws.filter(
+        estado_operativo__in=[
+            "EN_FACTURACION",
+            "FACTURADO",
+            "RADICADO",
+        ]
+    ).order_by("-actualizado_en")
+
+    return render(request, "paw_app/paw_historial.html", {
+        "paws": paws,
+        "query": query
+    })
 
 @login_required
 def cambiar_tipo_operacion(request, paw_id):
@@ -63,12 +88,35 @@ def cambiar_tipo_operacion(request, paw_id):
 
 @login_required
 def paw_list(request):
-    paws = Paw.objects.select_related("cotizacion", "creado_por").order_by("-creado_en")
+    query = request.GET.get("q", "")
 
-    if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
-        paws = paws.filter(tipo_operacion=Paw.TipoOperacion.SERVICIO_CAMPO)
+    paws = Paw.objects.select_related("cotizacion", "creado_por")
 
-    return render(request, "paw_app/paw_list.html", {"paws": paws})
+    # 🔎 FILTRO
+    if query:
+        paws = paws.filter(
+            numero_paw__icontains=query
+        ) | paws.filter(
+            cliente__icontains=query
+        ) | paws.filter(
+            campo__icontains=query
+        ) | paws.filter(
+            nombre_paw__icontains=query
+        )
+
+    # 🚫 EXCLUIR HISTORIAL (los ya avanzados)
+    paws = paws.exclude(
+        estado_operativo__in=[
+            "EN_FACTURACION",
+            "FACTURADO",
+            "RADICADO",
+        ]
+    ).order_by("criticidad", "estado_gestion", "-creado_en")
+
+    return render(request, "paw_app/paw_list.html", {
+        "paws": paws,
+        "query": query
+    })
 
 @login_required
 def actualizar_gestion_paw(request, paw_id):

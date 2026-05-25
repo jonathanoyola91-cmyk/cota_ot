@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from core.roles import tiene_rol
 from .forms import ClienteForm, QuotationForm
 from .models import Cliente, Quotation
-
+from django.db.models import Q
 
 # Consecutivos iniciales por empresa.
 # Si ya existe una cotización mayor en base de datos, el sistema continúa desde esa.
@@ -73,7 +73,19 @@ def lista_cotizaciones(request):
         messages.error(request, "No tienes acceso a Cotizaciones.")
         return redirect("/")
 
-    cotizaciones = Quotation.objects.all().order_by("-id")
+    query = request.GET.get("q", "")
+
+    cotizaciones = Quotation.objects.all()
+
+    # 🔍 BUSCADOR
+    if query:
+        cotizaciones = cotizaciones.filter(
+            Q(numero_cotizacion__icontains=query) |
+            Q(nombre_cotizacion__icontains=query) |
+            Q(cliente__icontains=query)
+        )
+
+    cotizaciones = cotizaciones.order_by("-id")
 
     total = cotizaciones.count()
     evaluacion = cotizaciones.filter(estado=Quotation.Estado.EVALUACION).count()
@@ -96,8 +108,8 @@ def lista_cotizaciones(request):
         "valor_adjudicado": valor_adjudicado,
         "con_paw": con_paw,
         "sin_paw": sin_paw,
+        "query": query,
     })
-
 
 @login_required
 def crear_cotizacion(request):

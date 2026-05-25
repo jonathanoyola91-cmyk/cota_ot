@@ -133,6 +133,14 @@
 <div class="panel">
 
     <div class="quote-panel-header">
+        <form method="get" style="display:flex; gap:10px; margin-top:10px;">
+    <input type="text" name="q"
+           placeholder="Buscar cotización, cliente..."
+           value="{{ query }}"
+           style="padding:8px; width:280px;">
+    
+    <button class="btn">Buscar</button>
+</form>
         <div>
             <h3>Listado de Cotizaciones</h3>
             <p>Control comercial, estado de adjudicación y generación de PAW.</p>

@@ -15,13 +15,18 @@
 <a class="btn" href="{% url 'agregar_item_bom' bom.id %}">Agregar ítem manual</a>
 <br><br>
 
-{% if bom.estado == "BORRADOR" %}
 <form method="post" action="{% url 'enviar_bom_compras' bom.id %}" style="display:inline;">
     {% csrf_token %}
-    <button class="btn">Enviar a compras</button>
+    
+    {% if bom.estado == "BORRADOR" %}
+        <button class="btn">Enviar a compras</button>
+    {% else %}
+        <button class="btn btn-warning">Reenviar actualización a compras</button>
+    {% endif %}
 </form>
-{% else %}
-<span class="badge">Enviado a compras ✅</span>
+
+{% if bom.estado != "BORRADOR" %}
+    <span class="badge">Enviado a compras ✅</span>
 {% endif %}
 <form method="post">
     {% csrf_token %}

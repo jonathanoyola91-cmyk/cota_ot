@@ -165,13 +165,14 @@ def enviar_bom_compras(request, bom_id):
             paw.estado_operativo = "EN_COMPRAS"
             paw.save(update_fields=["estado_operativo"])
 
-        if created:
-            for item in bom.items.all():
-                PurchaseLine.objects.create(
-                    request=compra,
-                    bom_item=item,
-                    descripcion=item.descripcion,
-                )
+        for item in bom.items.all():
+            PurchaseLine.objects.get_or_create(
+                request=compra,
+                bom_item=item,
+                defaults={
+                    "descripcion": item.descripcion,
+                }
+            )
 
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
