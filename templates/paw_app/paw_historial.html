@@ -121,37 +121,144 @@
         margin-bottom: 4px;
     }
 
+
+
+    .paw-toolbar {
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        gap:12px;
+        flex-wrap:wrap;
+        margin-bottom:14px;
+    }
+
+    .paw-filter {
+        display:grid;
+        grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(150px, .7fr)) auto auto;
+        gap:10px;
+        align-items:end;
+        background:#f8fafc;
+        border:1px solid #e2e8f0;
+        border-radius:16px;
+        padding:12px;
+        margin-bottom:16px;
+    }
+
+    .paw-filter label {
+        display:block;
+        font-size:12px;
+        font-weight:800;
+        color:#475569;
+        margin-bottom:5px;
+    }
+
+    .paw-filter input,
+    .paw-filter select {
+        width:100%;
+        border:1px solid #cbd5e1;
+        border-radius:11px;
+        padding:9px 10px;
+        font-size:13px;
+        color:#0f172a;
+        background:#fff;
+    }
+
+    .btn-light {
+        display:inline-block;
+        background:#ffffff;
+        color:#334155;
+        border:1px solid #cbd5e1;
+        padding:10px 13px;
+        border-radius:11px;
+        font-weight:900;
+        text-decoration:none;
+        white-space:nowrap;
+    }
+
+    .btn-primary-filter {
+        border:none;
+        background:#2563eb;
+        color:#fff;
+        padding:11px 14px;
+        border-radius:11px;
+        font-weight:900;
+        cursor:pointer;
+        white-space:nowrap;
+    }
+
+    .btn-primary-filter:hover { background:#1d4ed8; }
+
+    .empty-state {
+        padding:22px;
+        text-align:center;
+        color:#64748b;
+        font-weight:700;
+    }
+
+    @media (max-width: 1100px) {
+        .paw-filter { grid-template-columns:1fr 1fr; }
+    }
+
     @media (max-width: 900px) {
         .meeting-help {
             grid-template-columns: 1fr;
         }
+
+        .paw-filter { grid-template-columns:1fr; }
     }
 </style>
 
 <div class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+    <div class="paw-toolbar">
         <div>
-            <h3 style="margin:0;">PAW creados</h3>
+            <h3 style="margin:0;">Historial PAW</h3>
             <p style="margin:6px 0 0;color:#64748b;">
-                Seguimiento general del estado operativo y control para reunión de operaciones.
+                PAW enviados a facturación, radicados o facturados. No aparecen en el dashboard operativo.
             </p>
         </div>
+
+        <a class="btn-light" href="{% url 'paw_list' %}">← Volver a PAW activos</a>
     </div>
 
-    <div class="meeting-help">
-        <div class="meeting-help-card">
-            <strong>Criticidad</strong>
-            Alta, media o baja según prioridad de atención.
+    <form method="get" class="paw-filter">
+        <div>
+            <label>Buscar</label>
+            <input type="text" name="q" value="{{ query }}" placeholder="PAW, cliente, campo o cotización">
         </div>
-        <div class="meeting-help-card">
-            <strong>Gestión</strong>
-            Asignado, en proceso o pendiente para seguimiento manual.
+
+        <div>
+            <label>Estado</label>
+            <select name="estado">
+                <option value="">Todos</option>
+                <option value="EN_FACTURACION" {% if estado == "EN_FACTURACION" %}selected{% endif %}>En facturación</option>
+                <option value="FACTURADO" {% if estado == "FACTURADO" %}selected{% endif %}>Facturado</option>
+                <option value="RADICADO" {% if estado == "RADICADO" %}selected{% endif %}>Radicado</option>
+            </select>
         </div>
-        <div class="meeting-help-card">
-            <strong>Uso en reunión</strong>
-            Alta + pendiente debe revisarse primero.
+
+        <div>
+            <label>Criticidad</label>
+            <select name="criticidad">
+                <option value="">Todas</option>
+                {% for value, label in criticidades %}
+                    <option value="{{ value }}" {% if criticidad == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
         </div>
-    </div>
+
+        <div>
+            <label>Gestión</label>
+            <select name="gestion">
+                <option value="">Todas</option>
+                {% for value, label in estados_gestion %}
+                    <option value="{{ value }}" {% if gestion == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit" class="btn-primary-filter">Filtrar</button>
+        <a class="btn-light" href="{% url 'paw_historial' %}">Limpiar</a>
+    </form>
 
     <div class="paw-table-wrap">
         <table>
@@ -286,7 +393,7 @@
 
                 {% empty %}
                 <tr>
-                    <td colspan="13">No hay PAW creados.</td>
+                    <td colspan="13" class="empty-state">No hay PAW para mostrar con los filtros aplicados.</td>
                 </tr>
                 {% endfor %}
             </tbody>

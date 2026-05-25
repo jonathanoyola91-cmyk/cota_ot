@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import IntegrityError, transaction
-from django.db.models import Max
+from django.db.models import Q
 
 from core.roles import tiene_rol
 from .models import Paw, Criticidad, EstadoGestion
@@ -35,28 +35,55 @@ def obtener_siguiente_numero_paw():
 
 @login_required
 def paw_historial(request):
-    query = request.GET.get("q", "")
+    query = request.GET.get("q", "").strip()
+    estado = request.GET.get("estado", "").strip()
+    criticidad = request.GET.get("criticidad", "").strip()
+    gestion = request.GET.get("gestion", "").strip()
 
-    paws = Paw.objects.all()
+    estados_historial = [
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    ]
+
+    # Historial: PAW que ya salieron del tablero operativo.
+    # También se incluyen los que tienen factura asociada, aunque el estado no se haya sincronizado.
+    paws = (
+        Paw.objects
+        .select_related("cotizacion", "creado_por")
+        .filter(Q(estado_operativo__in=estados_historial) | Q(factura__isnull=False))
+    )
 
     if query:
         paws = paws.filter(
-            numero_paw__icontains=query
-        ) | paws.filter(
-            cliente__icontains=query
+            Q(numero_paw__icontains=query) |
+            Q(nombre_paw__icontains=query) |
+            Q(cliente__icontains=query) |
+            Q(campo__icontains=query) |
+            Q(cotizacion__numero_cotizacion__icontains=query) |
+            Q(cotizacion__nombre_cotizacion__icontains=query)
         )
 
-    paws = paws.filter(
-        estado_operativo__in=[
-            "EN_FACTURACION",
-            "FACTURADO",
-            "RADICADO",
-        ]
-    ).order_by("-actualizado_en")
+    if estado:
+        paws = paws.filter(estado_operativo=estado)
+
+    if criticidad:
+        paws = paws.filter(criticidad=criticidad)
+
+    if gestion:
+        paws = paws.filter(estado_gestion=gestion)
+
+    paws = paws.order_by("-actualizado_en")
 
     return render(request, "paw_app/paw_historial.html", {
         "paws": paws,
-        "query": query
+        "query": query,
+        "estado": estado,
+        "criticidad": criticidad,
+        "gestion": gestion,
+        "estados_historial": estados_historial,
+        "criticidades": Criticidad.choices,
+        "estados_gestion": EstadoGestion.choices,
     })
 
 @login_required
@@ -88,34 +115,55 @@ def cambiar_tipo_operacion(request, paw_id):
 
 @login_required
 def paw_list(request):
-    query = request.GET.get("q", "")
+    query = request.GET.get("q", "").strip()
+    estado = request.GET.get("estado", "").strip()
+    criticidad = request.GET.get("criticidad", "").strip()
+    gestion = request.GET.get("gestion", "").strip()
+
+    estados_historial = [
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    ]
 
     paws = Paw.objects.select_related("cotizacion", "creado_por")
 
-    # 🔎 FILTRO
+    # Dashboard limpio: no mostrar PAW ya enviados a facturación, radicados o facturados.
+    # También se excluyen los que ya tengan factura asociada.
+    paws = paws.exclude(
+        Q(estado_operativo__in=estados_historial) | Q(factura__isnull=False)
+    )
+
+    # Filtro tipo cotizaciones: busca por PAW, nombre, cliente, campo y cotización.
     if query:
         paws = paws.filter(
-            numero_paw__icontains=query
-        ) | paws.filter(
-            cliente__icontains=query
-        ) | paws.filter(
-            campo__icontains=query
-        ) | paws.filter(
-            nombre_paw__icontains=query
+            Q(numero_paw__icontains=query) |
+            Q(nombre_paw__icontains=query) |
+            Q(cliente__icontains=query) |
+            Q(campo__icontains=query) |
+            Q(cotizacion__numero_cotizacion__icontains=query) |
+            Q(cotizacion__nombre_cotizacion__icontains=query)
         )
 
-    # 🚫 EXCLUIR HISTORIAL (los ya avanzados)
-    paws = paws.exclude(
-        estado_operativo__in=[
-            "EN_FACTURACION",
-            "FACTURADO",
-            "RADICADO",
-        ]
-    ).order_by("criticidad", "estado_gestion", "-creado_en")
+    if estado:
+        paws = paws.filter(estado_operativo=estado)
+
+    if criticidad:
+        paws = paws.filter(criticidad=criticidad)
+
+    if gestion:
+        paws = paws.filter(estado_gestion=gestion)
+
+    paws = paws.order_by("criticidad", "estado_gestion", "-creado_en")
 
     return render(request, "paw_app/paw_list.html", {
         "paws": paws,
-        "query": query
+        "query": query,
+        "estado": estado,
+        "criticidad": criticidad,
+        "gestion": gestion,
+        "criticidades": Criticidad.choices,
+        "estados_gestion": EstadoGestion.choices,
     })
 
 @login_required
