@@ -507,7 +507,12 @@ def paw_detail(request, pk):
     flujo_entrega_ok = _tiene_entrega_taller(compra)
 
     puede_enviar_finanzas = flujo_tiene_contado and compra.estado != "CERRADA"
-    puede_enviar_aprobacion = flujo_tiene_credito and flujo_finanzas_ok and compra.estado != "CERRADA"
+    puede_enviar_aprobacion = (
+        flujo_finanzas_ok
+        and not flujo_aprobacion_ok
+        and not flujo_recepcion_creada
+        and compra.estado != "CERRADA"
+    )
     puede_enviar_inventario = flujo_aprobacion_ok and not flujo_recepcion_creada and compra.estado != "CERRADA"
     puede_registrar_recepcion = flujo_aprobacion_ok and flujo_recepcion_creada and not flujo_recepcion_ok and compra.estado != "CERRADA"
     puede_entregar_taller = flujo_recepcion_ok and not flujo_entrega_ok and compra.estado != "CERRADA"
@@ -518,7 +523,7 @@ def paw_detail(request, pk):
         siguiente_paso = "Compra cerrada"
     elif flujo_tiene_contado and not flujo_finanzas_ok:
         siguiente_paso = "Enviar a finanzas y esperar aprobación/pago"
-    elif flujo_tiene_credito and not flujo_aprobacion_ok:
+    elif flujo_finanzas_ok and not flujo_aprobacion_ok:
         siguiente_paso = "Enviar a aprobación gerencia"
     elif not flujo_recepcion_creada:
         siguiente_paso = "Enviar a inventario"
@@ -635,10 +640,17 @@ def enviar_aprobacion(request, pk):
         messages.error(request, "No puedes modificar una compra cerrada.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if not _tiene_lineas_credito(compra):
+    lineas_reales = compra.lineas.filter(
+        cantidad_requerida__gt=0,
+        cantidad_a_comprar__gt=0,
+        proveedor__isnull=False,
+        precio_unitario__isnull=False,
+    ).exists()
+
+    if not lineas_reales:
         messages.error(
             request,
-            "No hay líneas de crédito para enviar a Aprobación."
+            "No hay líneas de compra diligenciadas para enviar a Aprobación."
         )
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
