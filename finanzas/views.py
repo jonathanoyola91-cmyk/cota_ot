@@ -461,12 +461,24 @@ def marcar_pagado(request, linea_id):
 
     try:
         linea.mark_paid(request.user)
+         
+        approval = linea.approval
 
-        paw = linea.approval.purchase_request.bom.workorder.paw
-        if paw:
-            paw.estado_operativo = "PAGO_OK"
-            paw.save(update_fields=["estado_operativo"])
+        lineas_pendientes = approval.lineas.filter(pagado=False).exists()
 
+        if not lineas_pendientes:
+            approval.estado = "APROBADO"
+            approval.save(update_fields=["estado", "actualizado_en"])
+
+            compra = approval.purchase_request
+            compra.estado = "EN_REVISION"
+            compra.save(update_fields=["estado", "actualizado_en"])
+
+            paw = compra.bom.workorder.paw
+            if paw:
+                paw.estado_operativo = "PAGO_OK"
+                paw.save(update_fields=["estado_operativo"])
+                
         messages.success(request, "Pago registrado correctamente.")
 
     except Exception as e:

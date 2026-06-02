@@ -119,6 +119,36 @@ def _tiene_entrega_taller(compra):
 
     return WorkshopDelivery.objects.filter(purchase_request=compra).exists()
 
+@require_POST
+@login_required
+def aprobar_gerencia_compra(request, pk):
+    if not tiene_rol(request.user, ["GERENTE", "ADMIN"]):
+        messages.error(request, "Solo gerencia puede aprobar esta compra.")
+        return redirect("/")
+
+    from aprobacion.models import PurchaseApproval
+
+    compra = get_object_or_404(PurchaseRequest, pk=pk)
+
+    aprobacion, created = PurchaseApproval.objects.get_or_create(
+        purchase_request=compra,
+        defaults={
+            "estado": PurchaseApproval.Estado.PENDIENTE,
+            "enviado_por": request.user,
+        },
+    )
+
+    aprobacion.estado = PurchaseApproval.Estado.APROBADO
+    aprobacion.aprobado_por = request.user
+    aprobacion.save()
+
+    paw = _get_paw_from_compra(compra)
+    if paw:
+        paw.estado_operativo = "APROBADO_GERENCIA"
+        paw.save(update_fields=["estado_operativo"])
+
+    messages.success(request, "Compra aprobada por gerencia. Ya puede enviarse a Inventario.")
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
 
 @login_required
 def dashboard(request):
@@ -556,6 +586,7 @@ def paw_detail(request, pk):
         "puede_entregar_taller": puede_entregar_taller,
         "puede_cerrar_compra": puede_cerrar_compra,
         "siguiente_paso": siguiente_paso,
+        "puede_gerencia": tiene_rol(request.user, ["GERENTE", "ADMIN"]),
     })
 
 

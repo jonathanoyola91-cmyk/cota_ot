@@ -211,6 +211,15 @@
                     1. Enviar a finanzas
                 </button>
             </form>
+            
+            {% if flujo_finanzas_ok and not flujo_aprobacion_ok and puede_gerencia %}
+            <form method="post" action="{% url 'compras_oil:aprobar_gerencia_compra' compra.id %}">
+                {% csrf_token %}
+                <button class="btn" type="submit">
+                    Aprobar gerencia
+                </button>
+            </form>
+            {% endif %}
 
             <form method="post" action="{% url 'compras_oil:enviar_aprobacion' compra.pk %}">
                 {% csrf_token %}
