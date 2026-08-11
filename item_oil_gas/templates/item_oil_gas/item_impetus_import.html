@@ -1,0 +1,64 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}
+Importar Items IMPETUS
+{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+
+    <h2>
+        Importar Items IMPETUS
+    </h2>
+
+    <p style="color:#64748b;">
+        Cargue el catálogo maestro de partes número IMPETUS
+        mediante un archivo Excel.
+    </p>
+
+    <br>
+
+
+    <a
+        class="btn btn-secondary"
+        href="{% url 'item_oil_gas:item_impetus_template' %}"
+    >
+        Descargar plantilla Excel
+    </a>
+
+
+    <br><br>
+
+
+    <form
+        method="post"
+        enctype="multipart/form-data"
+    >
+
+        {% csrf_token %}
+
+        {{ form.as_p }}
+
+        <br>
+
+        <button
+            type="submit"
+            class="btn"
+        >
+            Importar catálogo
+        </button>
+
+
+        <a
+            class="btn btn-secondary"
+            href="{% url 'item_oil_gas:item_impetus_list' %}"
+        >
+            Volver
+        </a>
+
+    </form>
+
+</div>
+
+{% endblock %}

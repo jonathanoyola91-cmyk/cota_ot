@@ -4,11 +4,44 @@ from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 
-from .models import Item
+from django.http import HttpResponse
+from .models import Item, ItemImpetus
 from .forms import ItemForm, ItemImportForm
+
+from django.db.models import Q
 
 import openpyxl
 
+class ItemImpetusListView(ListView):
+
+    model = ItemImpetus
+
+    template_name = (
+        "item_oil_gas/item_impetus_list.html"
+    )
+
+    context_object_name = "items"
+
+    paginate_by = 50
+
+    def get_queryset(self):
+
+        qs = super().get_queryset()
+
+        q = self.request.GET.get(
+            "q",
+            ""
+        ).strip()
+
+        if q:
+
+            qs = qs.filter(
+                Q(codigo__icontains=q)
+                |
+                Q(descripcion__icontains=q)
+            )
+
+        return qs
 
 class ItemListView(ListView):
     model = Item
@@ -49,6 +82,229 @@ class ItemDeleteView(DeleteView):
     template_name = "item_oil_gas/item_confirm_delete.html"
     success_url = reverse_lazy("item_oil_gas:item_list")
 
+def download_template_impetus(request):
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+
+    ws.title = "Items IMPETUS"
+
+    headers = [
+        "Código",
+        "Descripción",
+        "Unidad Medida",
+        "Clasificacion",
+        "Grupo Inventario",
+    ]
+
+    ws.append(headers)
+
+    ws.append([
+        "IMP-0001",
+        "ITEM DE EJEMPLO IMPETUS",
+        "UND",
+        "REPUESTOS",
+        "CAMARA DE EMPUJE",
+    ])
+
+    response = HttpResponse(
+        content_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
+    )
+
+    response[
+        "Content-Disposition"
+    ] = (
+        'attachment; filename="plantilla_items_impetus.xlsx"'
+    )
+
+    wb.save(response)
+
+    return response
+
+def import_items_impetus(request):
+    """
+    Importa catálogo IMPETUS desde Excel.
+    Hace UPSERT por código:
+    - si existe, actualiza
+    - si no existe, crea
+    """
+
+    if request.method == "POST":
+
+        form = ItemImportForm(
+            request.POST,
+            request.FILES
+        )
+
+        if form.is_valid():
+
+            archivo = form.cleaned_data["archivo"]
+
+            try:
+
+                wb = openpyxl.load_workbook(
+                    archivo
+                )
+
+                ws = wb[
+                    wb.sheetnames[0]
+                ]
+
+                raw_headers = [
+                    ws.cell(
+                        row=1,
+                        column=c
+                    ).value
+                    for c in range(
+                        1,
+                        ws.max_column + 1
+                    )
+                ]
+
+                headers = [
+                    (h or "").strip()
+                    for h in raw_headers
+                ]
+
+                expected = {
+                    "Código": "codigo",
+                    "Descripción": "descripcion",
+                    "Unidad Medida": "unidad_medida",
+                    "Clasificacion": "clasificacion",
+                    "Grupo Inventario": "grupo_inventario",
+                }
+
+                col_idx = {
+                    headers[i]: i + 1
+                    for i in range(
+                        len(headers)
+                    )
+                    if headers[i]
+                }
+
+                missing = [
+                    h
+                    for h in expected.keys()
+                    if h not in col_idx
+                ]
+
+                if missing:
+
+                    messages.error(
+                        request,
+                        f"Faltan columnas en el Excel: {', '.join(missing)}"
+                    )
+
+                    return redirect(
+                        "item_oil_gas:item_impetus_import"
+                    )
+
+                creados = 0
+                actualizados = 0
+                vacios = 0
+
+                with transaction.atomic():
+
+                    for r in range(
+                        2,
+                        ws.max_row + 1
+                    ):
+
+                        codigo = str(
+                            ws.cell(
+                                row=r,
+                                column=col_idx["Código"]
+                            ).value or ""
+                        ).strip()
+
+                        if not codigo:
+
+                            vacios += 1
+                            continue
+
+                        data = {
+
+                            "descripcion": str(
+                                ws.cell(
+                                    row=r,
+                                    column=col_idx["Descripción"]
+                                ).value or ""
+                            ).strip(),
+
+                            "unidad_medida": str(
+                                ws.cell(
+                                    row=r,
+                                    column=col_idx["Unidad Medida"]
+                                ).value or ""
+                            ).strip(),
+
+                            "clasificacion": str(
+                                ws.cell(
+                                    row=r,
+                                    column=col_idx["Clasificacion"]
+                                ).value or ""
+                            ).strip(),
+
+                            "grupo_inventario": str(
+                                ws.cell(
+                                    row=r,
+                                    column=col_idx["Grupo Inventario"]
+                                ).value or ""
+                            ).strip(),
+                        }
+
+                        obj, created = (
+                            ItemImpetus.objects.update_or_create(
+                                codigo=codigo,
+                                defaults=data,
+                            )
+                        )
+
+                        if created:
+                            creados += 1
+                        else:
+                            actualizados += 1
+
+                messages.success(
+                    request,
+                    (
+                        "Importación IMPETUS lista. "
+                        f"Creados: {creados} | "
+                        f"Actualizados: {actualizados} | "
+                        f"Filas sin código: {vacios}"
+                    )
+                )
+
+                return redirect(
+                    "item_oil_gas:item_impetus_list"
+                )
+
+            except Exception as e:
+
+                messages.error(
+                    request,
+                    f"Error importando Excel IMPETUS: {e}"
+                )
+
+                return redirect(
+                    "item_oil_gas:item_impetus_import"
+                )
+
+    else:
+
+        form = ItemImportForm()
+
+    return render(
+        request,
+        "item_oil_gas/item_impetus_import.html",
+        {
+            "form": form
+        }
+    )
 
 def import_items(request):
     """
@@ -126,8 +382,7 @@ def import_items(request):
 
     return render(request, "item_oil_gas/item_import.html", {"form": form})
 
-from django.http import HttpResponse
-import openpyxl
+
 
 
 def download_template(request):

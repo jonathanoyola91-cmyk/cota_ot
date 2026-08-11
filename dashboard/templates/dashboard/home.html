@@ -490,6 +490,20 @@ window.addEventListener("load", function(){
     </a>
     {% endif %}
 
+    {% if es_inventario or es_ingenieria or es_gerente or request.user.is_superuser %}
+
+<a href="{% url 'item_oil_gas:item_list' %}"
+   class="{% if '/item-oil-gas/' in request.path and '/impetus/' not in request.path %}active{% endif %}">
+    📦 Items Oil & Gas
+</a>
+
+<a href="{% url 'item_oil_gas:item_impetus_list' %}"
+   class="{% if '/item-oil-gas/impetus/' in request.path %}active{% endif %}">
+    🔧 Items IMPETUS
+</a>
+
+{% endif %}
+
     {% if request.user.is_superuser %}
     <a href="/admin/"
        class="{% if '/admin/' in request.path %}active{% endif %}">

@@ -1,102 +1,806 @@
 {% extends "dashboard/home.html" %}
 
-{% block page_title %}Agregar ítem BOM{% endblock %}
+{% block page_title %}
+Agregar ítem BOM
+{% endblock %}
+
 
 {% block content %}
+
+
 <div class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+
+    <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-bottom:18px;
+        gap:20px;
+        flex-wrap:wrap;
+    ">
+
         <div>
-            <h2>Agregar ítem manual al BOM</h2>
-            <p style="color:#64748b;">OT #{{ bom.workorder.numero }} · {{ bom.workorder.cliente }}</p>
+
+            <h2>
+                Agregar ítem al BOM
+            </h2>
+
+            <p style="color:#64748b;">
+                OT #{{ bom.workorder.numero }}
+                ·
+                {{ bom.workorder.cliente }}
+            </p>
+
+
+            {% if bom.workorder.paw %}
+
+                <p>
+                    PAW:
+                    <strong>
+                        {{ bom.workorder.paw.numero_paw }}
+                    </strong>
+                </p>
+
+            {% endif %}
+
+
+            {% if bom.workorder.paw.cotizacion %}
+
+                <p>
+
+                    Cotización:
+
+                    <strong>
+                        {{ bom.workorder.paw.cotizacion.numero_cotizacion }}
+                    </strong>
+
+                    &nbsp; · &nbsp;
+
+                    Empresa:
+
+                    <strong>
+                        {{ bom.workorder.paw.cotizacion.get_empresa_display }}
+                    </strong>
+
+                </p>
+
+            {% endif %}
+
+
+            {% if catalogo_nombre %}
+
+                <p style="
+                    margin-top:10px;
+                    padding:8px 12px;
+                    background:#f1f5f9;
+                    border-radius:6px;
+                    display:inline-block;
+                ">
+
+                    Catálogo activo:
+
+                    <strong>
+                        {{ catalogo_nombre }}
+                    </strong>
+
+                </p>
+
+            {% endif %}
+
         </div>
 
-        <a class="btn btn-secondary" href="{% url 'bom_detail' bom.id %}">Volver al BOM</a>
+
+        <a
+            class="btn btn-secondary"
+            href="{% url 'bom_detail' bom.id %}"
+        >
+            Volver al BOM
+        </a>
+
     </div>
 
-    <form method="post">
+
+    <form
+        method="post"
+        id="form-item"
+    >
+
         {% csrf_token %}
 
-        <div class="cards">
-            <div class="card">
-                <small>Plano</small>
-                <input class="form-control" type="text" name="plano">
+
+        <!-- ======================================= -->
+        <!-- BUSCADOR -->
+        <!-- ======================================= -->
+
+        <div
+            class="card"
+            style="margin-bottom:20px;"
+        >
+
+            <h3>
+                Buscar parte número
+            </h3>
+
+            <p style="color:#64748b;">
+
+                Busque por parte número
+                o descripción.
+
+                {% if catalogo_nombre %}
+
+                    El sistema está consultando
+                    automáticamente el catálogo
+
+                    <strong>
+                        {{ catalogo_nombre }}
+                    </strong>.
+
+                {% endif %}
+
+            </p>
+
+
+            <input
+                type="text"
+                id="buscar-item"
+                class="form-control"
+                placeholder="Escriba parte número o descripción..."
+                autocomplete="off"
+            >
+
+
+            <input
+                type="hidden"
+                id="catalogo_id"
+                name="catalogo_id"
+            >
+
+
+            <div
+                id="resultados-items"
+                style="
+                    display:none;
+                    margin-top:5px;
+                    border:1px solid #dbe2ea;
+                    border-radius:5px;
+                    background:white;
+                    max-height:350px;
+                    overflow-y:auto;
+                "
+            >
             </div>
 
-            <div class="card">
-                <small>Código / Parte número</small>
-                <input class="form-control" type="text" name="codigo">
-            </div>
-
-            <div class="card">
-                <small>Descripción</small>
-                <input class="form-control" type="text" name="descripcion" required>
-            </div>
-
-            <div class="card">
-                <small>Unidad</small>
-                <input class="form-control" type="text" name="unidad">
-            </div>
-
-            <div class="card">
-                <small>Cant. estándar</small>
-                <input class="form-control" type="number" step="0.001" name="cantidad_estandar">
-            </div>
-
-            <div class="card">
-                <small>Cant. solicitada</small>
-                <input class="form-control" type="number" step="0.001" name="cantidad_solicitada">
-            </div>
-
-            <div class="card" style="grid-column:span 2;">
-                <small>Observaciones</small>
-                <input class="form-control" type="text" name="observaciones">
-            </div>
         </div>
 
-        <button class="btn">Agregar ítem</button>
+
+        <!-- ======================================= -->
+        <!-- INFORMACION ITEM -->
+        <!-- ======================================= -->
+
+        <div class="cards">
+
+
+            <div class="card">
+
+                <small>
+                    Parte número
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="codigo"
+                    id="codigo"
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Descripción
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="descripcion"
+                    id="descripcion"
+                    required
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Unidad
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="unidad"
+                    id="unidad"
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Clasificación
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="clasificacion"
+                    id="clasificacion"
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Grupo Inventario
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="grupo_inventario"
+                    id="grupo_inventario"
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Plano
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="plano"
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Cantidad estándar
+                </small>
+
+                <input
+                    class="form-control"
+                    type="number"
+                    step="0.001"
+                    name="cantidad_estandar"
+                    value="0"
+                >
+
+            </div>
+
+
+            <div class="card">
+
+                <small>
+                    Cantidad solicitada
+                </small>
+
+                <input
+                    class="form-control"
+                    type="number"
+                    step="0.001"
+                    name="cantidad_solicitada"
+                    value="1"
+                    required
+                >
+
+            </div>
+
+
+            <div
+                class="card"
+                style="grid-column:span 2;"
+            >
+
+                <small>
+                    Observaciones
+                </small>
+
+                <input
+                    class="form-control"
+                    type="text"
+                    name="observaciones"
+                >
+
+            </div>
+
+        </div>
+
+
+        <br>
+
+
+        <button
+            class="btn"
+            type="submit"
+        >
+            Agregar ítem
+        </button>
+
     </form>
+
 </div>
+
 
 <br>
 
+
+<!-- ======================================= -->
+<!-- ITEMS DEL BOM -->
+<!-- ======================================= -->
+
 <div class="panel">
-    <h3>Ítems agregados</h3>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Plano</th>
-                <th>Código</th>
-                <th>Descripción</th>
-                <th>Unidad</th>
-                <th>Cant. estándar</th>
-                <th>Cant. solicitada</th>
-                <th>Observaciones</th>
-                <th>Acciones</th>
-            </tr>
-        </thead>
+    <h3>
+        Ítems agregados
+    </h3>
 
-        <tbody>
-            {% for item in bom.items.all %}
-            <tr>
-                <td>{{ item.plano }}</td>
-                <td>{{ item.codigo }}</td>
-                <td>{{ item.descripcion }}</td>
-                <td>{{ item.unidad }}</td>
-                <td>{{ item.cantidad_estandar }}</td>
-                <td>{{ item.cantidad_solicitada }}</td>
-                <td>{{ item.observaciones }}</td>
-                <td>
-                    <a class="btn" href="{% url 'editar_item_bom' item.id %}">Editar</a>
-                    <a class="btn btn-secondary" href="{% url 'eliminar_item_bom' item.id %}">Eliminar</a>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="7">Todavía no hay ítems agregados.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+    <div style="overflow-x:auto;">
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Plano</th>
+
+                    <th>Parte número</th>
+
+                    <th>Descripción</th>
+
+                    <th>Unidad</th>
+
+                    <th>Clasificación</th>
+
+                    <th>Grupo Inventario</th>
+
+                    <th>Cant.</th>
+
+                    <th>Observaciones</th>
+
+                    <th>Acciones</th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+
+                {% for item in bom.items.all %}
+
+                    <tr>
+
+                        <td>
+                            {{ item.plano }}
+                        </td>
+
+                        <td>
+                            <strong>
+                                {{ item.codigo }}
+                            </strong>
+                        </td>
+
+                        <td>
+                            {{ item.descripcion }}
+                        </td>
+
+                        <td>
+                            {{ item.unidad }}
+                        </td>
+
+                        <td>
+                            {{ item.clasificacion }}
+                        </td>
+
+                        <td>
+                            {{ item.grupo_inventario }}
+                        </td>
+
+                        <td>
+                            {{ item.cantidad_solicitada }}
+                        </td>
+
+                        <td>
+                            {{ item.observaciones }}
+                        </td>
+
+                        <td>
+
+                            <a
+                                class="btn"
+                                href="{% url 'editar_item_bom' item.id %}"
+                            >
+                                Editar
+                            </a>
+
+                            <a
+                                class="btn btn-secondary"
+                                href="{% url 'eliminar_item_bom' item.id %}"
+                            >
+                                Eliminar
+                            </a>
+
+                        </td>
+
+                    </tr>
+
+
+                {% empty %}
+
+
+                    <tr>
+
+                        <td colspan="9">
+                            Todavía no hay ítems agregados.
+                        </td>
+
+                    </tr>
+
+
+                {% endfor %}
+
+
+            </tbody>
+
+        </table>
+
+    </div>
+
 </div>
+
+
+<script>
+
+const buscador =
+    document.getElementById(
+        "buscar-item"
+    );
+
+const resultados =
+    document.getElementById(
+        "resultados-items"
+    );
+
+const catalogoId =
+    document.getElementById(
+        "catalogo_id"
+    );
+
+let temporizador = null;
+
+
+
+buscador.addEventListener(
+    "input",
+    function () {
+
+        clearTimeout(
+            temporizador
+        );
+
+        const texto =
+            this.value.trim();
+
+
+        // Si modifica el buscador después
+        // de haber seleccionado algo,
+        // quitamos la selección anterior.
+
+        catalogoId.value = "";
+
+
+        if (texto.length < 2) {
+
+            resultados.style.display =
+                "none";
+
+            resultados.innerHTML =
+                "";
+
+            return;
+        }
+
+
+        temporizador = setTimeout(
+            function () {
+
+                buscarItems(
+                    texto
+                );
+
+            },
+            250
+        );
+
+    }
+);
+
+
+
+function buscarItems(texto) {
+
+    const url =
+        "{% url 'buscar_items_catalogo' bom.id %}"
+        +
+        "?q="
+        +
+        encodeURIComponent(
+            texto
+        );
+
+
+    fetch(url)
+
+        .then(
+            response => response.json()
+        )
+
+        .then(
+            data => {
+
+                resultados.innerHTML =
+                    "";
+
+
+                // ERROR
+
+                if (data.error) {
+
+                    resultados.innerHTML =
+                        `
+                        <div style="
+                            padding:12px;
+                            color:#b91c1c;
+                        ">
+                            ${data.error}
+                        </div>
+                        `;
+
+                    resultados.style.display =
+                        "block";
+
+                    return;
+                }
+
+
+                // SIN RESULTADOS
+
+                if (
+                    !data.items ||
+                    data.items.length === 0
+                ) {
+
+                    resultados.innerHTML =
+                        `
+                        <div style="
+                            padding:12px;
+                            color:#64748b;
+                        ">
+
+                            No se encontraron
+                            coincidencias en
+                            ${data.catalogo}.
+
+                        </div>
+                        `;
+
+                    resultados.style.display =
+                        "block";
+
+                    return;
+                }
+
+
+                // RESULTADOS
+
+                data.items.forEach(
+                    item => {
+
+                        const opcion =
+                            document.createElement(
+                                "div"
+                            );
+
+
+                        opcion.style.padding =
+                            "12px";
+
+                        opcion.style.cursor =
+                            "pointer";
+
+                        opcion.style.borderBottom =
+                            "1px solid #e2e8f0";
+
+
+                        opcion.innerHTML =
+                            `
+
+                            <div>
+
+                                <strong>
+                                    ${item.codigo}
+                                </strong>
+
+                            </div>
+
+                            <div>
+                                ${item.descripcion}
+                            </div>
+
+                            <small
+                                style="
+                                    color:#64748b;
+                                "
+                            >
+
+                                ${item.unidad || ""}
+
+                                &nbsp; · &nbsp;
+
+                                ${item.clasificacion || ""}
+
+                                &nbsp; · &nbsp;
+
+                                ${item.grupo_inventario || ""}
+
+                            </small>
+
+                            `;
+
+
+                        opcion.addEventListener(
+                            "mouseenter",
+                            function () {
+
+                                opcion.style.background =
+                                    "#f8fafc";
+
+                            }
+                        );
+
+
+                        opcion.addEventListener(
+                            "mouseleave",
+                            function () {
+
+                                opcion.style.background =
+                                    "white";
+
+                            }
+                        );
+
+
+                        opcion.addEventListener(
+                            "click",
+                            function () {
+
+                                seleccionarItem(
+                                    item
+                                );
+
+                            }
+                        );
+
+
+                        resultados.appendChild(
+                            opcion
+                        );
+
+                    }
+                );
+
+
+                resultados.style.display =
+                    "block";
+
+            }
+        )
+
+        .catch(
+            error => {
+
+                resultados.innerHTML =
+                    `
+                    <div style="
+                        padding:12px;
+                        color:#b91c1c;
+                    ">
+                        Error consultando catálogo.
+                    </div>
+                    `;
+
+                resultados.style.display =
+                    "block";
+
+                console.error(
+                    error
+                );
+
+            }
+        );
+
+}
+
+
+
+function seleccionarItem(item) {
+
+    catalogoId.value =
+        item.id;
+
+
+    document.getElementById(
+        "codigo"
+    ).value =
+        item.codigo;
+
+
+    document.getElementById(
+        "descripcion"
+    ).value =
+        item.descripcion;
+
+
+    document.getElementById(
+        "unidad"
+    ).value =
+        item.unidad;
+
+
+    document.getElementById(
+        "clasificacion"
+    ).value =
+        item.clasificacion;
+
+
+    document.getElementById(
+        "grupo_inventario"
+    ).value =
+        item.grupo_inventario;
+
+
+    buscador.value =
+        item.codigo
+        +
+        " - "
+        +
+        item.descripcion;
+
+
+    resultados.style.display =
+        "none";
+
+}
+
+</script>
+
+
 {% endblock %}

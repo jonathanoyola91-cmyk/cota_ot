@@ -1,7 +1,7 @@
 {% extends "dashboard/home.html" %}
 
 {% block page_title %}
-Catálogo de Items
+Items IMPETUS
 {% endblock %}
 
 {% block content %}
@@ -17,10 +17,6 @@ Catálogo de Items
     <br>
 
 
-    <!-- ========================= -->
-    <!-- BOTONES DE CATÁLOGOS -->
-    <!-- ========================= -->
-
     <div style="
         display:flex;
         gap:15px;
@@ -29,14 +25,14 @@ Catálogo de Items
     ">
 
         <a
-            class="btn"
+            class="btn btn-secondary"
             href="{% url 'item_oil_gas:item_list' %}"
         >
             Oil & Gas
         </a>
 
         <a
-            class="btn btn-secondary"
+            class="btn"
             href="{% url 'item_oil_gas:item_impetus_list' %}"
         >
             IMPETUS
@@ -56,11 +52,11 @@ Catálogo de Items
         <div>
 
             <h3>
-                Items Oil & Gas
+                Items IMPETUS
             </h3>
 
             <p style="color:#64748b;">
-                Catálogo maestro de Oil & Gas.
+                Catálogo maestro de partes número IMPETUS.
             </p>
 
         </div>
@@ -73,14 +69,14 @@ Catálogo de Items
 
             <a
                 class="btn"
-                href="{% url 'item_oil_gas:item_import' %}"
+                href="{% url 'item_oil_gas:item_impetus_import' %}"
             >
                 Importar Excel
             </a>
 
             <a
                 class="btn btn-secondary"
-                href="{% url 'item_oil_gas:item_template' %}"
+                href="{% url 'item_oil_gas:item_impetus_template' %}"
             >
                 Descargar plantilla
             </a>
@@ -92,10 +88,6 @@ Catálogo de Items
 
     <br>
 
-
-    <!-- ========================= -->
-    <!-- BUSCADOR -->
-    <!-- ========================= -->
 
     <form method="get">
 
@@ -110,7 +102,7 @@ Catálogo de Items
                 type="text"
                 name="q"
                 value="{{ request.GET.q }}"
-                placeholder="Buscar código o descripción..."
+                placeholder="Buscar parte número o descripción..."
             >
 
             <button
@@ -128,10 +120,6 @@ Catálogo de Items
     <br>
 
 
-    <!-- ========================= -->
-    <!-- TABLA -->
-    <!-- ========================= -->
-
     <div style="overflow-x:auto;">
 
         <table>
@@ -139,7 +127,7 @@ Catálogo de Items
             <thead>
 
                 <tr>
-                    <th>Código</th>
+                    <th>Parte Número</th>
                     <th>Descripción</th>
                     <th>Unidad</th>
                     <th>Clasificación</th>
@@ -157,9 +145,11 @@ Catálogo de Items
                 <tr>
 
                     <td>
+
                         <strong>
                             {{ item.codigo }}
                         </strong>
+
                     </td>
 
                     <td>
@@ -196,12 +186,13 @@ Catálogo de Items
 
                 </tr>
 
+
                 {% empty %}
 
                 <tr>
 
                     <td colspan="6">
-                        No existen items cargados.
+                        No existen items IMPETUS cargados.
                     </td>
 
                 </tr>
@@ -214,10 +205,6 @@ Catálogo de Items
 
     </div>
 
-
-    <!-- ========================= -->
-    <!-- PAGINACIÓN -->
-    <!-- ========================= -->
 
     {% if is_paginated %}
 

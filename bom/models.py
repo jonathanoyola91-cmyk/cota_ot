@@ -63,17 +63,57 @@ class Bom(models.Model):
 
 
 class BomItem(models.Model):
-    bom = models.ForeignKey(Bom, on_delete=models.CASCADE, related_name="items")
+    bom = models.ForeignKey(
+        Bom,
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
 
-    plano = models.CharField(max_length=120, blank=True)
-    codigo = models.CharField(max_length=80, blank=True)
-    descripcion = models.CharField(max_length=200)
-    unidad = models.CharField(max_length=20, blank=True)
+    plano = models.CharField(
+        max_length=120,
+        blank=True
+    )
 
-    cantidad_estandar = models.DecimalField(max_digits=12, decimal_places=3, default=0)
-    cantidad_solicitada = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    codigo = models.CharField(
+        max_length=80,
+        blank=True
+    )
 
-    observaciones = models.TextField(blank=True)
+    descripcion = models.CharField(
+        max_length=200
+    )
+
+    unidad = models.CharField(
+        max_length=20,
+        blank=True
+    )
+
+    # Información copiada desde el catálogo
+    clasificacion = models.CharField(
+        max_length=30,
+        blank=True
+    )
+
+    grupo_inventario = models.CharField(
+        max_length=255,
+        blank=True
+    )
+
+    cantidad_estandar = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=0
+    )
+
+    cantidad_solicitada = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=0
+    )
+
+    observaciones = models.TextField(
+        blank=True
+    )
 
     def __str__(self):
-        return f"{self.bom} - {self.descripcion}"
+        return f"{self.bom} - {self.codigo} - {self.descripcion}"

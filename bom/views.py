@@ -4,6 +4,48 @@ from workorders.models import WorkOrder
 from .models import Bom, BomItem, BomTemplate
 from compras_oil.models import PurchaseRequest, PurchaseLine
 
+from django.http import JsonResponse
+from django.db.models import Q
+
+from item_oil_gas.models import Item, ItemImpetus
+
+
+
+@login_required
+def buscar_items_catalogo(request):
+    """
+    Busca items del catálogo maestro Oil & Gas
+    por código o descripción.
+    """
+
+    q = request.GET.get("q", "").strip()
+
+    items = Item.objects.filter(activo=True)
+
+    if q:
+        items = items.filter(
+            Q(codigo__icontains=q) |
+            Q(descripcion__icontains=q)
+        )
+
+    items = items.order_by("codigo")[:50]
+
+    data = []
+
+    for item in items:
+        data.append({
+            "id": item.id,
+            "codigo": item.codigo,
+            "descripcion": item.descripcion,
+            "unidad_medida": item.unidad_medida or "",
+            "clasificacion": item.clasificacion or "",
+            "grupo_inventario": item.grupo_inventario or "",
+        })
+
+    return JsonResponse({
+        "items": data
+    })
+
 
 @login_required
 def crear_bom_desde_ot(request, ot_numero):
@@ -76,39 +118,301 @@ def bom_detail(request, bom_id):
 
     return render(request, "bom/bom_detail.html", {"bom": bom})
 
+@login_required
+def buscar_items_catalogo(request, bom_id):
+
+    bom = get_object_or_404(
+        Bom.objects.select_related(
+            "workorder",
+            "workorder__paw",
+            "workorder__paw__cotizacion"
+        ),
+        id=bom_id
+    )
+
+    q = request.GET.get("q", "").strip()
+
+    paw = bom.workorder.paw
+
+    # Verificar que el BOM tenga PAW
+    if not paw:
+        return JsonResponse({
+            "items": [],
+            "error": "La OT no tiene PAW asociado."
+        })
+
+    # Verificar cotización
+    if not paw.cotizacion:
+        return JsonResponse({
+            "items": [],
+            "error": "El PAW no tiene cotización asociada."
+        })
+
+    empresa = paw.cotizacion.empresa
+
+    # ==========================================
+    # SELECCIÓN AUTOMÁTICA DEL CATÁLOGO
+    # ==========================================
+
+    if empresa == "IMPETUS":
+
+        queryset = ItemImpetus.objects.filter(
+            activo=True
+        )
+
+        catalogo = "IMPETUS"
+
+    elif empresa == "OIL_GAS":
+
+        queryset = Item.objects.filter(
+            activo=True
+        )
+
+        catalogo = "OIL & GAS"
+
+    else:
+
+        return JsonResponse({
+            "items": [],
+            "error": f"Empresa no reconocida: {empresa}"
+        })
+
+    # ==========================================
+    # BÚSQUEDA
+    # ==========================================
+
+    if q:
+
+        queryset = queryset.filter(
+            Q(codigo__icontains=q) |
+            Q(descripcion__icontains=q)
+        )
+
+    queryset = queryset.order_by(
+        "codigo"
+    )[:50]
+
+    items = []
+
+    for item in queryset:
+
+        items.append({
+            "id": item.id,
+            "codigo": item.codigo,
+            "descripcion": item.descripcion,
+            "unidad": item.unidad_medida or "",
+            "clasificacion": item.clasificacion or "",
+            "grupo_inventario": item.grupo_inventario or "",
+        })
+
+    return JsonResponse({
+        "empresa": empresa,
+        "catalogo": catalogo,
+        "items": items,
+    })
 
 @login_required
 def agregar_item_bom(request, bom_id):
-    bom = get_object_or_404(Bom, id=bom_id)
+
+    bom = get_object_or_404(
+        Bom.objects.select_related(
+            "workorder",
+            "workorder__paw",
+            "workorder__paw__cotizacion"
+        ),
+        id=bom_id
+    )
+
+    paw = bom.workorder.paw
+
+    empresa = None
+    catalogo_nombre = None
+
+    if paw and paw.cotizacion:
+
+        empresa = paw.cotizacion.empresa
+
+        if empresa == "IMPETUS":
+            catalogo_nombre = "IMPETUS"
+
+        elif empresa == "OIL_GAS":
+            catalogo_nombre = "Oil & Gas"
+
+    # ==========================================
+    # AGREGAR ITEM
+    # ==========================================
 
     if request.method == "POST":
-        nuevo_item = BomItem.objects.create(
-            bom=bom,
-            plano=request.POST.get("plano", ""),
-            codigo=request.POST.get("codigo", ""),
-            descripcion=request.POST.get("descripcion", ""),
-            unidad=request.POST.get("unidad", ""),
-            cantidad_estandar=request.POST.get("cantidad_estandar") or 0,
-            cantidad_solicitada=request.POST.get("cantidad_solicitada") or 0,
-            observaciones=request.POST.get("observaciones", ""),
+
+        catalogo_id = request.POST.get(
+            "catalogo_id"
         )
 
-        compra = PurchaseRequest.objects.filter(bom=bom).first()
+        # --------------------------------------
+        # ITEM SELECCIONADO DESDE CATÁLOGO
+        # --------------------------------------
+
+        if catalogo_id and empresa:
+
+            if empresa == "IMPETUS":
+
+                item_catalogo = get_object_or_404(
+                    ItemImpetus,
+                    id=catalogo_id,
+                    activo=True
+                )
+
+            elif empresa == "OIL_GAS":
+
+                item_catalogo = get_object_or_404(
+                    Item,
+                    id=catalogo_id,
+                    activo=True
+                )
+
+            else:
+
+                item_catalogo = None
+
+            if item_catalogo:
+
+                nuevo_item = BomItem.objects.create(
+
+                    bom=bom,
+
+                    plano=request.POST.get(
+                        "plano",
+                        ""
+                    ).strip(),
+
+                    codigo=item_catalogo.codigo,
+
+                    descripcion=item_catalogo.descripcion,
+
+                    unidad=item_catalogo.unidad_medida or "",
+
+                    clasificacion=(
+                        item_catalogo.clasificacion or ""
+                    ),
+
+                    grupo_inventario=(
+                        item_catalogo.grupo_inventario or ""
+                    ),
+
+                    cantidad_estandar=(
+                        request.POST.get(
+                            "cantidad_estandar"
+                        ) or 0
+                    ),
+
+                    cantidad_solicitada=(
+                        request.POST.get(
+                            "cantidad_solicitada"
+                        ) or 0
+                    ),
+
+                    observaciones=request.POST.get(
+                        "observaciones",
+                        ""
+                    ).strip(),
+                )
+
+        # --------------------------------------
+        # ITEM MANUAL
+        # --------------------------------------
+
+        else:
+
+            nuevo_item = BomItem.objects.create(
+
+                bom=bom,
+
+                plano=request.POST.get(
+                    "plano",
+                    ""
+                ).strip(),
+
+                codigo=request.POST.get(
+                    "codigo",
+                    ""
+                ).strip(),
+
+                descripcion=request.POST.get(
+                    "descripcion",
+                    ""
+                ).strip(),
+
+                unidad=request.POST.get(
+                    "unidad",
+                    ""
+                ).strip(),
+
+                clasificacion=request.POST.get(
+                    "clasificacion",
+                    ""
+                ).strip(),
+
+                grupo_inventario=request.POST.get(
+                    "grupo_inventario",
+                    ""
+                ).strip(),
+
+                cantidad_estandar=(
+                    request.POST.get(
+                        "cantidad_estandar"
+                    ) or 0
+                ),
+
+                cantidad_solicitada=(
+                    request.POST.get(
+                        "cantidad_solicitada"
+                    ) or 0
+                ),
+
+                observaciones=request.POST.get(
+                    "observaciones",
+                    ""
+                ).strip(),
+            )
+
+        # ==========================================
+        # SINCRONIZACIÓN COMPRAS
+        # ==========================================
+
+        compra = PurchaseRequest.objects.filter(
+            bom=bom
+        ).first()
 
         if compra:
+
             PurchaseLine.objects.get_or_create(
+
                 request=compra,
+
                 bom_item=nuevo_item,
+
                 defaults={
                     "codigo": nuevo_item.codigo,
                     "descripcion": nuevo_item.descripcion,
-                    "cantidad_requerida": nuevo_item.cantidad_solicitada,
+                    "cantidad_requerida":
+                        nuevo_item.cantidad_solicitada,
                 }
             )
 
-        return redirect("agregar_item_bom", bom_id=bom.id)
+        return redirect(
+            "agregar_item_bom",
+            bom_id=bom.id
+        )
 
-    return render(request, "bom/agregar_item_bom.html", {"bom": bom})
+    return render(
+        request,
+        "bom/agregar_item_bom.html",
+        {
+            "bom": bom,
+            "empresa": empresa,
+            "catalogo_nombre": catalogo_nombre,
+        }
+    )
 
 def editar_item_bom(request, item_id):
     item = get_object_or_404(BomItem, id=item_id)
