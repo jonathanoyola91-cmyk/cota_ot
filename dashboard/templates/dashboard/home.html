@@ -430,11 +430,18 @@ window.addEventListener("load", function(){
     </a>
     
     {% if es_taller or es_ingenieria or es_gerente or request.user.is_superuser %}
-    <a href="/taller/"
-      class="{% if '/taller/' in request.path %}active{% endif %}">
-       Taller
-    </a>
-    {% endif %}
+
+<a href="/taller/"
+   class="{% if request.path == '/taller/' %}active{% endif %}">
+    🔧 Taller
+</a>
+
+<a href="{% url 'taller:camaras_taller' %}"
+   class="{% if '/taller/camaras/' in request.path %}active{% endif %}">
+    🏭 Cámaras en Taller
+</a>
+
+{% endif %}
 
     {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente or es_finanzas %}
     <a href="/campo/"

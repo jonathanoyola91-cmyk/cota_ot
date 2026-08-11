@@ -1,0 +1,145 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Editar cámara{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+
+    <h2>✏️ Editar cámara</h2>
+
+    <p>
+        Actualice la información y el estado actual de la cámara.
+    </p>
+
+    <br>
+
+    <form method="post">
+
+        {% csrf_token %}
+
+        <p>
+            <label><strong>Cliente *</strong></label><br>
+            <input
+                class="form-control"
+                type="text"
+                name="cliente"
+                value="{{ camara.cliente }}"
+                required
+                style="max-width:500px;"
+            >
+        </p>
+
+        <br>
+
+        <p>
+            <label><strong>Marca</strong></label><br>
+            <input
+                class="form-control"
+                type="text"
+                name="marca"
+                value="{{ camara.marca }}"
+                placeholder="Ej: NOV, IMPETUS, Summit"
+                style="max-width:500px;"
+            >
+        </p>
+
+        <br>
+
+        <p>
+            <label><strong>Modelo</strong></label><br>
+            <input
+                class="form-control"
+                type="text"
+                name="modelo"
+                value="{{ camara.modelo }}"
+                style="max-width:500px;"
+            >
+        </p>
+
+        <br>
+
+        <p>
+            <label><strong>Serial *</strong></label><br>
+            <input
+                class="form-control"
+                type="text"
+                name="serial"
+                value="{{ camara.serial }}"
+                required
+                style="max-width:500px;"
+            >
+        </p>
+
+        <br>
+
+        <p>
+            <label><strong>Fecha de ingreso *</strong></label><br>
+
+            <input
+                class="form-control"
+                type="date"
+                name="fecha_ingreso"
+                value="{{ camara.fecha_ingreso|date:'Y-m-d' }}"
+                required
+                style="max-width:250px;"
+            >
+        </p>
+
+        <br>
+
+        <p>
+            <label><strong>Estado *</strong></label><br>
+
+            <select
+                class="form-control"
+                name="estado"
+                required
+                style="max-width:500px;"
+            >
+
+                {% for valor, nombre in estados %}
+
+                    <option
+                        value="{{ valor }}"
+                        {% if camara.estado == valor %}selected{% endif %}
+                    >
+                        {{ nombre }}
+                    </option>
+
+                {% endfor %}
+
+            </select>
+        </p>
+
+        <br>
+
+        <p>
+            <label><strong>Observaciones</strong></label><br>
+
+            <textarea
+                class="form-control"
+                name="observaciones"
+                rows="5"
+                style="max-width:700px;"
+            >{{ camara.observaciones }}</textarea>
+
+        </p>
+
+        <br>
+
+        <button class="btn" type="submit">
+            Guardar cambios
+        </button>
+
+        <a
+            class="btn btn-secondary"
+            href="{% url 'taller:camaras_taller' %}"
+        >
+            Cancelar
+        </a>
+
+    </form>
+
+</div>
+
+{% endblock %}

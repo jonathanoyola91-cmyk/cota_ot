@@ -1,0 +1,92 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Registrar cámara{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+
+    <h2>Registrar ingreso de cámara</h2>
+
+    <p>
+        Registre la cámara recibida físicamente en planta.
+    </p>
+
+    <form method="post">
+
+        {% csrf_token %}
+
+        <p>
+            <label><strong>Cliente *</strong></label><br>
+            <input
+                type="text"
+                name="cliente"
+                required
+                style="width:100%; max-width:500px;"
+            >
+        </p>
+        
+        <p>
+        <label><strong>Marca</strong></label><br>
+        <input
+            type="text"
+            name="marca"
+            placeholder="Ej: IMPETUS, NOV, Canadian Advanced, Summit"
+            style="width:100%; max-width:500px;"
+            >
+        </p>
+
+        <p>
+            <label><strong>Modelo</strong></label><br>
+            <input
+                type="text"
+                name="modelo"
+                placeholder="Ej: P155B, G3A-4B, 24K"
+                style="width:100%; max-width:500px;"
+            >
+        </p>
+
+        <p>
+            <label><strong>Serial *</strong></label><br>
+            <input
+                type="text"
+                name="serial"
+                required
+                style="width:100%; max-width:500px;"
+            >
+        </p>
+
+        <p>
+            <label><strong>Fecha de ingreso *</strong></label><br>
+            <input
+                type="date"
+                name="fecha_ingreso"
+                required
+            >
+        </p>
+
+        <p>
+            <label><strong>Observaciones</strong></label><br>
+            <textarea
+                name="observaciones"
+                rows="4"
+                style="width:100%; max-width:700px;"
+                placeholder="Condición de ingreso, información del cliente, accesorios recibidos, etc."
+            ></textarea>
+        </p>
+
+        <br>
+
+        <button class="btn" type="submit">
+            Registrar cámara
+        </button>
+
+        <a class="btn btn-secondary"
+           href="{% url 'taller:camaras_taller' %}">
+            Cancelar
+        </a>
+
+    </form>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,205 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Cámaras en Taller{% endblock %}
+
+{% block content %}
+
+<style>
+.badge{
+    display:inline-block;
+    padding:4px 8px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+}
+
+.badge-blue{
+    background:#dbeafe;
+    color:#1e40af;
+}
+
+.badge-green{
+    background:#dcfce7;
+    color:#166534;
+}
+
+.section-title{
+    margin:22px 0 12px;
+}
+</style>
+
+
+<div class="cards">
+
+    <div class="card">
+        <small>Cámaras actualmente en planta</small>
+        <strong>{{ total_activas }}</strong>
+    </div>
+
+</div>
+
+
+<div class="panel">
+
+    <h2>🔧 Cámaras en Taller</h2>
+
+    <p>
+        Control de cámaras recibidas en planta antes de la generación del PAW.
+    </p>
+
+    <a class="btn" href="{% url 'taller:camara_nueva' %}">
+        + Registrar ingreso de cámara
+    </a>
+
+    <a class="btn btn-secondary" href="{% url 'taller:dashboard' %}">
+        Panel operativo
+    </a>
+
+</div>
+
+
+<h3 class="section-title">Cámaras actualmente en planta</h3>
+
+<div class="panel">
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>Fecha ingreso</th>
+                <th>Cliente</th>
+                <th>Marca</th>
+                <th>Modelo</th>
+                <th>Serial</th>
+                <th>Estado</th>
+                <th>Observaciones</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for camara in activas %}
+
+            <tr>
+
+    <td>
+        {{ camara.fecha_ingreso|date:"d/m/Y" }}
+    </td>
+
+    <td>
+        <strong>{{ camara.cliente }}</strong>
+    </td>
+
+    <td>
+        {{ camara.marca|default:"-" }}
+    </td>
+
+    <td>
+        {{ camara.modelo|default:"-" }}
+    </td>
+
+    <td>
+        <strong>{{ camara.serial }}</strong>
+    </td>
+
+    <td>
+        <span class="badge badge-blue">
+            {{ camara.get_estado_display }}
+        </span>
+    </td>
+
+    <td>
+        {{ camara.observaciones|default:"-" }}
+    </td>
+
+    <td>
+        <a
+            class="btn"
+            href="{% url 'taller:camara_editar' camara.id %}"
+        >
+            Editar
+        </a>
+    </td>
+
+</tr>
+
+            {% empty %}
+
+            <tr>
+                <td colspan="8">
+                    No hay cámaras pendientes actualmente en Taller.
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<h3 class="section-title">Historial</h3>
+
+<div class="panel">
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>Fecha ingreso</th>
+                <th>Cliente</th>
+                <th>Modelo</th>
+                <th>Serial</th>
+                <th>PAW</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for camara in historial %}
+
+            <tr>
+
+                <td>
+                    {{ camara.fecha_ingreso|date:"d/m/Y" }}
+                </td>
+
+                <td>
+                    {{ camara.cliente }}
+                </td>
+
+                <td>
+                    {{ camara.modelo|default:"-" }}
+                </td>
+
+                <td>
+                    <strong>{{ camara.serial }}</strong>
+                </td>
+
+                <td>
+                    <span class="badge badge-green">
+                        PAW {{ camara.paw.numero_paw }}
+                    </span>
+                </td>
+
+            </tr>
+
+            {% empty %}
+
+            <tr>
+                <td colspan="5">
+                    Aún no hay cámaras trasladadas al historial.
+                </td>
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+{% endblock %}

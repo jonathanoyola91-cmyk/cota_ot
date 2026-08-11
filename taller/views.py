@@ -10,6 +10,7 @@ from core.roles import tiene_rol
 from workorders.models import WorkOrder
 from compras_oil.models import PurchaseRequest
 from inventario.models import WorkshopDelivery
+from .models import CamaraTaller
 
 
 def obtener_bom_seguro(ot):
@@ -206,3 +207,132 @@ def confirmar_ensamble_ok(request, ot_id):
 
     messages.success(request, "Ensamble confirmado correctamente.")
     return redirect("taller:dashboard")
+
+@login_required
+def camaras_taller(request):
+
+    activas = (
+        CamaraTaller.objects
+        .filter(paw__isnull=True)
+        .order_by("fecha_ingreso", "id")
+    )
+
+    historial = (
+        CamaraTaller.objects
+        .filter(paw__isnull=False)
+        .select_related("paw")
+        .order_by("-actualizado_en")
+    )
+
+    return render(request, "taller/camaras_taller.html", {
+        "activas": activas,
+        "historial": historial,
+        "total_activas": activas.count(),
+    })
+
+
+@login_required
+def camara_nueva(request):
+
+    if request.method == "POST":
+
+        cliente = request.POST.get("cliente", "").strip()
+        marca = request.POST.get("marca", "").strip()
+        serial = request.POST.get("serial", "").strip()
+        modelo = request.POST.get("modelo", "").strip()
+        fecha_ingreso = request.POST.get("fecha_ingreso")
+        observaciones = request.POST.get("observaciones", "").strip()
+
+        if not cliente or not serial or not fecha_ingreso:
+            messages.error(
+                request,
+                "Cliente, serial y fecha de ingreso son obligatorios."
+            )
+            return redirect("taller:camara_nueva")
+
+        CamaraTaller.objects.create(
+            cliente=cliente,
+            marca=marca,
+            serial=serial,
+            modelo=modelo,
+            fecha_ingreso=fecha_ingreso,
+            estado=CamaraTaller.Estado.RECIBIDA,
+            observaciones=observaciones,
+        )
+
+        messages.success(
+            request,
+            f"Cámara serial {serial} registrada en Taller."
+        )
+
+        return redirect("taller:camaras_taller")
+
+    return render(request, "taller/camara_nueva.html")
+
+@login_required
+def camara_editar(request, camara_id):
+
+    camara = get_object_or_404(
+        CamaraTaller,
+        id=camara_id
+    )
+
+    if request.method == "POST":
+
+        cliente = request.POST.get("cliente", "").strip()
+        marca = request.POST.get("marca", "").strip()
+        modelo = request.POST.get("modelo", "").strip()
+        serial = request.POST.get("serial", "").strip()
+        fecha_ingreso = request.POST.get("fecha_ingreso")
+        estado = request.POST.get("estado")
+        observaciones = request.POST.get("observaciones", "").strip()
+
+        if not cliente or not serial or not fecha_ingreso:
+            messages.error(
+                request,
+                "Cliente, serial y fecha de ingreso son obligatorios."
+            )
+            return redirect(
+                "taller:camara_editar",
+                camara_id=camara.id
+            )
+
+        estados_validos = [
+            valor for valor, texto in CamaraTaller.Estado.choices
+        ]
+
+        if estado not in estados_validos:
+            messages.error(
+                request,
+                "El estado seleccionado no es válido."
+            )
+            return redirect(
+                "taller:camara_editar",
+                camara_id=camara.id
+            )
+
+        camara.cliente = cliente
+        camara.marca = marca
+        camara.modelo = modelo
+        camara.serial = serial
+        camara.fecha_ingreso = fecha_ingreso
+        camara.estado = estado
+        camara.observaciones = observaciones
+
+        camara.save()
+
+        messages.success(
+            request,
+            f"Cámara serial {camara.serial} actualizada correctamente."
+        )
+
+        return redirect("taller:camaras_taller")
+
+    return render(
+        request,
+        "taller/camara_editar.html",
+        {
+            "camara": camara,
+            "estados": CamaraTaller.Estado.choices,
+        }
+    )
