@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timedelta, time
 from decimal import Decimal
 
 from django.contrib import messages
@@ -31,7 +31,27 @@ def puede_editar_taller(user):
 
 @login_required
 def dashboard(request):
-    ots = WorkOrder.objects.select_related("paw").order_by("-numero")
+    estados_paw_fuera_operacion = [
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    ]
+
+    # Una OT cuyo PAW ya salió de operación no debe seguir apareciendo
+    # como "Pendiente BOM", "Esperando material", "Material parcial", etc.
+    # También excluimos OTs cerradas/terminadas.
+    ots = (
+        WorkOrder.objects
+        .select_related("paw")
+        .exclude(
+            Q(paw__estado_operativo__in=estados_paw_fuera_operacion)
+            | Q(estado__in=[
+                WorkOrder.Status.TERMINADA,
+                WorkOrder.Status.CERRADA,
+            ])
+        )
+        .order_by("-numero")
+    )
 
     pendientes_bom = []
     bom_borrador = []
@@ -548,20 +568,26 @@ def crear_jornada(request, ensamble_id):
 
     if request.method == "POST":
         form = JornadaTallerForm(request.POST, ensamble=ensamble)
+
+        # La instancia debe conocer el ensamble ANTES de form.is_valid().
+        # Así las validaciones del modelo (incluido solapamiento de horarios)
+        # aparecen como errores del formulario y no generan ValidationError 500.
+        form.instance.ensamble = ensamble
+
         if form.is_valid():
             jornada = form.save(commit=False)
             jornada.ensamble = ensamble
             jornada.registrado_por = request.user
             jornada.save()
-            messages.success(request, "Jornada registrada y horas calculadas automáticamente.")
+            messages.success(request, "Actividad registrada y horas calculadas automáticamente.")
             return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
     else:
+        ahora = timezone.localtime()
         form = JornadaTallerForm(
             ensamble=ensamble,
             initial={
                 "fecha": timezone.localdate(),
-                "hora_entrada": "07:00",
-                "hora_salida": "16:00",
+                "hora_entrada": ahora.strftime("%H:%M"),
             },
         )
 
@@ -641,6 +667,99 @@ def finalizar_ensamble(request, ensamble_id):
     return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
 
 
+
+def _merge_intervalos(intervalos):
+    """
+    Une intervalos que se tocan o se superponen.
+    Devuelve una lista de pares (inicio, fin) sin doble conteo.
+    """
+    if not intervalos:
+        return []
+
+    ordenados = sorted(intervalos, key=lambda x: x[0])
+    resultado = [list(ordenados[0])]
+
+    for inicio, fin in ordenados[1:]:
+        ultimo = resultado[-1]
+        if inicio <= ultimo[1]:
+            if fin > ultimo[1]:
+                ultimo[1] = fin
+        else:
+            resultado.append([inicio, fin])
+
+    return [(i, f) for i, f in resultado]
+
+
+def _clasificar_intervalos_dia(intervalos):
+    """
+    Consolida todos los PAW trabajados por un técnico en un mismo día y
+    clasifica el tiempo efectivo sin duplicar intervalos.
+    """
+    if not intervalos:
+        cero = Decimal("0.00")
+        return cero, cero, cero, cero
+
+    intervalos_unidos = _merge_intervalos(intervalos)
+
+    ordinarias = Decimal("0.00")
+    extra_diurna = Decimal("0.00")
+    extra_nocturna = Decimal("0.00")
+
+    for inicio, fin in intervalos_unidos:
+        cursor = inicio.date()
+        fin_dia = fin.date()
+
+        while cursor <= fin_dia:
+            dia_sig = cursor + timedelta(days=1)
+
+            tramos_ordinarios = [
+                (
+                    datetime.combine(cursor, datetime.min.time().replace(hour=7)),
+                    datetime.combine(cursor, datetime.min.time().replace(hour=12)),
+                ),
+                (
+                    datetime.combine(cursor, datetime.min.time().replace(hour=13)),
+                    datetime.combine(cursor, datetime.min.time().replace(hour=16)),
+                ),
+            ]
+
+            tramos_extra_diurna = [
+                (
+                    datetime.combine(cursor, datetime.min.time().replace(hour=6)),
+                    datetime.combine(cursor, datetime.min.time().replace(hour=7)),
+                ),
+                (
+                    datetime.combine(cursor, datetime.min.time().replace(hour=16)),
+                    datetime.combine(cursor, datetime.min.time().replace(hour=19)),
+                ),
+            ]
+
+            tramos_extra_nocturna = [
+                (
+                    datetime.combine(cursor, datetime.min.time()),
+                    datetime.combine(cursor, datetime.min.time().replace(hour=6)),
+                ),
+                (
+                    datetime.combine(cursor, datetime.min.time().replace(hour=19)),
+                    datetime.combine(dia_sig, datetime.min.time()),
+                ),
+            ]
+
+            for desde, hasta in tramos_ordinarios:
+                ordinarias += JornadaTaller._horas_interseccion(inicio, fin, desde, hasta)
+
+            for desde, hasta in tramos_extra_diurna:
+                extra_diurna += JornadaTaller._horas_interseccion(inicio, fin, desde, hasta)
+
+            for desde, hasta in tramos_extra_nocturna:
+                extra_nocturna += JornadaTaller._horas_interseccion(inicio, fin, desde, hasta)
+
+            cursor = dia_sig
+
+    total = ordinarias + extra_diurna + extra_nocturna
+    return ordinarias, extra_diurna, extra_nocturna, total
+
+
 @login_required
 def reporte_horas(request):
     if not _puede_ver_reporte_horas(request.user):
@@ -658,12 +777,25 @@ def reporte_horas(request):
         .order_by("tecnico__tecnico", "fecha", "hora_entrada")
     )
 
+    # Agrupamos por técnico y fecha para consolidar todos los PAW del día.
+    por_tecnico_fecha = defaultdict(lambda: {
+        "intervalos": [],
+        "detalle": [],
+    })
+
+    for j in jornadas:
+        clave = (j.tecnico.tecnico, j.fecha)
+        inicio, fin = j._intervalo_real()
+        por_tecnico_fecha[clave]["intervalos"].append((inicio, fin))
+        por_tecnico_fecha[clave]["detalle"].append(j)
+
     resumen = defaultdict(lambda: {
         "ordinarias": Decimal("0.00"),
         "extra_diurna": Decimal("0.00"),
         "extra_nocturna": Decimal("0.00"),
         "total": Decimal("0.00"),
         "detalle": [],
+        "dias": [],
     })
 
     total_ord = Decimal("0.00")
@@ -671,19 +803,28 @@ def reporte_horas(request):
     total_en = Decimal("0.00")
     total_general = Decimal("0.00")
 
-    for j in jornadas:
-        nombre = j.tecnico.tecnico
-        data = resumen[nombre]
-        data["ordinarias"] += j.horas_ordinarias
-        data["extra_diurna"] += j.horas_extra_diurna
-        data["extra_nocturna"] += j.horas_extra_nocturna
-        data["total"] += j.horas_totales
-        data["detalle"].append(j)
+    for (nombre, fecha), info in sorted(por_tecnico_fecha.items(), key=lambda x: (x[0][0], x[0][1])):
+        ord_dia, ed_dia, en_dia, total_dia = _clasificar_intervalos_dia(info["intervalos"])
 
-        total_ord += j.horas_ordinarias
-        total_ed += j.horas_extra_diurna
-        total_en += j.horas_extra_nocturna
-        total_general += j.horas_totales
+        data = resumen[nombre]
+        data["ordinarias"] += ord_dia
+        data["extra_diurna"] += ed_dia
+        data["extra_nocturna"] += en_dia
+        data["total"] += total_dia
+        data["detalle"].extend(info["detalle"])
+        data["dias"].append({
+            "fecha": fecha,
+            "ordinarias": ord_dia,
+            "extra_diurna": ed_dia,
+            "extra_nocturna": en_dia,
+            "total": total_dia,
+            "detalle": info["detalle"],
+        })
+
+        total_ord += ord_dia
+        total_ed += ed_dia
+        total_en += en_dia
+        total_general += total_dia
 
     return render(request, "taller_horas/reporte_horas.html", {
         "resumen": dict(resumen),
@@ -694,6 +835,7 @@ def reporte_horas(request):
         "total_extra_nocturna": total_en,
         "total_general": total_general,
     })
+
 
 @login_required
 def reporte_horas_empleado(request):
@@ -738,16 +880,22 @@ def reporte_horas_empleado(request):
         .order_by("fecha", "hora_entrada")
     )
 
+    # Consolidar por fecha todos los PAW del empleado para evitar doble conteo.
+    por_fecha = defaultdict(list)
+    for jornada in jornadas:
+        por_fecha[jornada.fecha].append(jornada._intervalo_real())
+
     total_ordinarias = Decimal("0.00")
     total_extra_diurna = Decimal("0.00")
     total_extra_nocturna = Decimal("0.00")
     total_general = Decimal("0.00")
 
-    for jornada in jornadas:
-        total_ordinarias += jornada.horas_ordinarias
-        total_extra_diurna += jornada.horas_extra_diurna
-        total_extra_nocturna += jornada.horas_extra_nocturna
-        total_general += jornada.horas_totales
+    for intervalos in por_fecha.values():
+        ord_dia, ed_dia, en_dia, total_dia = _clasificar_intervalos_dia(intervalos)
+        total_ordinarias += ord_dia
+        total_extra_diurna += ed_dia
+        total_extra_nocturna += en_dia
+        total_general += total_dia
 
     return render(
         request,

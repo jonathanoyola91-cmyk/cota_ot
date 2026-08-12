@@ -42,10 +42,33 @@ def cerrar_paw_antiguo(request, paw_id):
     paw = get_object_or_404(Paw, id=paw_id)
 
     if request.method == "POST":
-        paw.estado_operativo = "FACTURADO"
-        paw.save(update_fields=["estado_operativo", "actualizado_en"])
+        from workorders.models import WorkOrder
 
-        messages.success(request, f"PAW {paw.numero_paw} cerrado y enviado al historial.")
+        with transaction.atomic():
+            # Cierre administrativo del PAW legado.
+            # No crea BOM, compras, entregas, ensambles ni servicios faltantes.
+            paw.estado_operativo = "FACTURADO"
+            paw.save(update_fields=["estado_operativo", "actualizado_en"])
+
+            # Toda OT asociada queda cerrada administrativamente para que no siga
+            # apareciendo como pendiente en módulos operativos.
+            ots_cerradas = paw.ots.exclude(
+                estado__in=[
+                    WorkOrder.Status.TERMINADA,
+                    WorkOrder.Status.CERRADA,
+                ]
+            ).update(
+                estado=WorkOrder.Status.CERRADA,
+            )
+
+        messages.success(
+            request,
+            (
+                f"PAW {paw.numero_paw} cerrado y enviado al historial. "
+                f"Se cerraron administrativamente {ots_cerradas} OT pendientes; "
+                "los pasos omitidos no fueron creados ni marcados como ejecutados."
+            ),
+        )
         return redirect("paw_historial")
 
     return redirect("paw_detail", paw_id=paw.id)

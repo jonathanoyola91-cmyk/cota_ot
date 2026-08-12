@@ -212,6 +212,52 @@ def compras_dashboard(request):
     return dashboard(request)
 
 
+@login_required
+def historial_compras(request):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes acceso al historial de Compras.")
+        return redirect("/")
+
+    q = (request.GET.get("q") or "").strip()
+
+    compras = (
+        PurchaseRequest.objects
+        .filter(estado="CERRADA")
+        .select_related("bom", "bom__workorder", "creado_por")
+        .annotate(
+            total_lineas=Count(
+                "lineas",
+                filter=Q(lineas__cantidad_requerida__gt=0),
+                distinct=True,
+            ),
+            total_proveedores=Count(
+                "lineas__proveedor",
+                filter=Q(lineas__cantidad_requerida__gt=0),
+                distinct=True,
+            ),
+        )
+        .order_by("-actualizado_en")
+    )
+
+    if q:
+        filtro = (
+            Q(paw_numero__icontains=q) |
+            Q(paw_nombre__icontains=q) |
+            Q(lineas__codigo__icontains=q) |
+            Q(lineas__descripcion__icontains=q) |
+            Q(lineas__proveedor__nombre__icontains=q)
+        )
+        if q.isdigit():
+            filtro |= Q(bom__workorder__numero=int(q))
+        compras = compras.filter(filtro).distinct()
+
+    return render(request, "compras_oil/historial.html", {
+        "compras": compras,
+        "q": q,
+        "total_cerradas": PurchaseRequest.objects.filter(estado="CERRADA").count(),
+    })
+
+
 @require_POST
 @login_required
 def cerrar_solicitud(request, pk):

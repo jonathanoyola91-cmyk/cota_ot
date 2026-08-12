@@ -249,27 +249,75 @@ class JornadaTaller(models.Model):
         return inicio, fin
 
     def calcular_horas(self):
+        """
+        Calcula las horas del intervalo registrado para ESTE PAW/cámara.
+
+        La hora de entrada y salida representan el tiempo real dedicado a una
+        actividad específica, no necesariamente la jornada laboral completa
+        del técnico.
+
+        Franjas internas:
+        - 00:00-06:00  -> extra nocturna
+        - 06:00-07:00  -> extra diurna
+        - 07:00-12:00  -> ordinaria
+        - 12:00-13:00  -> almuerzo (no suma)
+        - 13:00-16:00  -> ordinaria
+        - 16:00-19:00  -> extra diurna
+        - 19:00-24:00  -> extra nocturna
+
+        Si el intervalo cruza medianoche, se continúa clasificando hasta la
+        hora real de salida del día siguiente.
+        """
         inicio, fin = self._intervalo_real()
-        dia = self.fecha
-        dia_sig = dia + timedelta(days=1)
 
-        ordinaria_1_ini = datetime.combine(dia, time(7, 0))
-        ordinaria_1_fin = datetime.combine(dia, time(12, 0))
-        ordinaria_2_ini = datetime.combine(dia, time(13, 0))
-        ordinaria_2_fin = datetime.combine(dia, time(16, 0))
+        ordinarias = Decimal("0.00")
+        extra_diurna = Decimal("0.00")
+        extra_nocturna = Decimal("0.00")
 
-        extra_dia_ini = datetime.combine(dia, time(16, 0))
-        extra_dia_fin = datetime.combine(dia, time(19, 0))
+        dia_cursor = inicio.date()
+        dia_fin = fin.date()
 
-        extra_noche_ini = datetime.combine(dia, time(19, 0))
-        extra_noche_fin = datetime.combine(dia_sig, time(6, 0))
+        while dia_cursor <= dia_fin:
+            dia_sig = dia_cursor + timedelta(days=1)
 
-        ordinarias = (
-            self._horas_interseccion(inicio, fin, ordinaria_1_ini, ordinaria_1_fin)
-            + self._horas_interseccion(inicio, fin, ordinaria_2_ini, ordinaria_2_fin)
-        )
-        extra_diurna = self._horas_interseccion(inicio, fin, extra_dia_ini, extra_dia_fin)
-        extra_nocturna = self._horas_interseccion(inicio, fin, extra_noche_ini, extra_noche_fin)
+            # Extra nocturna 00:00-06:00
+            nocturna_manana_ini = datetime.combine(dia_cursor, time(0, 0))
+            nocturna_manana_fin = datetime.combine(dia_cursor, time(6, 0))
+
+            # Extra diurna 06:00-07:00
+            extra_pre_ini = datetime.combine(dia_cursor, time(6, 0))
+            extra_pre_fin = datetime.combine(dia_cursor, time(7, 0))
+
+            # Ordinaria
+            ordinaria_1_ini = datetime.combine(dia_cursor, time(7, 0))
+            ordinaria_1_fin = datetime.combine(dia_cursor, time(12, 0))
+            ordinaria_2_ini = datetime.combine(dia_cursor, time(13, 0))
+            ordinaria_2_fin = datetime.combine(dia_cursor, time(16, 0))
+
+            # Extra diurna
+            extra_dia_ini = datetime.combine(dia_cursor, time(16, 0))
+            extra_dia_fin = datetime.combine(dia_cursor, time(19, 0))
+
+            # Extra nocturna 19:00-24:00
+            nocturna_noche_ini = datetime.combine(dia_cursor, time(19, 0))
+            nocturna_noche_fin = datetime.combine(dia_sig, time(0, 0))
+
+            ordinarias += (
+                self._horas_interseccion(inicio, fin, ordinaria_1_ini, ordinaria_1_fin)
+                + self._horas_interseccion(inicio, fin, ordinaria_2_ini, ordinaria_2_fin)
+            )
+
+            extra_diurna += (
+                self._horas_interseccion(inicio, fin, extra_pre_ini, extra_pre_fin)
+                + self._horas_interseccion(inicio, fin, extra_dia_ini, extra_dia_fin)
+            )
+
+            extra_nocturna += (
+                self._horas_interseccion(inicio, fin, nocturna_manana_ini, nocturna_manana_fin)
+                + self._horas_interseccion(inicio, fin, nocturna_noche_ini, nocturna_noche_fin)
+            )
+
+            dia_cursor = dia_sig
 
         total = ordinarias + extra_diurna + extra_nocturna
         return ordinarias, extra_diurna, extra_nocturna, total
@@ -286,22 +334,40 @@ class JornadaTaller(models.Model):
         if self.tecnico.ensamble_id != self.ensamble_id:
             raise ValidationError("El técnico seleccionado no está asignado a este ensamble.")
 
-        # La jornada operativa se registra desde las 07:00. La franja nocturna
-        # posterior a medianoche debe pertenecer a una jornada iniciada el día anterior.
-        if self.hora_entrada < time(7, 0):
-            raise ValidationError({
-                "hora_entrada": "La hora de entrada debe ser 07:00 o posterior. La franja nocturna después de medianoche se registra como continuación del día anterior."
-            })
-
+        # Hora de entrada y salida son libres porque representan el intervalo
+        # real dedicado a este PAW/cámara. Puede empezar antes de las 07:00,
+        # después de las 16:00 o cruzar medianoche.
         inicio, fin = self._intervalo_real()
-        if fin - inicio > timedelta(hours=23):
-            raise ValidationError("La jornada registrada no puede superar 23 horas.")
 
-        # Si cruza medianoche, solo clasificamos hasta 06:00 del día siguiente.
-        if fin.date() > inicio.date() and self.hora_salida > time(6, 0):
-            raise ValidationError({
-                "hora_salida": "Si la jornada cruza medianoche, la salida debe ser máximo a las 06:00 del día siguiente."
-            })
+        if fin <= inicio:
+            raise ValidationError("La hora de salida debe ser posterior a la hora de entrada.")
+
+        if fin - inicio > timedelta(hours=23):
+            raise ValidationError("El intervalo registrado no puede superar 23 horas.")
+
+        # Evitar doble contabilización del mismo técnico en el mismo intervalo,
+        # incluso si estaba trabajando sobre PAW diferentes.
+        otras = (
+            JornadaTaller.objects
+            .filter(
+                tecnico__tecnico=self.tecnico.tecnico,
+                fecha__in=[
+                    self.fecha - timedelta(days=1),
+                    self.fecha,
+                    self.fecha + timedelta(days=1),
+                ],
+            )
+            .exclude(pk=self.pk)
+            .select_related("tecnico")
+        )
+
+        for otra in otras:
+            otro_inicio, otro_fin = otra._intervalo_real()
+            if inicio < otro_fin and fin > otro_inicio:
+                raise ValidationError(
+                    "El técnico ya tiene otra actividad registrada que se cruza "
+                    "con este intervalo. Ajuste la hora de entrada o salida."
+                )
 
     def save(self, *args, **kwargs):
         self.full_clean()

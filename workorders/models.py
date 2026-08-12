@@ -4,15 +4,17 @@ from django.contrib.auth.models import Group
 
 
 class WorkOrderQuerySet(models.QuerySet):
+    FINAL_STATES = ["TERMINADA", "CERRADA"]
+
     def activos(self):
-        return self.exclude(estado=WorkOrder.Status.TERMINADA)
+        return self.exclude(estado__in=self.FINAL_STATES)
 
     def finalizadas(self):
-        return self.filter(estado=WorkOrder.Status.TERMINADA)
+        return self.filter(estado__in=self.FINAL_STATES)
 
 
 class WorkOrderActiveManager(models.Manager):
-    FINAL_STATES = ["TERMINADA"]
+    FINAL_STATES = ["TERMINADA", "CERRADA"]
 
     def get_queryset(self):
         return super().get_queryset().exclude(estado__in=self.FINAL_STATES)

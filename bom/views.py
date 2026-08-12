@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from workorders.models import WorkOrder
 from .models import Bom, BomItem, BomTemplate
 from compras_oil.models import PurchaseRequest, PurchaseLine
@@ -11,9 +12,34 @@ from item_oil_gas.models import ItemImpetus
 
 
 
+ESTADOS_PAW_CERRADO = {
+    "EN_FACTURACION",
+    "FACTURADO",
+    "RADICADO",
+}
+
+
+def _paw_cerrado(ot):
+    return bool(
+        ot.paw_id
+        and ot.paw.estado_operativo in ESTADOS_PAW_CERRADO
+    )
+
+
+
 @login_required
 def crear_bom_desde_ot(request, ot_numero):
-    ot = get_object_or_404(WorkOrder, numero=ot_numero)
+    ot = get_object_or_404(
+        WorkOrder.objects.select_related("paw"),
+        numero=ot_numero,
+    )
+
+    if _paw_cerrado(ot):
+        messages.warning(
+            request,
+            f"El PAW {ot.paw.numero_paw} está cerrado. No se requiere crear el BOM pendiente.",
+        )
+        return redirect("paw_detail", paw_id=ot.paw.id)
 
     if hasattr(ot, "bom"):
         return redirect("bom_detail", bom_id=ot.bom.id)
@@ -255,7 +281,19 @@ def eliminar_item_bom(request, item_id):
     })
 
 def enviar_bom_compras(request, bom_id):
-    bom = get_object_or_404(Bom.objects.prefetch_related("items"), id=bom_id)
+    bom = get_object_or_404(
+        Bom.objects
+        .select_related("workorder", "workorder__paw")
+        .prefetch_related("items"),
+        id=bom_id,
+    )
+
+    if _paw_cerrado(bom.workorder):
+        messages.warning(
+            request,
+            f"El PAW {bom.workorder.paw.numero_paw} está cerrado. No se enviará el BOM a Compras.",
+        )
+        return redirect("bom_detail", bom_id=bom.id)
 
     if request.method == "POST":
 
