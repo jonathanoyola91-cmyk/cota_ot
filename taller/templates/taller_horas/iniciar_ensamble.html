@@ -1,0 +1,21 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Iniciar horas · PAW {{ paw.numero_paw }}{% endblock %}
+{% block content %}
+<div class="panel">
+    <h2>Iniciar control de horas de Taller</h2>
+    <p>
+        <strong>PAW:</strong> {{ paw.numero_paw }} ·
+        <strong>Cliente:</strong> {{ paw.cliente|default:"-" }}
+    </p>
+    <p><strong>Trabajo:</strong> {{ paw.nombre_paw|default:"-" }}</p>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:12px;border-radius:12px;margin-top:14px;font-weight:700;">
+        Este registro controla únicamente horas y actividades de Taller. No cambia el estado operativo del PAW.
+    </div>
+    <form method="post" style="margin-top:18px;">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="btn" type="submit">Iniciar control de horas</button>
+        <a class="btn btn-secondary" href="{% url 'taller:horas_dashboard' %}">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

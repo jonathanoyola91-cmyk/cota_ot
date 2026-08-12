@@ -1,0 +1,82 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Horas Taller · PAW {{ ensamble.paw.numero_paw }}{% endblock %}
+{% block content %}
+<div class="cards">
+    <div class="card"><small>PAW</small><strong>{{ ensamble.paw.numero_paw }}</strong></div>
+    <div class="card"><small>Estado interno</small><strong>{{ ensamble.get_estado_display }}</strong></div>
+    <div class="card"><small>Horas ordinarias</small><strong>{{ ensamble.total_horas_ordinarias|floatformat:2 }}</strong></div>
+    <div class="card"><small>HE diurna</small><strong>{{ ensamble.total_extra_diurna|floatformat:2 }}</strong></div>
+    <div class="card"><small>HE nocturna</small><strong>{{ ensamble.total_extra_nocturna|floatformat:2 }}</strong></div>
+    <div class="card"><small>Total horas-hombre</small><strong>{{ ensamble.total_horas_hombre|floatformat:2 }}</strong></div>
+</div>
+
+<div class="panel" style="margin-top:18px;">
+    <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+            <h2>{{ ensamble.paw.nombre_paw|default:"Control de horas de ensamble" }}</h2>
+            <p><strong>Cliente:</strong> {{ ensamble.paw.cliente|default:"-" }}</p>
+            <p><strong>Campo:</strong> {{ ensamble.paw.campo|default:"-" }}</p>
+            {% if camara_relacionada %}
+                <p>
+                    <strong>Cámara Tear Down relacionada:</strong>
+                    Serial {{ camara_relacionada.serial }} · Modelo {{ camara_relacionada.modelo|default:"-" }}
+                </p>
+            {% endif %}
+            <p><strong>Inicio:</strong> {{ ensamble.fecha_inicio|date:"d/m/Y" }} · <strong>Fin:</strong> {{ ensamble.fecha_fin|date:"d/m/Y"|default:"En curso" }}</p>
+            <p><strong>Técnicos:</strong>
+                {% for t in ensamble.tecnicos.all %}
+                    {{ t.tecnico }}{% if not forloop.last %}, {% endif %}
+                {% empty %}Pendientes{% endfor %}
+            </p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-content:flex-start;">
+            <a class="btn btn-secondary" href="{% url 'taller:horas_dashboard' %}">Volver</a>
+            <a class="btn btn-secondary" href="{% url 'paw_detail' ensamble.paw.id %}">Ver PAW</a>
+            {% if puede_operar and ensamble.estado != 'FINALIZADO' %}
+                <a class="btn btn-secondary" href="{% url 'taller:horas_asignar_tecnicos' ensamble.id %}">Técnicos</a>
+                <a class="btn" href="{% url 'taller:horas_crear_jornada' ensamble.id %}">+ Registrar jornada</a>
+                <form method="post" action="{% url 'taller:horas_finalizar' ensamble.id %}"
+                      onsubmit="return confirm('¿Finalizar este control de horas? El PAW NO cambiará de estado.');">
+                    {% csrf_token %}
+                    <button class="btn" type="submit">Finalizar horas</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="panel" style="margin-top:18px;">
+    <h2>Jornadas registradas</h2><br>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead><tr>
+                <th>Fecha</th><th>Técnico</th><th>Entrada</th><th>Salida</th>
+                <th>Ordinarias</th><th>HE diurna</th><th>HE nocturna</th><th>Total</th>
+                <th>Actividades</th><th>Acción</th>
+            </tr></thead>
+            <tbody>
+            {% for j in jornadas %}
+                <tr>
+                    <td>{{ j.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ j.tecnico.tecnico }}</td>
+                    <td>{{ j.hora_entrada|time:"H:i" }}</td>
+                    <td>{{ j.hora_salida|time:"H:i" }}</td>
+                    <td>{{ j.horas_ordinarias|floatformat:2 }}</td>
+                    <td>{{ j.horas_extra_diurna|floatformat:2 }}</td>
+                    <td>{{ j.horas_extra_nocturna|floatformat:2 }}</td>
+                    <td><strong>{{ j.horas_totales|floatformat:2 }}</strong></td>
+                    <td style="min-width:260px;">{{ j.actividades|default:"-"|linebreaksbr }}</td>
+                    <td>
+                        {% if puede_operar and ensamble.estado != 'FINALIZADO' %}
+                            <a class="btn btn-secondary" href="{% url 'taller:horas_editar_jornada' j.id %}">Editar</a>
+                        {% else %}-{% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="10">No hay jornadas registradas.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

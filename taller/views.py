@@ -1,3 +1,5 @@
+from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 
 from django.contrib import messages
@@ -10,7 +12,9 @@ from core.roles import tiene_rol
 from workorders.models import WorkOrder
 from compras_oil.models import PurchaseRequest
 from inventario.models import WorkshopDelivery
-from .models import CamaraTaller
+from paw_app.models import Paw
+from .forms_horas import AsignarTecnicosTallerForm, IniciarEnsambleForm, JornadaTallerForm
+from .models import CamaraTaller, EnsambleTaller, JornadaTaller
 
 
 def obtener_bom_seguro(ot):
@@ -241,6 +245,7 @@ def camara_nueva(request):
         serial = request.POST.get("serial", "").strip()
         modelo = request.POST.get("modelo", "").strip()
         fecha_ingreso = request.POST.get("fecha_ingreso")
+        fecha_tear_down = request.POST.get("fecha_tear_down") or None
         observaciones = request.POST.get("observaciones", "").strip()
 
         if not cliente or not serial or not fecha_ingreso:
@@ -256,6 +261,7 @@ def camara_nueva(request):
             serial=serial,
             modelo=modelo,
             fecha_ingreso=fecha_ingreso,
+            fecha_tear_down=fecha_tear_down,
             estado=CamaraTaller.Estado.RECIBIDA,
             observaciones=observaciones,
         )
@@ -284,6 +290,7 @@ def camara_editar(request, camara_id):
         modelo = request.POST.get("modelo", "").strip()
         serial = request.POST.get("serial", "").strip()
         fecha_ingreso = request.POST.get("fecha_ingreso")
+        fecha_tear_down = request.POST.get("fecha_tear_down") or None
         estado = request.POST.get("estado")
         observaciones = request.POST.get("observaciones", "").strip()
 
@@ -316,6 +323,7 @@ def camara_editar(request, camara_id):
         camara.modelo = modelo
         camara.serial = serial
         camara.fecha_ingreso = fecha_ingreso
+        camara.fecha_tear_down = fecha_tear_down
         camara.estado = estado
         camara.observaciones = observaciones
 
@@ -336,3 +344,443 @@ def camara_editar(request, camara_id):
             "estados": CamaraTaller.Estado.choices,
         }
     )
+
+# ============================================================
+# CONTROL DE HORAS DE ENSAMBLE - TALLER
+# ============================================================
+
+def _puede_taller(user):
+    return tiene_rol(user, ["TALLER", "INGENIERIA", "GERENTE", "ADMIN"])
+
+
+def _puede_ver_reporte_horas(user):
+    return tiene_rol(user, ["FINANZAS", "GERENTE", "ADMIN"])
+
+
+def _parse_fecha(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+@login_required
+def dashboard_horas_taller(request):
+    if not _puede_taller(request.user) and not _puede_ver_reporte_horas(request.user):
+        messages.error(request, "No tienes acceso al control de horas de Taller.")
+        return redirect("/")
+
+    # Todo PAW creado como ENSAMBLE aparece en Taller sin depender de OT
+    # ni de que CamaraTaller tenga el PAW relacionado.
+    estados_fuera_operacion = ["EN_FACTURACION", "FACTURADO", "RADICADO"]
+
+    paws_disponibles = (
+        Paw.objects
+        .select_related("cotizacion")
+        .filter(tipo_operacion=Paw.TipoOperacion.ENSAMBLE)
+        .exclude(estado_operativo__in=estados_fuera_operacion)
+        .filter(ensamble_horas_taller__isnull=True)
+        .order_by("-creado_en")
+    )
+
+    ensambles = (
+        EnsambleTaller.objects
+        .select_related("paw", "paw__cotizacion", "responsable")
+        .prefetch_related("tecnicos", "jornadas")
+        .filter(paw__isnull=False)
+        .order_by("-actualizado_en")
+    )
+
+    return render(request, "taller_horas/dashboard.html", {
+        "paws_disponibles": paws_disponibles,
+        "ensambles": ensambles,
+        "puede_operar": _puede_taller(request.user),
+        "puede_reporte": _puede_ver_reporte_horas(request.user),
+    })
+
+
+@login_required
+def iniciar_ensamble(request, paw_id):
+    if not _puede_taller(request.user):
+        messages.error(request, "No tienes permiso para iniciar controles de horas de Taller.")
+        return redirect("/")
+
+    paw = get_object_or_404(
+        Paw.objects.select_related("cotizacion"),
+        id=paw_id,
+        tipo_operacion=Paw.TipoOperacion.ENSAMBLE,
+    )
+
+    existente = EnsambleTaller.objects.filter(paw=paw).first()
+    if existente:
+        return redirect("taller:horas_detalle", ensamble_id=existente.id)
+
+    if request.method == "POST":
+        form = IniciarEnsambleForm(request.POST)
+        if form.is_valid():
+            ensamble = form.save(commit=False)
+            ensamble.paw = paw
+            ensamble.responsable = request.user
+            ensamble.save()
+            messages.success(
+                request,
+                f"Control de horas iniciado para el PAW {paw.numero_paw}."
+            )
+            return redirect("taller:horas_asignar_tecnicos", ensamble_id=ensamble.id)
+    else:
+        form = IniciarEnsambleForm(initial={"fecha_inicio": timezone.localdate()})
+
+    return render(request, "taller_horas/iniciar_ensamble.html", {
+        "paw": paw,
+        "form": form,
+    })
+
+
+@login_required
+def detalle_ensamble(request, ensamble_id):
+    if not _puede_taller(request.user) and not _puede_ver_reporte_horas(request.user):
+        messages.error(request, "No tienes acceso a este control de horas.")
+        return redirect("/")
+
+    ensamble = get_object_or_404(
+        EnsambleTaller.objects
+        .select_related("paw", "paw__cotizacion", "responsable")
+        .prefetch_related("tecnicos", "jornadas", "jornadas__tecnico"),
+        id=ensamble_id,
+    )
+
+    camara_relacionada = None
+    if ensamble.paw_id:
+        camara_relacionada = (
+            CamaraTaller.objects
+            .filter(paw=ensamble.paw)
+            .order_by("-actualizado_en")
+            .first()
+        )
+
+    return render(request, "taller_horas/detalle.html", {
+        "ensamble": ensamble,
+        "jornadas": ensamble.jornadas.all(),
+        "camara_relacionada": camara_relacionada,
+        "puede_operar": _puede_taller(request.user),
+        "puede_reporte": _puede_ver_reporte_horas(request.user),
+    })
+
+
+@login_required
+def asignar_tecnicos(request, ensamble_id):
+    if not _puede_taller(request.user):
+        messages.error(request, "No tienes permiso para asignar técnicos.")
+        return redirect("/")
+
+    ensamble = get_object_or_404(
+        EnsambleTaller.objects
+        .select_related("paw")
+        .prefetch_related("tecnicos"),
+        id=ensamble_id,
+    )
+
+    if ensamble.estado == EnsambleTaller.Estado.FINALIZADO:
+        messages.error(request, "No puedes modificar técnicos de un control finalizado.")
+        return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+
+    if request.method == "POST":
+        form = AsignarTecnicosTallerForm(request.POST, ensamble=ensamble)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Técnicos de Taller actualizados.")
+            return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+    else:
+        form = AsignarTecnicosTallerForm(ensamble=ensamble)
+
+    return render(request, "taller_horas/asignar_tecnicos.html", {
+        "ensamble": ensamble,
+        "form": form,
+    })
+
+
+@login_required
+def crear_jornada(request, ensamble_id):
+    if not _puede_taller(request.user):
+        messages.error(request, "No tienes permiso para registrar jornadas de Taller.")
+        return redirect("/")
+
+    ensamble = get_object_or_404(
+        EnsambleTaller.objects
+        .select_related("paw")
+        .prefetch_related("tecnicos"),
+        id=ensamble_id,
+    )
+
+    if ensamble.estado == EnsambleTaller.Estado.FINALIZADO:
+        messages.error(request, "No puedes registrar horas en un control finalizado.")
+        return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+
+    if not ensamble.tecnicos.exists():
+        messages.error(request, "Primero debes asignar los técnicos involucrados.")
+        return redirect("taller:horas_asignar_tecnicos", ensamble_id=ensamble.id)
+
+    if request.method == "POST":
+        form = JornadaTallerForm(request.POST, ensamble=ensamble)
+        if form.is_valid():
+            jornada = form.save(commit=False)
+            jornada.ensamble = ensamble
+            jornada.registrado_por = request.user
+            jornada.save()
+            messages.success(request, "Jornada registrada y horas calculadas automáticamente.")
+            return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+    else:
+        form = JornadaTallerForm(
+            ensamble=ensamble,
+            initial={
+                "fecha": timezone.localdate(),
+                "hora_entrada": "07:00",
+                "hora_salida": "16:00",
+            },
+        )
+
+    return render(request, "taller_horas/jornada_form.html", {
+        "ensamble": ensamble,
+        "form": form,
+        "modo": "crear",
+    })
+
+
+@login_required
+def editar_jornada(request, jornada_id):
+    if not _puede_taller(request.user):
+        messages.error(request, "No tienes permiso para editar jornadas de Taller.")
+        return redirect("/")
+
+    jornada = get_object_or_404(
+        JornadaTaller.objects
+        .select_related("ensamble", "ensamble__paw", "tecnico"),
+        id=jornada_id,
+    )
+    ensamble = jornada.ensamble
+
+    if ensamble.estado == EnsambleTaller.Estado.FINALIZADO:
+        messages.error(request, "No puedes editar jornadas de un control finalizado.")
+        return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+
+    if request.method == "POST":
+        form = JornadaTallerForm(request.POST, instance=jornada, ensamble=ensamble)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Jornada actualizada.")
+            return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+    else:
+        form = JornadaTallerForm(instance=jornada, ensamble=ensamble)
+
+    return render(request, "taller_horas/jornada_form.html", {
+        "ensamble": ensamble,
+        "jornada": jornada,
+        "form": form,
+        "modo": "editar",
+    })
+
+
+@require_POST
+@login_required
+def finalizar_ensamble(request, ensamble_id):
+    if not _puede_taller(request.user):
+        messages.error(request, "No tienes permiso para finalizar controles de horas de Taller.")
+        return redirect("/")
+
+    ensamble = get_object_or_404(
+        EnsambleTaller.objects
+        .select_related("paw")
+        .prefetch_related("jornadas"),
+        id=ensamble_id,
+    )
+
+    if ensamble.estado == EnsambleTaller.Estado.FINALIZADO:
+        messages.info(request, "Este control de horas ya estaba finalizado.")
+        return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+
+    if not ensamble.jornadas.exists():
+        messages.error(request, "No puedes finalizar sin registrar al menos una jornada.")
+        return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+
+    # CIERRE EXCLUSIVAMENTE INTERNO.
+    # No cambia paw.estado_operativo, tipo_operacion ni el estado de CamaraTaller.
+    ensamble.estado = EnsambleTaller.Estado.FINALIZADO
+    ensamble.fecha_fin = timezone.localdate()
+    ensamble.save(update_fields=["estado", "fecha_fin", "actualizado_en"])
+
+    messages.success(
+        request,
+        "Control de horas finalizado internamente. El flujo principal del PAW no fue modificado."
+    )
+    return redirect("taller:horas_detalle", ensamble_id=ensamble.id)
+
+
+@login_required
+def reporte_horas(request):
+    if not _puede_ver_reporte_horas(request.user):
+        messages.error(request, "No tienes acceso al reporte contable de horas de Taller.")
+        return redirect("/")
+
+    hoy = timezone.localdate()
+    fecha_inicio = _parse_fecha(request.GET.get("fecha_inicio")) or hoy.replace(day=1)
+    fecha_fin = _parse_fecha(request.GET.get("fecha_fin")) or hoy
+
+    jornadas = (
+        JornadaTaller.objects
+        .filter(fecha__range=[fecha_inicio, fecha_fin])
+        .select_related("tecnico", "ensamble", "ensamble__paw")
+        .order_by("tecnico__tecnico", "fecha", "hora_entrada")
+    )
+
+    resumen = defaultdict(lambda: {
+        "ordinarias": Decimal("0.00"),
+        "extra_diurna": Decimal("0.00"),
+        "extra_nocturna": Decimal("0.00"),
+        "total": Decimal("0.00"),
+        "detalle": [],
+    })
+
+    total_ord = Decimal("0.00")
+    total_ed = Decimal("0.00")
+    total_en = Decimal("0.00")
+    total_general = Decimal("0.00")
+
+    for j in jornadas:
+        nombre = j.tecnico.tecnico
+        data = resumen[nombre]
+        data["ordinarias"] += j.horas_ordinarias
+        data["extra_diurna"] += j.horas_extra_diurna
+        data["extra_nocturna"] += j.horas_extra_nocturna
+        data["total"] += j.horas_totales
+        data["detalle"].append(j)
+
+        total_ord += j.horas_ordinarias
+        total_ed += j.horas_extra_diurna
+        total_en += j.horas_extra_nocturna
+        total_general += j.horas_totales
+
+    return render(request, "taller_horas/reporte_horas.html", {
+        "resumen": dict(resumen),
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin,
+        "total_ordinarias": total_ord,
+        "total_extra_diurna": total_ed,
+        "total_extra_nocturna": total_en,
+        "total_general": total_general,
+    })
+
+@login_required
+def reporte_horas_empleado(request):
+    if not _puede_ver_reporte_horas(request.user):
+        messages.error(
+            request,
+            "No tienes acceso al reporte individual de horas extra de Taller."
+        )
+        return redirect("/")
+
+    tecnico = request.GET.get("tecnico", "").strip()
+
+    if not tecnico:
+        messages.error(request, "Debes indicar el técnico.")
+        return redirect("taller:horas_reporte")
+
+    hoy = timezone.localdate()
+    corte_inicio, corte_fin = _periodo_corte_27(hoy)
+
+    fecha_inicio = (
+        _parse_fecha(request.GET.get("fecha_inicio"))
+        or corte_inicio
+    )
+
+    fecha_fin = (
+        _parse_fecha(request.GET.get("fecha_fin"))
+        or corte_fin
+    )
+
+    jornadas = (
+        JornadaTaller.objects
+        .filter(
+            tecnico__tecnico=tecnico,
+            fecha__range=[fecha_inicio, fecha_fin],
+            ensamble__estado=EnsambleTaller.Estado.FINALIZADO,
+        )
+        .select_related(
+            "tecnico",
+            "ensamble",
+            "ensamble__paw",
+        )
+        .order_by("fecha", "hora_entrada")
+    )
+
+    total_ordinarias = Decimal("0.00")
+    total_extra_diurna = Decimal("0.00")
+    total_extra_nocturna = Decimal("0.00")
+    total_general = Decimal("0.00")
+
+    for jornada in jornadas:
+        total_ordinarias += jornada.horas_ordinarias
+        total_extra_diurna += jornada.horas_extra_diurna
+        total_extra_nocturna += jornada.horas_extra_nocturna
+        total_general += jornada.horas_totales
+
+    return render(
+        request,
+        "taller_horas/reporte_horas_empleado.html",
+        {
+            "tecnico": tecnico,
+            "jornadas": jornadas,
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin,
+            "total_ordinarias": total_ordinarias,
+            "total_extra_diurna": total_extra_diurna,
+            "total_extra_nocturna": total_extra_nocturna,
+            "total_general": total_general,
+        }
+    )
+
+def _periodo_corte_27(fecha_base):
+    if fecha_base.day <= 27:
+
+        if fecha_base.month == 1:
+            fecha_inicio = date(
+                fecha_base.year - 1,
+                12,
+                28
+            )
+        else:
+            fecha_inicio = date(
+                fecha_base.year,
+                fecha_base.month - 1,
+                28
+            )
+
+        fecha_fin = date(
+            fecha_base.year,
+            fecha_base.month,
+            27
+        )
+
+    else:
+
+        fecha_inicio = date(
+            fecha_base.year,
+            fecha_base.month,
+            28
+        )
+
+        if fecha_base.month == 12:
+            fecha_fin = date(
+                fecha_base.year + 1,
+                1,
+                27
+            )
+        else:
+            fecha_fin = date(
+                fecha_base.year,
+                fecha_base.month + 1,
+                27
+            )
+
+    return fecha_inicio, fecha_fin

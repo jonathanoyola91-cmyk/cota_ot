@@ -1,0 +1,35 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}{% if modo == 'editar' %}Editar jornada{% else %}Registrar jornada{% endif %} · PAW {{ ensamble.paw.numero_paw }}{% endblock %}
+{% block content %}
+<style>
+.grid-horas{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:14px}
+.help-horas{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;color:#1e40af;font-weight:700;margin:14px 0}
+@media(max-width:760px){.grid-horas{grid-template-columns:1fr}}
+</style>
+<div class="panel">
+    <h2>{% if modo == 'editar' %}Editar jornada{% else %}Registrar jornada de Taller{% endif %}</h2>
+    <p>PAW <strong>{{ ensamble.paw.numero_paw }}</strong> · {{ ensamble.paw.nombre_paw|default:"-" }}</p>
+    <div class="help-horas">
+        Ordinario: 07:00–12:00 y 13:00–16:00. Almuerzo 12:00–13:00 no suma horas.
+        HE diurna: 16:00–19:00. HE nocturna: 19:00–06:00 del día siguiente.
+    </div>
+    {% if form.non_field_errors %}
+        <div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:12px;">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <div class="grid-horas">
+            <div><label>Técnico</label>{{ form.tecnico }}{{ form.tecnico.errors }}</div>
+            <div><label>Fecha</label>{{ form.fecha }}{{ form.fecha.errors }}</div>
+            <div><label>Hora entrada</label>{{ form.hora_entrada }}{{ form.hora_entrada.errors }}</div>
+            <div><label>Hora salida</label>{{ form.hora_salida }}{{ form.hora_salida.errors }}</div>
+        </div>
+        <div style="margin-top:14px;"><label>Actividades realizadas</label>{{ form.actividades }}{{ form.actividades.errors }}</div>
+        <div style="margin-top:14px;"><label>Observaciones</label>{{ form.observaciones }}{{ form.observaciones.errors }}</div>
+        <div style="margin-top:18px;">
+            <button class="btn" type="submit">Guardar jornada</button>
+            <a class="btn btn-secondary" href="{% url 'taller:horas_detalle' ensamble.id %}">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

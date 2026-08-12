@@ -1,0 +1,81 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Taller · Horas de ensamble{% endblock %}
+{% block content %}
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+        <div>
+            <h2>Control de horas · Ensamble de cámaras</h2>
+            <p style="color:#64748b;">
+                Los PAW tipo Ensamble aparecen automáticamente. El cierre de horas no modifica el flujo principal del PAW.
+            </p>
+        </div>
+        {% if puede_reporte %}
+            <a class="btn btn-secondary" href="{% url 'taller:horas_reporte' %}">Reporte Contabilidad</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="panel" style="margin-top:18px;">
+    <h2>Controles de horas iniciados</h2><br>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead><tr>
+                <th>PAW</th><th>Trabajo</th><th>Cliente</th><th>Estado interno</th><th>Técnicos</th>
+                <th>H. ordinarias</th><th>HE diurna</th><th>HE nocturna</th><th>Total HH</th><th>Acción</th>
+            </tr></thead>
+            <tbody>
+            {% for e in ensambles %}
+                <tr>
+                    <td><strong>{{ e.paw.numero_paw|default:"-" }}</strong></td>
+                    <td>{{ e.paw.nombre_paw|default:"-" }}</td>
+                    <td>{{ e.paw.cliente|default:"-" }}</td>
+                    <td>{{ e.get_estado_display }}</td>
+                    <td>{{ e.cantidad_tecnicos }}</td>
+                    <td>{{ e.total_horas_ordinarias|floatformat:2 }}</td>
+                    <td>{{ e.total_extra_diurna|floatformat:2 }}</td>
+                    <td>{{ e.total_extra_nocturna|floatformat:2 }}</td>
+                    <td><strong>{{ e.total_horas_hombre|floatformat:2 }}</strong></td>
+                    <td><a class="btn" href="{% url 'taller:horas_detalle' e.id %}">Ver</a></td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="10">No hay controles de horas iniciados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if puede_operar %}
+<div class="panel" style="margin-top:18px;">
+    <h2>PAW pendientes de iniciar control de horas</h2>
+    <p style="color:#64748b;margin:6px 0 16px;">
+        Se muestran automáticamente los PAW cuyo tipo de operación es Ensamble / Taller.
+    </p>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead><tr>
+                <th>PAW</th><th>Trabajo</th><th>Cliente</th><th>Campo</th><th>Estado PAW</th><th>Acción</th>
+            </tr></thead>
+            <tbody>
+            {% for paw in paws_disponibles %}
+                <tr>
+                    <td><strong>{{ paw.numero_paw }}</strong></td>
+                    <td>{{ paw.nombre_paw|default:"-" }}</td>
+                    <td>{{ paw.cliente|default:"-" }}</td>
+                    <td>{{ paw.campo|default:"-" }}</td>
+                    <td>{{ paw.get_estado_operativo_display }}</td>
+                    <td>
+                        <a class="btn" href="{% url 'taller:horas_iniciar' paw.id %}">
+                            Iniciar control horas
+                        </a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6">No hay PAW de ensamble pendientes de iniciar.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

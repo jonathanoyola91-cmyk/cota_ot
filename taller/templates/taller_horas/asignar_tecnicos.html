@@ -1,0 +1,18 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Técnicos Taller · PAW {{ ensamble.paw.numero_paw }}{% endblock %}
+{% block content %}
+<div class="panel">
+    <h2>Técnicos involucrados</h2>
+    <p style="color:#64748b;">
+        PAW {{ ensamble.paw.numero_paw }} · {{ ensamble.paw.nombre_paw|default:"-" }}
+    </p>
+    <form method="post" style="margin-top:18px;">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {{ form.tecnicos.errors }}
+        <div style="display:grid;gap:10px;margin:16px 0;">{{ form.tecnicos }}</div>
+        <button class="btn" type="submit">Guardar técnicos</button>
+        <a class="btn btn-secondary" href="{% url 'taller:horas_detalle' ensamble.id %}">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

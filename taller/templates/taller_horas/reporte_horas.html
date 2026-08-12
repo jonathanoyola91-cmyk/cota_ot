@@ -1,0 +1,104 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Taller · Horas extra técnicos{% endblock %}
+{% block content %}
+<style>
+    .he-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:18px 0}
+    .he-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:18px 0}
+    .he-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:16px}
+    .he-card small{display:block;color:#64748b;font-weight:800;font-size:12px;margin-bottom:6px}
+    .he-card strong{font-size:20px}
+    .tech-card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:18px;margin-top:18px}
+    @media print{
+        .sidebar,.topbar,.no-print{display:none!important}
+        .main{padding:0!important}
+        .panel,.tech-card,.he-card{box-shadow:none!important}
+    }
+</style>
+
+<div class="panel">
+    <div class="no-print" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h2>Reporte técnico · Horas extra Taller</h2>
+            <p style="color:#64748b;margin-top:6px;">
+                Corte 28–27. Solo se incluyen jornadas pertenecientes a controles de horas FINALIZADOS.
+                Taller no maneja bonos.
+            </p>
+        </div>
+        <button class="btn btn-secondary" onclick="window.print()">Imprimir / PDF</button>
+    </div>
+
+    <form method="get" class="he-filter no-print">
+        <div>
+            <label>Fecha inicio</label>
+            <input class="form-control" type="date" name="fecha_inicio" value="{{ fecha_inicio|date:'Y-m-d' }}">
+        </div>
+        <div>
+            <label>Fecha fin</label>
+            <input class="form-control" type="date" name="fecha_fin" value="{{ fecha_fin|date:'Y-m-d' }}">
+        </div>
+        <button class="btn" type="submit">Filtrar</button>
+    </form>
+
+    <div class="he-summary">
+        <div class="he-card"><small>Periodo</small><strong>{{ fecha_inicio|date:"d/m/Y" }} → {{ fecha_fin|date:"d/m/Y" }}</strong></div>
+        <div class="he-card"><small>Horas ordinarias (informativo)</small><strong>{{ total_ordinarias|floatformat:2 }} h</strong></div>
+        <div class="he-card"><small>HE diurna</small><strong>{{ total_extra_diurna|floatformat:2 }} h</strong></div>
+        <div class="he-card"><small>HE nocturna</small><strong>{{ total_extra_nocturna|floatformat:2 }} h</strong></div>
+    </div>
+</div>
+
+{% for tecnico, data in resumen.items %}
+<div class="tech-card">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+        <div>
+            <h3 style="margin:0;">{{ tecnico }}</h3>
+            <p style="color:#64748b;margin-top:6px;">
+                Ordinarias: <strong>{{ data.ordinarias|floatformat:2 }} h</strong> ·
+                HE diurna: <strong>{{ data.extra_diurna|floatformat:2 }} h</strong> ·
+                HE nocturna: <strong>{{ data.extra_nocturna|floatformat:2 }} h</strong>
+            </p>
+        </div>
+        <a class="btn btn-secondary no-print"
+           target="_blank"
+           href="{% url 'taller:horas_reporte_empleado' %}?tecnico={{ tecnico|urlencode }}&fecha_inicio={{ fecha_inicio|date:'Y-m-d' }}&fecha_fin={{ fecha_fin|date:'Y-m-d' }}">
+            PDF empleado
+        </a>
+    </div>
+
+    <div style="overflow-x:auto;margin-top:14px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>PAW</th>
+                    <th>Trabajo</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Ordinarias</th>
+                    <th>HE diurna</th>
+                    <th>HE nocturna</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for j in data.detalle %}
+                <tr>
+                    <td>{{ j.fecha|date:"d/m/Y" }}</td>
+                    <td><strong>{{ j.ensamble.paw.numero_paw }}</strong></td>
+                    <td>{{ j.ensamble.paw.nombre_paw|default:"-" }}</td>
+                    <td>{{ j.hora_entrada|time:"H:i" }}</td>
+                    <td>{{ j.hora_salida|time:"H:i" }}</td>
+                    <td>{{ j.horas_ordinarias|floatformat:2 }}</td>
+                    <td><strong>{{ j.horas_extra_diurna|floatformat:2 }}</strong></td>
+                    <td><strong>{{ j.horas_extra_nocturna|floatformat:2 }}</strong></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% empty %}
+<div class="panel" style="margin-top:18px;">
+    <strong>No hay horas extra de Taller liquidadas para este corte.</strong>
+</div>
+{% endfor %}
+{% endblock %}
