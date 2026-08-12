@@ -90,7 +90,8 @@
                 <td>{{ ot.titulo }}</td>
                 <td><span class="badge badge-red">SIN BOM</span></td>
                 <td>
-                    <a class="btn" href="/bom/crear/{{ ot.numero }}/">
+                    <a class="btn"
+                       href="{% url 'crear_bom_desde_ot' ot.numero %}">
                         Crear BOM
                     </a>
                 </td>
