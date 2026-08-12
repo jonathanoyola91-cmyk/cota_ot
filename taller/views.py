@@ -43,6 +43,11 @@ def dashboard(request):
     ots = (
         WorkOrder.objects
         .select_related("paw")
+        .filter(
+            Q(paw__isnull=True)
+            | Q(paw__requiere_taller=True)
+            | Q(paw__requiere_taller__isnull=True, paw__tipo_operacion="ENSAMBLE")
+        )
         .exclude(
             Q(paw__estado_operativo__in=estados_paw_fuera_operacion)
             | Q(estado__in=[
@@ -72,7 +77,7 @@ def dashboard(request):
         if compra:
             entrega = (
                 WorkshopDelivery.objects
-                .filter(purchase_request=compra)
+                .filter(purchase_request=compra, destino="TALLER")
                 .prefetch_related("lineas")
                 .first()
             )
@@ -180,7 +185,7 @@ def confirmar_ensamble_ok(request, ot_id):
 
     entrega = (
         WorkshopDelivery.objects
-        .filter(purchase_request=compra)
+        .filter(purchase_request=compra, destino="TALLER")
         .prefetch_related("lineas")
         .first()
     )

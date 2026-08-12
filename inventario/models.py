@@ -34,38 +34,81 @@ class InventoryReception(models.Model):
 
 
 class InventoryReceptionLine(models.Model):
-    recepcion = models.ForeignKey(InventoryReception, on_delete=models.CASCADE, related_name="lineas")
-    purchase_line = models.ForeignKey("compras_oil.PurchaseLine", on_delete=models.CASCADE)
 
-    codigo = models.CharField(max_length=100, blank=True, null=True)
-    descripcion = models.TextField(blank=True, null=True)
-    unidad = models.CharField(max_length=20, blank=True, null=True)
+    class Estado(models.TextChoices):
+        PENDIENTE = "PENDIENTE", "Pendiente"
+        PARCIAL = "PARCIAL", "Parcial"
+        LISTO = "LISTO", "Listo"
 
-    cantidad_esperada = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    cantidad_recibida = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    recepcion = models.ForeignKey(
+        InventoryReception,
+        on_delete=models.CASCADE,
+        related_name="lineas"
+    )
 
-    estado = models.CharField(max_length=20, default="PENDIENTE")
+    purchase_line = models.OneToOneField(
+        "compras_oil.PurchaseLine",
+        on_delete=models.PROTECT,
+        related_name="recepcion_linea"
+    )
 
-    fecha_llegada = models.DateField(blank=True, null=True)
-    observacion_inventario = models.TextField(blank=True, null=True)
+    # Snapshot del ítem comprado
+    codigo = models.CharField(max_length=80, blank=True, default="")
+    descripcion = models.CharField(max_length=200, blank=True, default="")
+    unidad = models.CharField(max_length=20, blank=True, default="")
+
+    cantidad_esperada = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=0
+    )
+
+    cantidad_recibida = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=0
+    )
+
+    fecha_llegada = models.DateField(null=True, blank=True)
+
+    estado = models.CharField(
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+
+    observacion_inventario = models.TextField(
+        blank=True,
+        null=True
+    )
+
     def __str__(self):
-        pl = getattr(self, "purchase_line", None)
-        codigo = getattr(pl, "codigo", "") if pl else ""
-        return f"Recepción {codigo} - {self.estado}"
-
-
+        return f"Recepción {self.codigo} - {self.estado}"
+        
 # ======================================================
 # ENTREGA TALLER
 # ======================================================
 
 class WorkshopDelivery(models.Model):
     """
-    Encabezado: ENTREGA TALLER por PurchaseRequest (PAW).
+    Encabezado de entrega de material por PurchaseRequest (PAW).
+    Se conserva el nombre histórico del modelo para no romper relaciones existentes.
     """
+
+    class Destino(models.TextChoices):
+        TALLER = "TALLER", "Taller"
+        CAMPO = "CAMPO", "Campo"
+        INVENTARIO = "INVENTARIO", "Inventario / despacho al cliente"
     purchase_request = models.OneToOneField(
         "compras_oil.PurchaseRequest",
         on_delete=models.PROTECT,
         related_name="entrega_taller"
+    )
+
+    destino = models.CharField(
+        max_length=20,
+        choices=Destino.choices,
+        default=Destino.TALLER,
     )
 
     creado_por = models.ForeignKey(
@@ -86,7 +129,7 @@ class WorkshopDelivery(models.Model):
         paw = getattr(pr, "paw_numero", None) if pr else None
         nombre = getattr(pr, "paw_nombre", "") if pr else ""
         nombre = (nombre or "")[:60]
-        return f"ENTREGA TALLER - PAW #{paw or self.id} - {nombre}"
+        return f"ENTREGA {self.get_destino_display().upper()} - PAW #{paw or self.id} - {nombre}"
 
 
 class WorkshopDeliveryLine(models.Model):

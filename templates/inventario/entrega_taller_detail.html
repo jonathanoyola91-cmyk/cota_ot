@@ -1,5 +1,5 @@
 {% extends "dashboard/home.html" %}
-{% block page_title %}Entrega a Taller{% endblock %}
+{% block page_title %}Entrega de Material{% endblock %}
 
 {% block content %}
 
@@ -38,7 +38,8 @@
 </style>
 
 <div class="panel">
-    <h2>Entrega a taller · PAW {{ entrega.purchase_request.paw_numero }}</h2>
+    <h2>Entrega a {{ entrega.get_destino_display }} · PAW {{ entrega.purchase_request.paw_numero }}</h2>
+    <p><strong>Destino:</strong> {{ entrega.get_destino_display }}</p>
     <p>{{ entrega.purchase_request.paw_nombre }}</p>
 
     <div class="progress-wrap">

@@ -113,6 +113,43 @@
         margin-top:10px;
         line-height:1.5;
     }
+
+    .approval-summary {
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+        gap:10px;
+        margin:12px 0 14px;
+    }
+    .approval-mini {
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:12px;
+        padding:11px 13px;
+        color:#334155;
+        font-size:12px;
+        font-weight:800;
+    }
+    .approval-mini strong { color:#0f172a; font-size:16px; }
+    .line-status {
+        display:inline-flex;
+        align-items:center;
+        padding:6px 9px;
+        border-radius:999px;
+        font-size:11px;
+        font-weight:900;
+        white-space:nowrap;
+    }
+    .status-ok { background:#dcfce7; color:#166534; }
+    .status-wait { background:#fef3c7; color:#92400e; }
+    .status-bad { background:#fee2e2; color:#991b1b; }
+    .status-info { background:#dbeafe; color:#1d4ed8; }
+    .status-muted { background:#e2e8f0; color:#475569; }
+    .line-action-btn {
+        border:0; border-radius:9px; padding:8px 10px; cursor:pointer;
+        background:#2563eb; color:#fff; font-size:11px; font-weight:900; white-space:nowrap;
+    }
+    .line-action-btn:disabled { background:#cbd5e1; color:#64748b; cursor:not-allowed; }
+
 </style>
 
 <div class="cards">
@@ -168,20 +205,25 @@
         <hr style="margin:20px 0;border:none;border-top:1px solid #e5e7eb;">
 
         <div class="flow-help">
-            <strong class="flow-help-title">Flujo recomendado de compra</strong>
+            <strong class="flow-help-title">Flujo de compra por ítem</strong>
             <div class="flow-help-text">
-                1. Enviar a finanzas si hay líneas de contado ·
-                2. Enviar a aprobación gerencia ·
-                3. Enviar a inventario ·
-                4. Registrar recepción de material ·
-                5. Entregar material a taller ·
-                6. Cerrar compra
+                1. Cada ítem se aprueba según su tipo de pago: Contado → Finanzas / Crédito → Gerencia ·
+                2. Cuando todos estén aprobados, enviar a Inventario ·
+                3. Registrar recepción ·
+                4. Entregar material ·
+                5. Cerrar compra
+            </div>
+
+            <div class="approval-summary">
+                <div class="approval-mini">Aprobaciones<br><strong>{{ resumen_aprobaciones.aprobadas }}/{{ resumen_aprobaciones.total }}</strong> ítems</div>
+                <div class="approval-mini">Contado / Finanzas<br><strong>{{ resumen_aprobaciones.contado_aprobado }}/{{ resumen_aprobaciones.contado_total }}</strong></div>
+                <div class="approval-mini">Crédito / Gerencia<br><strong>{{ resumen_aprobaciones.credito_aprobado }}/{{ resumen_aprobaciones.credito_total }}</strong></div>
             </div>
 
             <div class="flow-legend">
-                <span><span class="legend-dot dot-done"></span>Realizado</span>
-                <span><span class="legend-dot dot-active"></span>Paso recomendado / actual</span>
-                <span><span class="legend-dot dot-pending"></span>Pendiente o bloqueado</span>
+                <span><span class="legend-dot dot-done"></span>Aprobado</span>
+                <span><span class="legend-dot dot-active"></span>Acción disponible</span>
+                <span><span class="legend-dot dot-pending"></span>Pendiente</span>
                 <span><span class="legend-dot dot-final"></span>Cierre final</span>
             </div>
         </div>
@@ -196,82 +238,62 @@
 
         {% if compra.estado == "BORRADOR" %}
             <div class="flow-warning">
-                ⚠️ Antes de avanzar, guarda los cambios de proveedor, precio, tipo de pago y observaciones.
+                ⚠️ Guarda proveedor, precio y tipo de pago antes de enviar cada ítem a aprobación.
             </div>
         {% endif %}
 
         <div class="flow-actions">
-
-            <form method="post" action="{% url 'compras_oil:enviar_finanzas' compra.pk %}">
-                {% csrf_token %}
-                <button class="flow-btn {% if flujo_tiene_contado and flujo_finanzas_ok %}step-done{% elif puede_enviar_finanzas %}step-active{% else %}step-pending{% endif %}"
-                        type="submit"
-                        {% if not puede_enviar_finanzas %}disabled{% endif %}>
-                    {% if flujo_tiene_contado and flujo_finanzas_ok %}✅{% elif puede_enviar_finanzas %}🔵{% else %}⚪{% endif %}
-                    1. Enviar a finanzas
-                </button>
-            </form>
-            
-            {% if flujo_finanzas_ok and not flujo_aprobacion_ok and puede_gerencia %}
-            <form method="post" action="{% url 'compras_oil:aprobar_gerencia_compra' compra.id %}">
-                {% csrf_token %}
-                <button class="btn" type="submit">
-                    Aprobar gerencia
-                </button>
-            </form>
-            {% endif %}
-
-            <form method="post" action="{% url 'compras_oil:enviar_aprobacion' compra.pk %}">
-                {% csrf_token %}
-                <button class="flow-btn {% if flujo_aprobacion_ok %}step-done{% elif puede_enviar_aprobacion %}step-active{% else %}step-pending{% endif %}"
-                        type="submit"
-                        {% if not puede_enviar_aprobacion %}disabled{% endif %}>
-                    {% if flujo_aprobacion_ok %}✅{% elif puede_enviar_aprobacion %}🔵{% else %}⚪{% endif %}
-                    2. Enviar a aprobación gerencia
-                </button>
-            </form>
-
             <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
                 {% csrf_token %}
                 <button class="flow-btn {% if flujo_recepcion_creada %}step-done{% elif puede_enviar_inventario %}step-active{% else %}step-pending{% endif %}"
-                        type="submit"
-                        {% if not puede_enviar_inventario %}disabled{% endif %}>
+                        type="submit" {% if not puede_enviar_inventario %}disabled{% endif %}>
                     {% if flujo_recepcion_creada %}✅{% elif puede_enviar_inventario %}🔵{% else %}⚪{% endif %}
-                    3. Enviar a inventario
+                    2. Enviar a Inventario
                 </button>
             </form>
 
             <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
                 {% csrf_token %}
                 <button class="flow-btn {% if flujo_recepcion_ok %}step-done{% elif puede_registrar_recepcion %}step-active{% else %}step-pending{% endif %}"
-                        type="submit"
-                        {% if not puede_registrar_recepcion %}disabled{% endif %}>
+                        type="submit" {% if not puede_registrar_recepcion %}disabled{% endif %}>
                     {% if flujo_recepcion_ok %}✅{% elif puede_registrar_recepcion %}🔵{% else %}⚪{% endif %}
-                    4. Registrar recepción
+                    3. Registrar recepción
                 </button>
             </form>
 
-            <form method="post" action="{% url 'compras_oil:generar_entrega_taller' compra.pk %}">
-                {% csrf_token %}
-                <button class="flow-btn {% if flujo_entrega_ok %}step-done{% elif puede_entregar_taller %}step-active{% else %}step-pending{% endif %}"
-                        type="submit"
-                        {% if not puede_entregar_taller %}disabled{% endif %}>
-                    {% if flujo_entrega_ok %}✅{% elif puede_entregar_taller %}🔵{% else %}⚪{% endif %}
-                    5. Entregar material a taller
-                </button>
-            </form>
+            {% if flujo_entrega_creada %}
+                <a class="flow-btn {% if flujo_entrega_ok %}step-done{% else %}step-active{% endif %}"
+                   href="{% url 'inventario:entrega_taller_detail' entrega.pk %}">
+                    {% if flujo_entrega_ok %}✅{% else %}🔵{% endif %}
+                    4. Entrega: {{ entrega.get_destino_display }}
+                </a>
+            {% else %}
+                <form method="post" action="{% url 'compras_oil:generar_entrega' compra.pk %}"
+                      style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    {% csrf_token %}
+                    <select name="destino" {% if not puede_generar_entrega %}disabled{% endif %}
+                            style="padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;font-weight:800;">
+                        <option value="">Destino de entrega...</option>
+                        {% if paw and paw.aplica_taller %}<option value="TALLER">Taller</option>{% endif %}
+                        {% if paw and paw.aplica_campo %}<option value="CAMPO">Campo</option>{% endif %}
+                        <option value="INVENTARIO">Inventario / despacho cliente</option>
+                    </select>
+                    <button class="flow-btn {% if puede_generar_entrega %}step-active{% else %}step-pending{% endif %}"
+                            type="submit" {% if not puede_generar_entrega %}disabled{% endif %}>
+                        {% if puede_generar_entrega %}🔵{% else %}⚪{% endif %} 4. Generar entrega
+                    </button>
+                </form>
+            {% endif %}
 
             <form method="post" action="{% url 'compras_oil:cerrar_solicitud' compra.pk %}"
-                  {% if puede_cerrar_compra %}onsubmit="return confirm('¿Confirmas que deseas cerrar esta compra? Esta acción debe hacerse solo cuando el material ya fue recibido y entregado a taller.');"{% endif %}>
+                  {% if puede_cerrar_compra %}onsubmit="return confirm('¿Confirmas que deseas cerrar esta compra?');"{% endif %}>
                 {% csrf_token %}
                 <button class="flow-btn {% if compra.estado == 'CERRADA' %}step-done{% elif puede_cerrar_compra %}step-final{% else %}step-pending{% endif %}"
-                        type="submit"
-                        {% if not puede_cerrar_compra %}disabled{% endif %}>
+                        type="submit" {% if not puede_cerrar_compra %}disabled{% endif %}>
                     {% if compra.estado == "CERRADA" %}✅{% elif puede_cerrar_compra %}🔒{% else %}⚪{% endif %}
-                    6. Cerrar compra
+                    5. Cerrar compra
                 </button>
             </form>
-
         </div>
 
         
@@ -316,6 +338,8 @@
                         <th>Tipo Pago</th>
                         <th>% Pago</th>
                         <th>Condición / Obs. de compra</th>
+                        <th>Estado aprobación</th>
+                        <th>Acción</th>
                     </tr>
                 </thead>
 
@@ -388,6 +412,44 @@
                                 {{ form.instance.observaciones_compras|default:"-" }}
                             {% endif %}
                         </td>
+
+                        <td style="min-width:190px;">
+                            {% if form.instance.flujo_estado == "APROBADO" %}
+                                <span class="line-status status-ok">✓ {{ form.instance.flujo_texto }}</span>
+                            {% elif form.instance.flujo_estado == "RECHAZADO" %}
+                                <span class="line-status status-bad">✕ {{ form.instance.flujo_texto }}</span>
+                            {% elif form.instance.flujo_estado == "PENDIENTE" or form.instance.flujo_estado == "EN_ESPERA" %}
+                                <span class="line-status status-wait">{{ form.instance.flujo_texto }}</span>
+                            {% elif form.instance.flujo_estado == "PENDIENTE_ENVIO" %}
+                                <span class="line-status status-info">{{ form.instance.flujo_texto }}</span>
+                            {% else %}
+                                <span class="line-status status-muted">{{ form.instance.flujo_texto }}</span>
+                            {% endif %}
+                        </td>
+
+                        <td style="min-width:150px;">
+                            {% if puede_compras and compra.estado != "CERRADA" %}
+                                {% if form.instance.flujo_estado == "PENDIENTE_ENVIO" %}
+                                    {% if form.instance.tipo_pago == "CONTADO" %}
+                                        <button class="line-action-btn" type="submit" form="send-fin-{{ form.instance.id }}">Enviar a Finanzas</button>
+                                    {% elif form.instance.tipo_pago == "CREDITO" %}
+                                        <button class="line-action-btn" type="submit" form="send-ger-{{ form.instance.id }}">Enviar a Gerencia</button>
+                                    {% else %}
+                                        <button class="line-action-btn" type="button" disabled>Definir pago</button>
+                                    {% endif %}
+                                {% elif form.instance.flujo_estado == "RECHAZADO" %}
+                                    {% if form.instance.tipo_pago == "CONTADO" %}
+                                        <button class="line-action-btn" type="submit" form="send-fin-{{ form.instance.id }}">Reenviar Finanzas</button>
+                                    {% elif form.instance.tipo_pago == "CREDITO" %}
+                                        <button class="line-action-btn" type="submit" form="send-ger-{{ form.instance.id }}">Reenviar Gerencia</button>
+                                    {% endif %}
+                                {% else %}
+                                    <span style="color:#64748b;font-size:12px;font-weight:800;">Sin acción</span>
+                                {% endif %}
+                            {% else %}
+                                <span style="color:#64748b;font-size:12px;font-weight:800;">-</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -409,6 +471,17 @@
         </div>
     </div>
 </form>
+
+{% if puede_compras and compra.estado != "CERRADA" %}
+    {% for form in formset %}
+        <form id="send-fin-{{ form.instance.id }}" method="post" action="{% url 'compras_oil:enviar_linea_finanzas' form.instance.id %}" style="display:none;">
+            {% csrf_token %}
+        </form>
+        <form id="send-ger-{{ form.instance.id }}" method="post" action="{% url 'compras_oil:enviar_linea_gerencia' form.instance.id %}" style="display:none;">
+            {% csrf_token %}
+        </form>
+    {% endfor %}
+{% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {

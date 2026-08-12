@@ -1,0 +1,143 @@
+{% extends "dashboard/home.html" %}
+
+{% block page_title %}Aprobación de Gerencia{% endblock %}
+
+{% block content %}
+<style>
+    .approval-wrap { display:grid; gap:18px; }
+    .approval-card {
+        background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+        padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.04);
+    }
+    .approval-head {
+        display:flex; justify-content:space-between; gap:16px;
+        align-items:flex-start; flex-wrap:wrap; margin-bottom:14px;
+    }
+    .approval-head h3 { margin:0 0 5px 0; }
+    .meta { color:#64748b; font-size:13px; }
+    .badge {
+        display:inline-block; padding:5px 9px; border-radius:999px;
+        font-size:12px; font-weight:700;
+    }
+    .badge-pending { background:#fff7ed; color:#9a3412; }
+    .badge-ok { background:#ecfdf5; color:#166534; }
+    .badge-no { background:#fef2f2; color:#991b1b; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:10px 8px; border-bottom:1px solid #e5e7eb; vertical-align:top; }
+    th { text-align:left; font-size:12px; color:#475569; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; min-width:260px; }
+    .actions form { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .obs { min-width:160px; max-width:220px; }
+    .btn-approve {
+        border:0; border-radius:7px; padding:7px 11px;
+        background:#166534; color:#fff; cursor:pointer;
+    }
+    .btn-reject {
+        border:0; border-radius:7px; padding:7px 11px;
+        background:#991b1b; color:#fff; cursor:pointer;
+    }
+</style>
+
+<div class="approval-head">
+    <div>
+        <h2 style="margin:0;">Aprobación de compras · Gerencia</h2>
+        <div class="meta">Ítems a crédito pendientes de decisión</div>
+    </div>
+    <span class="badge badge-pending">{{ total_pendientes }} pendiente{{ total_pendientes|pluralize:"s" }}</span>
+</div>
+
+<div class="approval-wrap">
+{% for aprobacion in pendientes %}
+    <div class="approval-card">
+        <div class="approval-head">
+            <div>
+                <h3>PAW {{ aprobacion.purchase_request.paw_numero }}</h3>
+                <div class="meta">{{ aprobacion.purchase_request.paw_nombre }}</div>
+            </div>
+            <div class="meta">
+                {{ aprobacion.total_aprobadas }}/{{ aprobacion.total_credito }} aprobados
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Cant.</th>
+                        <th>Proveedor</th>
+                        <th>Valor unidad</th>
+                        <th>Valor total</th>
+                        <th>Estado</th>
+                        <th>Decisión</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for linea in aprobacion.lineas_credito %}
+                    <tr>
+                        <td>{{ linea.codigo|default:"-" }}</td>
+                        <td>{{ linea.descripcion }}</td>
+                        <td>{{ linea.cantidad_a_comprar }}</td>
+                        <td>{{ linea.proveedor|default:"-" }}</td>
+                        <td>${{ linea.valor_unidad }}</td>
+                        <td><strong>${{ linea.valor_total }}</strong></td>
+                        <td>
+                            {% if linea.estado_aprobacion == "APROBADO" %}
+                                <span class="badge badge-ok">Aprobado</span>
+                            {% elif linea.estado_aprobacion == "RECHAZADO" %}
+                                <span class="badge badge-no">Rechazado</span>
+                            {% else %}
+                                <span class="badge badge-pending">Pendiente</span>
+                            {% endif %}
+                        </td>
+                        <td class="actions">
+                            {% if linea.estado_aprobacion == "PENDIENTE" %}
+                                <form method="post" action="{% url 'aprobacion:aprobar_linea' linea.id %}">
+                                    {% csrf_token %}
+                                    <input class="obs" type="text" name="observacion" placeholder="Observación opcional">
+                                    <button class="btn-approve" type="submit">Aprobar</button>
+                                </form>
+
+                                <form method="post" action="{% url 'aprobacion:rechazar_linea' linea.id %}">
+                                    {% csrf_token %}
+                                    <input class="obs" type="text" name="observacion" placeholder="Motivo del rechazo" required>
+                                    <button class="btn-reject" type="submit">Rechazar</button>
+                                </form>
+                            {% else %}
+                                <span class="meta">
+                                    {{ linea.decidido_por|default:"-" }}
+                                    {% if linea.decidido_en %}<br>{{ linea.decidido_en|date:"d/m/Y H:i" }}{% endif %}
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% empty %}
+    <div class="approval-card">
+        <strong>No hay ítems a crédito pendientes de aprobación.</strong>
+    </div>
+{% endfor %}
+</div>
+
+{% if historial %}
+<hr style="margin:28px 0;">
+<h3>Historial reciente</h3>
+<div class="approval-wrap">
+{% for aprobacion in historial %}
+    <div class="approval-card">
+        <strong>PAW {{ aprobacion.purchase_request.paw_numero }}</strong>
+        <span class="meta"> · {{ aprobacion.purchase_request.paw_nombre }}</span>
+        <div class="meta" style="margin-top:6px;">
+            Aprobados: {{ aprobacion.total_aprobadas }} · Rechazados: {{ aprobacion.total_rechazadas }}
+        </div>
+    </div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

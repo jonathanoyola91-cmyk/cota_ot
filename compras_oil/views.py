@@ -18,7 +18,7 @@ from openpyxl.utils import get_column_letter
 
 from core.roles import tiene_rol
 from .forms import SupplierForm
-from .models import PurchaseRequest, Supplier
+from .models import PurchaseRequest, PurchaseLine, Supplier
 
 
 def _get_paw_from_compra(compra):
@@ -60,6 +60,91 @@ def _aprobacion_aprobada(compra):
 
     approvals = PurchaseApproval.objects.filter(purchase_request=compra)
     return any(_estado_es_aprobado(aprob) for aprob in approvals)
+
+
+
+
+def _estado_flujo_linea(linea):
+    """Devuelve el estado operativo de aprobación de una línea de compra.
+
+    CONTADO  -> Finanzas (FinanceApprovalLine)
+    CREDITO  -> Gerencia (PurchaseApprovalLine)
+    """
+    if Decimal(linea.cantidad_a_comprar or 0) <= 0:
+        return {"estado": "NO_APLICA", "texto": "No requiere compra", "aprobado": True, "enviado": True}
+
+    if not linea.proveedor_id or linea.precio_unitario is None:
+        return {"estado": "INCOMPLETO", "texto": "Completar proveedor y precio", "aprobado": False, "enviado": False}
+
+    if linea.tipo_pago == "CONTADO":
+        try:
+            fl = linea.finance_line
+        except Exception:
+            return {"estado": "PENDIENTE_ENVIO", "texto": "Pendiente enviar a Finanzas", "aprobado": False, "enviado": False}
+
+        decision = str(fl.decision or "PENDIENTE").upper()
+        if fl.pagado:
+            return {"estado": "APROBADO", "texto": "Pagado por Finanzas", "aprobado": True, "enviado": True}
+        if decision == "APROBADO":
+            return {"estado": "APROBADO", "texto": "Aprobado por Finanzas", "aprobado": True, "enviado": True}
+        if decision == "PROGRAMADO":
+            return {"estado": "APROBADO", "texto": "Programado por Finanzas", "aprobado": True, "enviado": True}
+        if decision == "RECHAZADO":
+            return {"estado": "RECHAZADO", "texto": "Rechazado por Finanzas", "aprobado": False, "enviado": True}
+        if decision == "EN_ESPERA":
+            return {"estado": "EN_ESPERA", "texto": "En espera en Finanzas", "aprobado": False, "enviado": True}
+        return {"estado": "PENDIENTE", "texto": "Pendiente en Finanzas", "aprobado": False, "enviado": True}
+
+    if linea.tipo_pago == "CREDITO":
+        try:
+            al = linea.purchase_approval_line
+        except Exception:
+            return {"estado": "PENDIENTE_ENVIO", "texto": "Pendiente enviar a Gerencia", "aprobado": False, "enviado": False}
+
+        estado = str(al.estado_aprobacion or "PENDIENTE").upper()
+        if estado == "APROBADO":
+            return {"estado": "APROBADO", "texto": "Aprobado por Gerencia", "aprobado": True, "enviado": True}
+        if estado == "RECHAZADO":
+            return {"estado": "RECHAZADO", "texto": "Rechazado por Gerencia", "aprobado": False, "enviado": True}
+        return {"estado": "PENDIENTE", "texto": "Pendiente en Gerencia", "aprobado": False, "enviado": True}
+
+    return {"estado": "INCOMPLETO", "texto": "Definir tipo de pago", "aprobado": False, "enviado": False}
+
+
+def _resumen_aprobaciones(compra):
+    lineas = list(
+        compra.lineas
+        .filter(cantidad_requerida__gt=0, cantidad_a_comprar__gt=0)
+        .select_related("proveedor")
+    )
+
+    total = len(lineas)
+    aprobadas = 0
+    contado_total = contado_aprobado = 0
+    credito_total = credito_aprobado = 0
+
+    for linea in lineas:
+        estado = _estado_flujo_linea(linea)
+        if estado["aprobado"]:
+            aprobadas += 1
+        if linea.tipo_pago == "CONTADO":
+            contado_total += 1
+            if estado["aprobado"]:
+                contado_aprobado += 1
+        elif linea.tipo_pago == "CREDITO":
+            credito_total += 1
+            if estado["aprobado"]:
+                credito_aprobado += 1
+
+    return {
+        "total": total,
+        "aprobadas": aprobadas,
+        "contado_total": contado_total,
+        "contado_aprobado": contado_aprobado,
+        "credito_total": credito_total,
+        "credito_aprobado": credito_aprobado,
+        "todas_aprobadas": total > 0 and aprobadas == total,
+    }
 
 
 def _recepcion_creada(compra):
@@ -111,13 +196,34 @@ def _recepcion_completa(compra):
     return True
 
 
-def _tiene_entrega_taller(compra):
+def _get_entrega(compra):
     try:
         from inventario.models import WorkshopDelivery
     except Exception:
+        return None
+    return (
+        WorkshopDelivery.objects
+        .filter(purchase_request=compra)
+        .prefetch_related("lineas")
+        .first()
+    )
+
+
+def _entrega_completa(compra):
+    entrega = _get_entrega(compra)
+    if not entrega:
         return False
 
-    return WorkshopDelivery.objects.filter(purchase_request=compra).exists()
+    lineas = list(entrega.lineas.all())
+    if not lineas:
+        return False
+
+    for linea in lineas:
+        requerida = Decimal(linea.cantidad_requerida or 0)
+        entregada = Decimal(linea.cantidad_entregada or 0)
+        if requerida > 0 and entregada < requerida:
+            return False
+    return True
 
 @require_POST
 @login_required
@@ -273,33 +379,35 @@ def cerrar_solicitud(request, pk):
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     if not _recepcion_completa(compra):
-        messages.error(
-            request,
-            "No puedes cerrar la compra. Primero debes completar la recepción del material."
-        )
+        messages.error(request, "No puedes cerrar la compra. Primero debes completar la recepción del material.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if not _tiene_entrega_taller(compra):
-        messages.error(
-            request,
-            "No puedes cerrar la compra. Primero debes entregar el material a taller."
-        )
+    entrega = _get_entrega(compra)
+    if not entrega:
+        messages.error(request, "No puedes cerrar la compra. Primero debes definir y registrar la entrega del material.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if paw and paw.estado_operativo != "ENTREGADO_TALLER":
-        messages.error(
-            request,
-            "No puedes cerrar la compra. El PAW todavía no registra entrega a taller."
-        )
+    if not _entrega_completa(compra):
+        messages.error(request, "No puedes cerrar la compra. La entrega todavía tiene cantidades pendientes.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     compra.estado = "CERRADA"
     compra.save(update_fields=["estado", "actualizado_en"])
 
-    messages.success(
-        request,
-        f"Compra PAW {compra.paw_numero} cerrada correctamente."
-    )
+    # Cerrar la COMPRA no equivale a cerrar todo el PAW.
+    # Solo avanzamos el PAW según el destino y su alcance real.
+    if paw:
+        destino = getattr(entrega, "destino", "TALLER")
+        if destino == "TALLER" and getattr(paw, "aplica_taller", True):
+            paw.estado_operativo = "ENTREGADO_TALLER"
+            paw.save(update_fields=["estado_operativo"])
+        elif destino == "INVENTARIO":
+            if not getattr(paw, "aplica_taller", False) and not getattr(paw, "aplica_campo", False):
+                paw.estado_operativo = "PRODUCTO_OK"
+                paw.save(update_fields=["estado_operativo"])
+        # CAMPO conserva MATERIAL_RECIBIDO: el módulo Campo continúa el flujo.
+
+    messages.success(request, f"Compra PAW {compra.paw_numero} cerrada correctamente.")
     return redirect("compras_oil:dashboard")
 
 @login_required
@@ -533,7 +641,11 @@ def paw_detail(request, pk):
     compra = get_object_or_404(
         PurchaseRequest.objects
         .select_related("bom", "bom__workorder", "creado_por")
-        .prefetch_related("lineas__proveedor"),
+        .prefetch_related(
+            "lineas__proveedor",
+            "lineas__finance_line",
+            "lineas__purchase_approval_line",
+        ),
         pk=pk
     )
 
@@ -547,66 +659,67 @@ def paw_detail(request, pk):
             return redirect("compras_oil:paw_detail", pk=compra.pk)
 
         nuevo_estado = request.POST.get("estado")
-
-        if nuevo_estado in ["BORRADOR", "EN_REVISION", "CERRADA"]:
+        if nuevo_estado in ["BORRADOR", "EN_REVISION"]:
             compra.estado = nuevo_estado
             compra.save(update_fields=["estado", "actualizado_en"])
 
         formset = PurchaseLineFormSet(request.POST, queryset=queryset)
-
         if formset.is_valid():
             formset.save()
-            messages.success(
-                request,
-                "Solicitud de compra actualizada correctamente."
-            )
+            messages.success(request, "Solicitud de compra actualizada correctamente.")
             return redirect("compras_oil:paw_detail", pk=compra.pk)
     else:
         formset = PurchaseLineFormSet(queryset=queryset)
 
     total_requerido = Decimal("0")
     total_a_comprar = Decimal("0")
-
     for ln in queryset:
         precio = ln.precio_unitario or Decimal("0")
         total_requerido += (ln.cantidad_requerida or Decimal("0")) * precio
         total_a_comprar += (ln.cantidad_a_comprar or Decimal("0")) * precio
 
-    paw = _get_paw_from_compra(compra)
+    # Adjunta el estado individual a cada instancia usada por el formset.
+    for form in formset.forms:
+        info = _estado_flujo_linea(form.instance)
+        form.instance.flujo_estado = info["estado"]
+        form.instance.flujo_texto = info["texto"]
+        form.instance.flujo_aprobado = info["aprobado"]
+        form.instance.flujo_enviado = info["enviado"]
 
-    flujo_tiene_contado = _tiene_lineas_contado(compra)
-    flujo_tiene_credito = _tiene_lineas_credito(compra)
-    flujo_finanzas_ok = (not flujo_tiene_contado) or _finanzas_aprobado(compra)
-    flujo_aprobacion_ok = _aprobacion_aprobada(compra)
+    paw = _get_paw_from_compra(compra)
+    resumen = _resumen_aprobaciones(compra)
     flujo_recepcion_creada = _recepcion_creada(compra)
     flujo_recepcion_ok = _recepcion_completa(compra)
-    flujo_entrega_ok = _tiene_entrega_taller(compra)
+    entrega = _get_entrega(compra)
+    flujo_entrega_creada = entrega is not None
+    flujo_entrega_ok = _entrega_completa(compra)
 
-    puede_enviar_finanzas = flujo_tiene_contado and compra.estado != "CERRADA"
-    puede_enviar_aprobacion = (
-        flujo_finanzas_ok
-        and not flujo_aprobacion_ok
+    puede_enviar_inventario = (
+        resumen["todas_aprobadas"]
         and not flujo_recepcion_creada
         and compra.estado != "CERRADA"
     )
-    puede_enviar_inventario = flujo_aprobacion_ok and not flujo_recepcion_creada and compra.estado != "CERRADA"
-    puede_registrar_recepcion = flujo_aprobacion_ok and flujo_recepcion_creada and not flujo_recepcion_ok and compra.estado != "CERRADA"
-    puede_entregar_taller = flujo_recepcion_ok and not flujo_entrega_ok and compra.estado != "CERRADA"
+    puede_registrar_recepcion = (
+        resumen["todas_aprobadas"]
+        and flujo_recepcion_creada
+        and not flujo_recepcion_ok
+        and compra.estado != "CERRADA"
+    )
+    puede_generar_entrega = flujo_recepcion_ok and not flujo_entrega_creada and compra.estado != "CERRADA"
     puede_cerrar_compra = flujo_recepcion_ok and flujo_entrega_ok and compra.estado != "CERRADA"
 
-    siguiente_paso = "Diligenciar líneas de compra"
     if compra.estado == "CERRADA":
         siguiente_paso = "Compra cerrada"
-    elif flujo_tiene_contado and not flujo_finanzas_ok:
-        siguiente_paso = "Enviar a finanzas y esperar aprobación/pago"
-    elif flujo_finanzas_ok and not flujo_aprobacion_ok:
-        siguiente_paso = "Enviar a aprobación gerencia"
+    elif not resumen["todas_aprobadas"]:
+        siguiente_paso = f"Completar aprobaciones por ítem ({resumen['aprobadas']}/{resumen['total']})"
     elif not flujo_recepcion_creada:
         siguiente_paso = "Enviar a inventario"
     elif not flujo_recepcion_ok:
         siguiente_paso = "Registrar recepción de material"
+    elif not flujo_entrega_creada:
+        siguiente_paso = "Definir destino y generar entrega"
     elif not flujo_entrega_ok:
-        siguiente_paso = "Entregar material a taller"
+        siguiente_paso = "Completar cantidades entregadas"
     else:
         siguiente_paso = "Cerrar compra"
 
@@ -618,22 +731,102 @@ def paw_detail(request, pk):
         "total_a_comprar": total_a_comprar,
         "puede_compras": tiene_rol(request.user, ["COMPRAS", "ADMIN"]),
         "paw": paw,
-        "flujo_tiene_contado": flujo_tiene_contado,
-        "flujo_tiene_credito": flujo_tiene_credito,
-        "flujo_finanzas_ok": flujo_finanzas_ok,
-        "flujo_aprobacion_ok": flujo_aprobacion_ok,
+        "resumen_aprobaciones": resumen,
         "flujo_recepcion_creada": flujo_recepcion_creada,
         "flujo_recepcion_ok": flujo_recepcion_ok,
+        "flujo_entrega_creada": flujo_entrega_creada,
         "flujo_entrega_ok": flujo_entrega_ok,
-        "puede_enviar_finanzas": puede_enviar_finanzas,
-        "puede_enviar_aprobacion": puede_enviar_aprobacion,
+        "entrega": entrega,
         "puede_enviar_inventario": puede_enviar_inventario,
         "puede_registrar_recepcion": puede_registrar_recepcion,
-        "puede_entregar_taller": puede_entregar_taller,
+        "puede_generar_entrega": puede_generar_entrega,
         "puede_cerrar_compra": puede_cerrar_compra,
         "siguiente_paso": siguiente_paso,
-        "puede_gerencia": tiene_rol(request.user, ["GERENTE", "ADMIN"]),
     })
+
+
+@require_POST
+@login_required
+def enviar_linea_finanzas(request, linea_id):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para enviar ítems a Finanzas.")
+        return redirect("/")
+
+    from finanzas.models import FinanceApproval, FinanceApprovalLine
+
+    linea = get_object_or_404(
+        PurchaseLine.objects.select_related("request", "proveedor"),
+        pk=linea_id,
+    )
+    compra = linea.request
+
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if linea.tipo_pago != "CONTADO":
+        messages.error(request, "Este ítem no es de contado; debe enviarse a Gerencia.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if Decimal(linea.cantidad_a_comprar or 0) <= 0 or not linea.proveedor_id or linea.precio_unitario is None:
+        messages.error(request, "Completa cantidad, proveedor y precio antes de enviar el ítem.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    finanza, _ = FinanceApproval.objects.get_or_create(
+        purchase_request=compra,
+        defaults={"estado": FinanceApproval.Estado.PENDIENTE, "enviado_por": request.user},
+    )
+    FinanceApprovalLine.objects.get_or_create(approval=finanza, purchase_line=linea)
+
+    messages.success(request, f"Ítem {linea.codigo or linea.id} enviado a Finanzas.")
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+
+@require_POST
+@login_required
+def enviar_linea_gerencia(request, linea_id):
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para enviar ítems a Gerencia.")
+        return redirect("/")
+
+    from aprobacion.models import PurchaseApproval, PurchaseApprovalLine
+
+    linea = get_object_or_404(
+        PurchaseLine.objects.select_related("request", "proveedor"),
+        pk=linea_id,
+    )
+    compra = linea.request
+
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if linea.tipo_pago != "CREDITO":
+        messages.error(request, "Este ítem no es de crédito; debe enviarse a Finanzas.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    if Decimal(linea.cantidad_a_comprar or 0) <= 0 or not linea.proveedor_id or linea.precio_unitario is None:
+        messages.error(request, "Completa cantidad, proveedor y precio antes de enviar el ítem.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    aprobacion, _ = PurchaseApproval.objects.get_or_create(
+        purchase_request=compra,
+        defaults={"estado": PurchaseApproval.Estado.PENDIENTE, "enviado_por": request.user},
+    )
+    aprobacion_linea, _ = PurchaseApprovalLine.objects.get_or_create(
+        approval=aprobacion,
+        purchase_line=linea,
+    )
+    # Refresca el snapshot mientras la decisión siga pendiente.
+    if aprobacion_linea.estado_aprobacion == PurchaseApprovalLine.EstadoAprobacion.PENDIENTE:
+        aprobacion_linea.snapshot_from_purchase_line()
+        aprobacion_linea.save()
+
+    aprobacion.recalcular_estado()
+    aprobacion.save(update_fields=["estado", "actualizado_en"])
+
+    messages.success(request, f"Ítem {linea.codigo or linea.id} enviado a Gerencia.")
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
 
 
 @require_POST
@@ -780,25 +973,13 @@ def enviar_inventario(request, pk):
         messages.error(request, "No puedes modificar una compra cerrada.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if _tiene_lineas_contado(compra) and not _finanzas_aprobado(compra):
+    resumen = _resumen_aprobaciones(compra)
+    if not resumen["todas_aprobadas"]:
         messages.error(
             request,
-            "No puedes enviar a inventario. Hay líneas de contado pendientes por aprobación/pago en Finanzas."
+            f"No puedes enviar a Inventario. Solo hay {resumen['aprobadas']} de {resumen['total']} ítems aprobados."
         )
         return redirect("compras_oil:paw_detail", pk=compra.pk)
-
-    if _tiene_lineas_credito(compra) and not _aprobacion_aprobada(compra):
-        messages.error(
-            request,
-            "No puedes enviar a inventario. La compra aún no ha sido aprobada por gerencia."
-        )
-        return redirect("compras_oil:paw_detail", pk=compra.pk)
-
-    paw = _get_paw_from_compra(compra)
-
-    if paw:
-        paw.estado_operativo = "MATERIAL_RECIBIDO"
-        paw.save(update_fields=["estado_operativo"])
 
     recepcion, _ = InventoryReception.objects.get_or_create(
         purchase_request=compra,
@@ -831,51 +1012,53 @@ def enviar_inventario(request, pk):
 
 @require_POST
 @login_required
-def generar_entrega_taller(request, pk):
+def generar_entrega(request, pk):
     if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
-        messages.error(request, "No tienes permiso para generar entrega a taller.")
+        messages.error(request, "No tienes permiso para generar entregas.")
         return redirect("/")
 
     from inventario.models import WorkshopDelivery, WorkshopDeliveryLine
 
-    compra = get_object_or_404(
-        PurchaseRequest.objects.prefetch_related("lineas"),
-        pk=pk,
-    )
+    compra = get_object_or_404(PurchaseRequest.objects.prefetch_related("lineas"), pk=pk)
 
     if compra.estado == "CERRADA":
         messages.error(request, "No puedes modificar una compra cerrada.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     if not _recepcion_completa(compra):
-        messages.error(
-            request,
-            "No puedes entregar a taller. Primero debes completar la recepción del material."
-        )
+        messages.error(request, "Primero debes completar la recepción del material.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    destino = (request.POST.get("destino") or "").upper().strip()
+    destinos_validos = {"TALLER", "CAMPO", "INVENTARIO"}
+    if destino not in destinos_validos:
+        messages.error(request, "Selecciona un destino válido para la entrega.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     paw = _get_paw_from_compra(compra)
+    if destino == "TALLER" and paw and not getattr(paw, "aplica_taller", False):
+        messages.error(request, "Este PAW no tiene habilitado el alcance Taller.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+    if destino == "CAMPO" and paw and not getattr(paw, "aplica_campo", False):
+        messages.error(request, "Este PAW no tiene habilitado el alcance Campo.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if paw:
-        paw.estado_operativo = "ENTREGADO_TALLER"
-        paw.save(update_fields=["estado_operativo"])
-
-    entrega, _ = WorkshopDelivery.objects.get_or_create(
+    entrega, created = WorkshopDelivery.objects.get_or_create(
         purchase_request=compra,
-        defaults={"creado_por": request.user},
+        defaults={"creado_por": request.user, "destino": destino},
     )
 
+    if not created and getattr(entrega, "destino", destino) != destino:
+        if any(Decimal(x.cantidad_entregada or 0) > 0 for x in entrega.lineas.all()):
+            messages.error(request, "No puedes cambiar el destino porque la entrega ya tiene cantidades registradas.")
+            return redirect("compras_oil:paw_detail", pk=compra.pk)
+        entrega.destino = destino
+        entrega.save(update_fields=["destino", "actualizado_en"])
+
     creadas = 0
-
-    for ln in compra.lineas.all():
-
-        cantidad = ln.cantidad_requerida or 0
-
-        # Solo se entregan líneas reales.
-        if cantidad <= 0:
-            continue
-
-        _, created = WorkshopDeliveryLine.objects.get_or_create(
+    for ln in compra.lineas.filter(cantidad_a_comprar__gt=0):
+        cantidad = Decimal(ln.cantidad_a_comprar or 0)
+        _, created_line = WorkshopDeliveryLine.objects.get_or_create(
             delivery=entrega,
             purchase_line=ln,
             defaults={
@@ -885,12 +1068,12 @@ def generar_entrega_taller(request, pk):
                 "cantidad_requerida": cantidad,
             },
         )
-
-        if created:
+        if created_line:
             creadas += 1
 
-    messages.success(
-        request,
-        f"Entrega a Taller generada correctamente. Líneas nuevas: {creadas}."
-    )
+    messages.success(request, f"Entrega a {entrega.get_destino_display()} generada. Líneas nuevas: {creadas}.")
     return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+
+
+# Alias temporal para enlaces antiguos.
+generar_entrega_taller = generar_entrega

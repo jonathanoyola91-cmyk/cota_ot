@@ -414,6 +414,13 @@ window.addEventListener("load", function(){
     </a>
     {% endif %} 
 
+    {% if es_gerente or request.user.is_superuser %}
+    <a href="{% url 'aprobacion:dashboard' %}"
+       class="{% if '/aprobacion/' in request.path %}active{% endif %}">
+        ✅ Aprobación compras
+    </a>
+    {% endif %}
+
     {% if es_finanzas or es_gerente or request.user.is_superuser %}
     <a href="/finanzas/proveedores-cxp/"
        onclick="document.getElementById('page-loader')?.classList.remove('hide')"
