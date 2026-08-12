@@ -129,6 +129,46 @@ def cambiar_tipo_operacion(request, paw_id):
 
     return redirect("paw_detail", paw_id=paw.id)
 
+@login_required
+def actualizar_alcance_paw(request, paw_id):
+    if not tiene_rol(request.user, ["ADMIN", "GERENTE", "INGENIERIA"]):
+        messages.error(request, "No tienes permiso para cambiar el alcance del PAW.")
+        return redirect("paw_detail", paw_id=paw_id)
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+
+        paw.requiere_taller = "requiere_taller" in request.POST
+        paw.requiere_campo = "requiere_campo" in request.POST
+        paw.requiere_compras = "requiere_compras" in request.POST
+
+        if not paw.requiere_taller and not paw.requiere_campo and not paw.requiere_compras:
+            messages.error(
+                request,
+                "Debe seleccionar al menos un alcance para el PAW.",
+            )
+            return redirect("paw_detail", paw_id=paw.id)
+
+        # IMPORTANTE:
+        # Todavía NO modificamos tipo_operacion.
+        # Se conserva para proteger el funcionamiento de los PAW existentes.
+
+        paw.save(
+            update_fields=[
+                "requiere_taller",
+                "requiere_campo",
+                "requiere_compras",
+                "actualizado_en",
+            ]
+        )
+
+        messages.success(
+            request,
+            f"Alcance del PAW {paw.numero_paw} actualizado correctamente."
+        )
+
+    return redirect("paw_detail", paw_id=paw.id)
 
 @login_required
 def paw_list(request):
@@ -217,8 +257,8 @@ def paw_detail(request, paw_id):
     )
 
     if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
-        if paw.tipo_operacion != Paw.TipoOperacion.SERVICIO_CAMPO:
-            messages.error(request, "No tienes acceso a este PAW.")
+        if not paw.aplica_campo:
+            messages.error(request, "No tienes acceso a este PAW porque no incluye servicio en campo.")
             return redirect("campo:dashboard")
 
     return render(request, "paw_app/paw_detail.html", {"paw": paw})
@@ -238,10 +278,26 @@ def crear_paw(request, cotizacion_id):
         return redirect("paw_detail", paw_id=paw_existente.id)
 
     if request.method == "POST":
-        tipo_operacion = request.POST.get("tipo_operacion") or Paw.TipoOperacion.ENSAMBLE
+        requiere_taller = "requiere_taller" in request.POST
+        requiere_campo = "requiere_campo" in request.POST
+        requiere_compras = "requiere_compras" in request.POST
 
-        tipos_validos = [choice[0] for choice in Paw.TipoOperacion.choices]
-        if tipo_operacion not in tipos_validos:
+        # El PAW debe tener al menos un alcance seleccionado.
+        if not requiere_taller and not requiere_campo and not requiere_compras:
+            messages.error(
+                request,
+                "Debe seleccionar al menos un alcance para crear el PAW.",
+            )
+            return render(request, "paw_app/crear_paw.html", {
+                "cotizacion": cotizacion,
+            })
+
+        # Compatibilidad con la lógica histórica.
+        # Solo campo conserva SERVICIO_CAMPO. Cualquier alcance con Taller,
+        # o solo Compras, conserva ENSAMBLE mientras terminamos la migración.
+        if requiere_campo and not requiere_taller:
+            tipo_operacion = Paw.TipoOperacion.SERVICIO_CAMPO
+        else:
             tipo_operacion = Paw.TipoOperacion.ENSAMBLE
 
         try:
@@ -253,6 +309,9 @@ def crear_paw(request, cotizacion_id):
                     cotizacion=cotizacion,
                     creado_por=request.user,
                     tipo_operacion=tipo_operacion,
+                    requiere_taller=requiere_taller,
+                    requiere_campo=requiere_campo,
+                    requiere_compras=requiere_compras,
                 )
 
         except IntegrityError:
@@ -267,7 +326,6 @@ def crear_paw(request, cotizacion_id):
 
     return render(request, "paw_app/crear_paw.html", {
         "cotizacion": cotizacion,
-        "tipos_operacion": Paw.TipoOperacion.choices,
     })
 
 
@@ -281,8 +339,18 @@ def iniciar_servicio_campo(request, paw_id):
 
     paw = get_object_or_404(Paw, id=paw_id)
 
-    if paw.tipo_operacion != Paw.TipoOperacion.SERVICIO_CAMPO:
-        messages.error(request, "Este PAW no está marcado como servicio técnico en campo.")
+    if not paw.aplica_campo:
+        messages.error(
+            request,
+            "Este PAW no tiene habilitado el alcance de instalación / servicio en campo.",
+        )
+        return redirect("paw_detail", paw_id=paw.id)
+
+    if paw.aplica_taller and not paw.taller_finalizado:
+        messages.error(
+            request,
+            "Primero debe finalizar el trabajo de Taller antes de iniciar el servicio en campo.",
+        )
         return redirect("paw_detail", paw_id=paw.id)
 
     servicio, created = FieldService.objects.get_or_create(
@@ -309,10 +377,10 @@ def marcar_producto_ok(request, paw_id):
 
     paw = get_object_or_404(Paw, id=paw_id)
 
-    if paw.tipo_operacion == Paw.TipoOperacion.SERVICIO_CAMPO:
+    if not paw.aplica_taller:
         messages.error(
             request,
-            "Este PAW es de servicio de campo. Debes finalizar el servicio desde el módulo Campo.",
+            "Este PAW no tiene habilitado el alcance de Taller / reparación.",
         )
         return redirect("paw_detail", paw_id=paw.id)
 
@@ -323,7 +391,19 @@ def marcar_producto_ok(request, paw_id):
     paw.estado_operativo = "PRODUCTO_OK"
     paw.save(update_fields=["estado_operativo"])
 
-    messages.success(request, "Producto marcado como OK.")
+    if paw.listo_para_facturar:
+        messages.success(
+            request,
+            "Trabajo de Taller finalizado. El PAW quedó listo para facturación.",
+        )
+    elif paw.aplica_campo:
+        messages.success(
+            request,
+            "Trabajo de Taller finalizado. El PAW queda pendiente de instalación / servicio en campo.",
+        )
+    else:
+        messages.success(request, "Producto marcado como OK.")
+
     return redirect("paw_detail", paw_id=paw.id)
 
 
@@ -335,14 +415,14 @@ def registrar_ensamble(request, paw_id):
 
     paw = get_object_or_404(Paw, id=paw_id)
 
-    if paw.tipo_operacion == Paw.TipoOperacion.SERVICIO_CAMPO:
+    if not paw.aplica_taller:
         messages.error(
             request,
-            "Este PAW es de servicio de campo. Usa la opción Iniciar instalación.",
+            "Este PAW no tiene habilitado el alcance de Taller / reparación.",
         )
         return redirect("paw_detail", paw_id=paw.id)
 
-    if paw.estado_operativo != "MATERIAL_RECIBIDO":
+    if paw.aplica_compras and paw.estado_operativo != "MATERIAL_RECIBIDO":
         messages.error(request, "No puede registrar ensamble hasta que el material esté recibido.")
         return redirect("paw_detail", paw_id=paw.id)
 

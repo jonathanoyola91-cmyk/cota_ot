@@ -68,8 +68,105 @@ class Paw(models.Model):
         max_length=30,
         choices=TipoOperacion.choices,
         default=TipoOperacion.ENSAMBLE,
-        help_text="Use Servicio técnico en campo cuando el PAW no requiere ensamble en taller.",
+        help_text="Campo legado. Se conserva para no afectar los PAW existentes durante la transición.",
     )
+
+    # FASE 1 - Alcance operativo flexible.
+    # Se dejan en NULL para que los PAW existentes continúen usando tipo_operacion
+    # hasta que sean migrados/actualizados explícitamente.
+    requiere_taller = models.BooleanField(
+        "Requiere taller / ensamble",
+        null=True,
+        blank=True,
+        help_text="Si está vacío, se conserva la lógica histórica basada en tipo_operacion.",
+    )
+
+    requiere_campo = models.BooleanField(
+        "Requiere servicio en campo",
+        null=True,
+        blank=True,
+        help_text="Si está vacío, se conserva la lógica histórica basada en tipo_operacion.",
+    )
+
+    requiere_compras = models.BooleanField(
+        "Requiere compras / materiales",
+        null=True,
+        blank=True,
+        help_text="Si está vacío, el flujo actual de compras no se modifica todavía.",
+    )
+
+    @property
+    def aplica_taller(self):
+        """Compatibilidad: nuevo campo si fue definido; si no, usa tipo_operacion legado."""
+        if self.requiere_taller is not None:
+            return self.requiere_taller
+        return self.tipo_operacion == self.TipoOperacion.ENSAMBLE
+
+    @property
+    def aplica_campo(self):
+        """Compatibilidad: nuevo campo si fue definido; si no, usa tipo_operacion legado."""
+        if self.requiere_campo is not None:
+            return self.requiere_campo
+        return self.tipo_operacion == self.TipoOperacion.SERVICIO_CAMPO
+
+    @property
+    def aplica_compras(self):
+        """FASE 1: mientras no se defina, conserva el comportamiento actual (compras aplica)."""
+        if self.requiere_compras is not None:
+            return self.requiere_compras
+        return True
+
+    @property
+    def compras_finalizadas(self):
+        if not self.aplica_compras:
+            return True
+
+        estados_ok = {
+            EstadoOperativo.MATERIAL_RECIBIDO,
+            EstadoOperativo.ENTREGADO_TALLER,
+            EstadoOperativo.PRODUCTO_OK,
+            EstadoOperativo.EN_FACTURACION,
+            EstadoOperativo.FACTURADO,
+            EstadoOperativo.RADICADO,
+        }
+
+        if self.estado_operativo in estados_ok:
+            return True
+
+        try:
+            return bool(self.factura)
+        except Exception:
+            return False
+
+    @property
+    def taller_finalizado(self):
+        if not self.aplica_taller:
+            return True
+
+        return self.estado_operativo in {
+            EstadoOperativo.PRODUCTO_OK,
+            EstadoOperativo.EN_FACTURACION,
+            EstadoOperativo.FACTURADO,
+            EstadoOperativo.RADICADO,
+        }
+
+    @property
+    def campo_finalizado(self):
+        if not self.aplica_campo:
+            return True
+
+        try:
+            return self.servicio_campo.estado == "FINALIZADO"
+        except Exception:
+            return False
+
+    @property
+    def listo_para_facturar(self):
+        return (
+            self.compras_finalizadas
+            and self.taller_finalizado
+            and self.campo_finalizado
+        )
 
     estado_operativo = models.CharField(
         max_length=30,

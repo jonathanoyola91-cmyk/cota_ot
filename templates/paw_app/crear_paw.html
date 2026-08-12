@@ -100,25 +100,66 @@
         {% csrf_token %}
 
         <div class="operation-box">
-            <label for="tipo_operacion">Tipo de operación del PAW</label>
+    <label>Alcance del PAW</label>
 
-            <select name="tipo_operacion" id="tipo_operacion" required>
-                {% for value, label in tipos_operacion %}
-                    <option value="{{ value }}" {% if value == "ENSAMBLE" %}selected{% endif %}>
-                        {{ label }}
-                    </option>
-                {% endfor %}
-            </select>
+    <div style="margin-top:14px;">
 
-            <div class="operation-help">
-                <p>
-                    <strong>Ensamble / Taller:</strong> mantiene el flujo actual de taller, ensamble OK y producto listo.
-                </p>
-                <p>
-                    <strong>Servicio técnico en campo:</strong> activa el flujo de instalación, gastos diarios y finalización de servicio.
-                </p>
-            </div>
-        </div>
+        <label style="
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:12px;
+            font-weight:700;
+        ">
+            <input type="checkbox"
+                   name="requiere_taller"
+                   checked>
+            🔧 Taller / reparación
+        </label>
+
+        <label style="
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:12px;
+            font-weight:700;
+        ">
+            <input type="checkbox"
+                   name="requiere_campo">
+            🚚 Instalación / servicio en campo
+        </label>
+
+        <label style="
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:12px;
+            font-weight:700;
+        ">
+            <input type="checkbox"
+                   name="requiere_compras"
+                   checked>
+            🛒 Compras / materiales
+        </label>
+
+    </div>
+
+    <div class="operation-help">
+        <p>
+            Seleccione todos los procesos que aplican para este PAW.
+        </p>
+
+        <p>
+            Puede seleccionar <strong>Taller + Campo</strong>
+            cuando el alcance incluya reparación y posterior instalación.
+        </p>
+
+        <p>
+            Para suministro únicamente, seleccione solamente
+            <strong>Compras / materiales</strong>.
+        </p>
+    </div>
+</div>
 
         <button class="btn" type="submit">Crear PAW</button>
     </form>

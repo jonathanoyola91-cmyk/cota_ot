@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib import messages
+from django.db.models import Q
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -209,7 +210,21 @@ def confirmar_ensamble_ok(request, ot_id):
         ot.paw.estado_operativo = "PRODUCTO_OK"
         ot.paw.save(update_fields=["estado_operativo"])
 
-    messages.success(request, "Ensamble confirmado correctamente.")
+        if ot.paw.listo_para_facturar:
+            messages.success(
+                request,
+                "Ensamble confirmado. El PAW quedó listo para facturación.",
+            )
+        elif ot.paw.aplica_campo:
+            messages.success(
+                request,
+                "Ensamble confirmado. Taller finalizó y el PAW queda pendiente de Campo.",
+            )
+        else:
+            messages.success(request, "Ensamble confirmado correctamente.")
+    else:
+        messages.success(request, "Ensamble confirmado correctamente.")
+
     return redirect("taller:dashboard")
 
 @login_required
@@ -379,7 +394,13 @@ def dashboard_horas_taller(request):
     paws_disponibles = (
         Paw.objects
         .select_related("cotizacion")
-        .filter(tipo_operacion=Paw.TipoOperacion.ENSAMBLE)
+        .filter(
+            Q(requiere_taller=True)
+            | Q(
+                requiere_taller__isnull=True,
+                tipo_operacion=Paw.TipoOperacion.ENSAMBLE,
+            )
+        )
         .exclude(estado_operativo__in=estados_fuera_operacion)
         .filter(ensamble_horas_taller__isnull=True)
         .order_by("-creado_en")
@@ -410,8 +431,11 @@ def iniciar_ensamble(request, paw_id):
     paw = get_object_or_404(
         Paw.objects.select_related("cotizacion"),
         id=paw_id,
-        tipo_operacion=Paw.TipoOperacion.ENSAMBLE,
     )
+
+    if not paw.aplica_taller:
+        messages.error(request, "Este PAW no tiene habilitado el alcance de Taller / reparación.")
+        return redirect("taller:horas_dashboard")
 
     existente = EnsambleTaller.objects.filter(paw=paw).first()
     if existente:

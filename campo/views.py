@@ -650,7 +650,17 @@ def finalizar_servicio(request, servicio_id):
     paw.estado_operativo = "PRODUCTO_OK"
     paw.save(update_fields=["estado_operativo"])
 
-    messages.success(request, "Servicio finalizado. El PAW quedó listo para facturación.")
+    if paw.listo_para_facturar:
+        messages.success(
+            request,
+            "Servicio de campo finalizado. El PAW quedó listo para facturación.",
+        )
+    else:
+        messages.success(
+            request,
+            "Servicio de campo finalizado. El PAW aún tiene alcances pendientes antes de facturación.",
+        )
+
     return redirect("paw_detail", paw_id=paw.id)
 
 
