@@ -37,24 +37,68 @@ def inventario_dashboard(request):
         else:
             r.porcentaje = 0
 
-    entregas = (
+    entregas_qs = (
         WorkshopDelivery.objects
         .select_related("purchase_request", "creado_por")
         .prefetch_related("lineas")
         .order_by("-actualizado_en")
     )
 
+    # Separamos las entregas activas del historial sin modificar el modelo.
+    # Una entrega pasa al historial únicamente cuando TODAS sus líneas
+    # tienen cantidad_entregada >= cantidad_requerida.
+    entregas_pendientes = []
+    historial_entregas = []
+
+    for entrega in entregas_qs:
+        lineas = list(entrega.lineas.all())
+        total_lineas = len(lineas)
+        lineas_completas = 0
+        cantidad_requerida_total = Decimal("0")
+        cantidad_entregada_total = Decimal("0")
+
+        for linea in lineas:
+            requerida = Decimal(linea.cantidad_requerida or 0)
+            entregada = Decimal(linea.cantidad_entregada or 0)
+
+            cantidad_requerida_total += requerida
+            cantidad_entregada_total += min(entregada, requerida) if requerida > 0 else Decimal("0")
+
+            if requerida <= 0 or entregada >= requerida:
+                lineas_completas += 1
+
+        entrega.total_lineas = total_lineas
+        entrega.lineas_completas = lineas_completas
+
+        if cantidad_requerida_total > 0:
+            entrega.porcentaje_entrega = min(
+                100,
+                round(float((cantidad_entregada_total / cantidad_requerida_total) * 100))
+            )
+        else:
+            entrega.porcentaje_entrega = 0
+
+        entrega.entrega_completa = (
+            total_lineas > 0
+            and lineas_completas == total_lineas
+        )
+
+        if entrega.entrega_completa:
+            historial_entregas.append(entrega)
+        else:
+            entregas_pendientes.append(entrega)
+
     return render(request, "inventario/dashboard.html", {
         "recepciones": recepciones,
-        "entregas": entregas,
+        "entregas": entregas_pendientes,
+        "historial_entregas": historial_entregas,
         "total_recepciones": recepciones.count(),
-        "total_entregas": entregas.count(),
+        "total_entregas": len(entregas_pendientes),
+        "total_historial_entregas": len(historial_entregas),
         "lineas_pendientes": InventoryReceptionLine.objects.filter(estado="PENDIENTE").count(),
         "lineas_parciales": InventoryReceptionLine.objects.filter(estado="PARCIAL").count(),
         "lineas_listas": InventoryReceptionLine.objects.filter(estado="LISTO").count(),
     })
-
-
 @login_required
 def recepcion_detail(request, pk):
     recepcion = get_object_or_404(

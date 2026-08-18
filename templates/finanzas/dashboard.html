@@ -6,7 +6,19 @@
 {% block content %}
 
 <div class="panel">
-    <h2>Solicitudes en Finanzas</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div>
+            <h2 style="margin-bottom:4px;">Pendientes de Finanzas</h2>
+            <div style="color:#64748b; font-size:13px;">
+                Solicitudes que todavía tienen líneas pendientes de pago.
+            </div>
+        </div>
+
+        <span class="badge">
+            {{ total_pendientes }} pendiente{{ total_pendientes|pluralize:"s" }}
+        </span>
+    </div>
+
     <br>
 
     <table>
@@ -21,15 +33,21 @@
         </thead>
 
         <tbody>
-            {% for item in items %}
+            {% for item in pendientes %}
             <tr>
                 <td>
                     <strong>{{ item.purchase_request.paw_numero }}</strong><br>
                     {{ item.purchase_request.paw_nombre }}
                 </td>
-                <td><span class="badge">{{ item.estado }}</span></td>
+
+                <td>
+                    <span class="badge">{{ item.estado }}</span>
+                </td>
+
                 <td>{{ item.enviado_por|default:"-" }}</td>
+
                 <td>{{ item.actualizado_en|date:"d/m/Y H:i" }}</td>
+
                 <td>
                     <a class="btn" href="{% url 'finanzas:detalle' item.id %}">
                         Abrir
@@ -38,7 +56,70 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="5">No hay solicitudes en finanzas.</td>
+                <td colspan="5" style="text-align:center; padding:24px;">
+                    No hay solicitudes pendientes en Finanzas.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+
+<div class="panel" style="margin-top:24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div>
+            <h2 style="margin-bottom:4px;">Historial / Finalizados</h2>
+            <div style="color:#64748b; font-size:13px;">
+                Solicitudes cuyo proceso financiero ya fue completado.
+            </div>
+        </div>
+
+        <span class="badge">
+            {{ total_historial }} finalizado{{ total_historial|pluralize:"s" }}
+        </span>
+    </div>
+
+    <br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>PAW</th>
+                <th>Estado</th>
+                <th>Enviado por</th>
+                <th>Actualizado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for item in historial %}
+            <tr>
+                <td>
+                    <strong>{{ item.purchase_request.paw_numero }}</strong><br>
+                    {{ item.purchase_request.paw_nombre }}
+                </td>
+
+                <td>
+                    <span class="badge">Finalizado</span>
+                </td>
+
+                <td>{{ item.enviado_por|default:"-" }}</td>
+
+                <td>{{ item.actualizado_en|date:"d/m/Y H:i" }}</td>
+
+                <td>
+                    <a class="btn" href="{% url 'finanzas:detalle' item.id %}">
+                        Consultar
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" style="text-align:center; padding:24px;">
+                    Aún no hay solicitudes finalizadas.
+                </td>
             </tr>
             {% endfor %}
         </tbody>

@@ -5,7 +5,8 @@
 
 <div class="cards">
     <div class="card"><small>Recepciones</small><strong>{{ total_recepciones }}</strong></div>
-    <div class="card"><small>Entregas a taller</small><strong>{{ total_entregas }}</strong></div>
+    <div class="card"><small>Entregas pendientes</small><strong>{{ total_entregas }}</strong></div>
+    <div class="card"><small>Historial entregas</small><strong>{{ total_historial_entregas }}</strong></div>
     <div class="card"><small>Líneas pendientes</small><strong>{{ lineas_pendientes }}</strong></div>
     <div class="card"><small>Líneas listas</small><strong>{{ lineas_listas }}</strong></div>
 </div>
@@ -51,7 +52,7 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="5">No hay recepciones pendientes.</td></tr>
+            <tr><td colspan="6">No hay recepciones pendientes.</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -60,7 +61,17 @@
 <br>
 
 <div class="panel">
-    <h3>Entregas a taller</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h3 style="margin-bottom:4px;">Entregas a taller</h3>
+            <div style="font-size:12px;color:#64748b;">
+                Aquí permanecen únicamente las entregas pendientes o parciales.
+            </div>
+        </div>
+        <span class="badge">{{ total_entregas }} pendiente{{ total_entregas|pluralize:"s" }}</span>
+    </div>
+
+    <br>
 
     <table>
         <thead>
@@ -68,6 +79,7 @@
                 <th>PAW</th>
                 <th>Nombre</th>
                 <th>Líneas</th>
+                <th>Progreso entrega</th>
                 <th>Actualizado</th>
                 <th>Acción</th>
             </tr>
@@ -77,7 +89,24 @@
             <tr>
                 <td><strong>{{ e.purchase_request.paw_numero }}</strong></td>
                 <td>{{ e.purchase_request.paw_nombre }}</td>
-                <td>{{ e.lineas.count }}</td>
+                <td>{{ e.lineas_completas }} / {{ e.total_lineas }}</td>
+                <td>
+                    <div style="font-size:12px;font-weight:700;margin-bottom:5px;">
+                        {{ e.porcentaje_entrega }}%
+                    </div>
+                    <div style="background:#e5e7eb;border-radius:999px;height:10px;overflow:hidden;width:180px;">
+                        <div style="background:#2563eb;height:100%;width:{{ e.porcentaje_entrega }}%;border-radius:999px;"></div>
+                    </div>
+                    {% if e.porcentaje_entrega > 0 %}
+                        <div style="font-size:11px;color:#92400e;margin-top:4px;font-weight:700;">
+                            Entrega parcial
+                        </div>
+                    {% else %}
+                        <div style="font-size:11px;color:#64748b;margin-top:4px;">
+                            Pendiente de entrega
+                        </div>
+                    {% endif %}
+                </td>
                 <td>{{ e.actualizado_en|date:"d/m/Y H:i" }}</td>
                 <td>
                     <a class="btn" href="{% url 'inventario:entrega_taller_detail' e.id %}">
@@ -86,7 +115,59 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="5">No hay entregas a taller generadas.</td></tr>
+            <tr><td colspan="6">No hay entregas pendientes o parciales.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<br>
+
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h3 style="margin-bottom:4px;">Historial de entregas</h3>
+            <div style="font-size:12px;color:#64748b;">
+                PAW cuya entrega fue completada en su totalidad.
+            </div>
+        </div>
+        <span class="badge">{{ total_historial_entregas }} finalizada{{ total_historial_entregas|pluralize:"s" }}</span>
+    </div>
+
+    <br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>PAW</th>
+                <th>Nombre</th>
+                <th>Líneas</th>
+                <th>Estado</th>
+                <th>Actualizado</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in historial_entregas %}
+            <tr>
+                <td><strong>{{ e.purchase_request.paw_numero }}</strong></td>
+                <td>{{ e.purchase_request.paw_nombre }}</td>
+                <td>{{ e.lineas_completas }} / {{ e.total_lineas }}</td>
+                <td><span class="badge">✓ Entrega completa</span></td>
+                <td>{{ e.actualizado_en|date:"d/m/Y H:i" }}</td>
+                <td>
+                    <a class="btn" href="{% url 'inventario:entrega_taller_detail' e.id %}">
+                        Ver entrega
+                    </a>
+                    <a class="btn btn-secondary"
+                       href="{% url 'inventario:entrega_taller_pdf' e.id %}"
+                       target="_blank">
+                        PDF
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">Aún no hay entregas finalizadas.</td></tr>
             {% endfor %}
         </tbody>
     </table>

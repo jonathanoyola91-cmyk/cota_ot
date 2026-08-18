@@ -177,8 +177,18 @@
 
 <br>
 
-<div class="panel">
-    <h2>Facturas / PAW en facturación</h2>
+
+<div class="panel" style="margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin:0 0 4px 0;">Facturadas</h2>
+            <div style="font-size:12px;color:#64748b;font-weight:700;">Facturas generadas que todavía no han sido radicadas.</div>
+        </div>
+        <span class="badge-soft" style="background:#e2e8f0;color:#0f172a;">
+            {{ total_facturadas }}
+        </span>
+    </div>
+
     <br>
 
     <div class="table-wrap">
@@ -200,7 +210,7 @@
             </thead>
 
             <tbody>
-                {% for factura in facturas %}
+                {% for factura in facturadas %}
                 <tr>
                     <td><strong>{{ factura.numero_paw }}</strong></td>
                     <td>{{ factura.cliente }}</td>
@@ -212,28 +222,19 @@
 
                     <td>
                         {% if factura.dias_para_vencer is not None %}
-
                             {% if factura.dias_para_vencer < 0 %}
-                                <span class="badge-soft" style="background:#dc2626;color:white;">
-                                    Vencida
-                                </span>
-
+                                <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
                             {% elif factura.dias_para_vencer == 0 %}
-                                <span class="badge-soft" style="background:#f97316;color:white;">
-                                    Hoy vence
-                                </span>
-
+                                <span class="badge-soft" style="background:#f97316;color:white;">Hoy vence</span>
                             {% elif factura.dias_para_vencer <= 5 %}
                                 <span class="badge-soft" style="background:#f59e0b;color:white;">
                                     {{ factura.dias_para_vencer }} días
                                 </span>
-
                             {% else %}
                                 <span class="badge-soft" style="background:#16a34a;color:white;">
                                     {{ factura.dias_para_vencer }} días
                                 </span>
                             {% endif %}
-
                         {% else %}
                             <span class="badge-soft" style="background:#94a3b8;color:white;">-</span>
                         {% endif %}
@@ -247,7 +248,7 @@
                         {% elif factura.estado == "vencida" %}
                             <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
                         {% elif factura.estado == "facturado" %}
-                            <span class="badge-soft" style="background:#2563eb;color:white;">Facturado</span>
+                            <span class="badge-soft" style="background:#2563eb;color:white;">Facturada</span>
                         {% elif factura.estado == "radicacion" %}
                             <span class="badge-soft" style="background:#334155;color:white;">Radicada</span>
                         {% else %}
@@ -263,7 +264,289 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="11">No hay facturas registradas.</td>
+                    <td colspan="11">No hay facturas pendientes de radicar.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin:0 0 4px 0;">Radicadas</h2>
+            <div style="font-size:12px;color:#64748b;font-weight:700;">Facturas radicadas y todavía dentro de su plazo de pago.</div>
+        </div>
+        <span class="badge-soft" style="background:#e2e8f0;color:#0f172a;">
+            {{ total_radicadas }}
+        </span>
+    </div>
+
+    <br>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Factura</th>
+                    <th>Precio</th>
+                    <th>IVA 19%</th>
+                    <th>Total</th>
+                    <th>Vencimiento</th>
+                    <th>Radicación</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for factura in radicadas %}
+                <tr>
+                    <td><strong>{{ factura.numero_paw }}</strong></td>
+                    <td>{{ factura.cliente }}</td>
+                    <td>{{ factura.campo }}</td>
+                    <td>{{ factura.numero_factura|default:"Sin número" }}</td>
+                    <td>$ {{ factura.precio|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.iva|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.total_con_iva|default:0|floatformat:0|intcomma }}</td>
+
+                    <td>
+                        {% if factura.dias_para_vencer is not None %}
+                            {% if factura.dias_para_vencer < 0 %}
+                                <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                            {% elif factura.dias_para_vencer == 0 %}
+                                <span class="badge-soft" style="background:#f97316;color:white;">Hoy vence</span>
+                            {% elif factura.dias_para_vencer <= 5 %}
+                                <span class="badge-soft" style="background:#f59e0b;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% else %}
+                                <span class="badge-soft" style="background:#16a34a;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">-</span>
+                        {% endif %}
+                    </td>
+
+                    <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
+
+                    <td>
+                        {% if factura.estado == "pagada" %}
+                            <span class="badge-soft" style="background:#16a34a;color:white;">Pagada</span>
+                        {% elif factura.estado == "vencida" %}
+                            <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                        {% elif factura.estado == "facturado" %}
+                            <span class="badge-soft" style="background:#2563eb;color:white;">Facturada</span>
+                        {% elif factura.estado == "radicacion" %}
+                            <span class="badge-soft" style="background:#334155;color:white;">Radicada</span>
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">{{ factura.estado }}</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <a class="btn" href="{% url 'facturacion:detalle' factura.id %}">
+                            Abrir
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">No hay facturas radicadas pendientes.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin:0 0 4px 0;">Vencidas</h2>
+            <div style="font-size:12px;color:#64748b;font-weight:700;">Facturas cuyo plazo de pago ya venció y siguen pendientes.</div>
+        </div>
+        <span class="badge-soft" style="background:#e2e8f0;color:#0f172a;">
+            {{ total_vencidas }}
+        </span>
+    </div>
+
+    <br>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Factura</th>
+                    <th>Precio</th>
+                    <th>IVA 19%</th>
+                    <th>Total</th>
+                    <th>Vencimiento</th>
+                    <th>Radicación</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for factura in vencidas %}
+                <tr>
+                    <td><strong>{{ factura.numero_paw }}</strong></td>
+                    <td>{{ factura.cliente }}</td>
+                    <td>{{ factura.campo }}</td>
+                    <td>{{ factura.numero_factura|default:"Sin número" }}</td>
+                    <td>$ {{ factura.precio|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.iva|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.total_con_iva|default:0|floatformat:0|intcomma }}</td>
+
+                    <td>
+                        {% if factura.dias_para_vencer is not None %}
+                            {% if factura.dias_para_vencer < 0 %}
+                                <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                            {% elif factura.dias_para_vencer == 0 %}
+                                <span class="badge-soft" style="background:#f97316;color:white;">Hoy vence</span>
+                            {% elif factura.dias_para_vencer <= 5 %}
+                                <span class="badge-soft" style="background:#f59e0b;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% else %}
+                                <span class="badge-soft" style="background:#16a34a;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">-</span>
+                        {% endif %}
+                    </td>
+
+                    <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
+
+                    <td>
+                        {% if factura.estado == "pagada" %}
+                            <span class="badge-soft" style="background:#16a34a;color:white;">Pagada</span>
+                        {% elif factura.estado == "vencida" %}
+                            <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                        {% elif factura.estado == "facturado" %}
+                            <span class="badge-soft" style="background:#2563eb;color:white;">Facturada</span>
+                        {% elif factura.estado == "radicacion" %}
+                            <span class="badge-soft" style="background:#334155;color:white;">Radicada</span>
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">{{ factura.estado }}</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <a class="btn" href="{% url 'facturacion:detalle' factura.id %}">
+                            Abrir
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">No hay facturas vencidas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin:0 0 4px 0;">Pagadas / Historial</h2>
+            <div style="font-size:12px;color:#64748b;font-weight:700;">Proceso finalizado. El pago recibido cierra el PAW.</div>
+        </div>
+        <span class="badge-soft" style="background:#e2e8f0;color:#0f172a;">
+            {{ total_pagadas }}
+        </span>
+    </div>
+
+    <br>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Factura</th>
+                    <th>Precio</th>
+                    <th>IVA 19%</th>
+                    <th>Total</th>
+                    <th>Vencimiento</th>
+                    <th>Radicación</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for factura in pagadas %}
+                <tr>
+                    <td><strong>{{ factura.numero_paw }}</strong></td>
+                    <td>{{ factura.cliente }}</td>
+                    <td>{{ factura.campo }}</td>
+                    <td>{{ factura.numero_factura|default:"Sin número" }}</td>
+                    <td>$ {{ factura.precio|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.iva|default:0|floatformat:0|intcomma }}</td>
+                    <td>$ {{ factura.total_con_iva|default:0|floatformat:0|intcomma }}</td>
+
+                    <td>
+                        {% if factura.dias_para_vencer is not None %}
+                            {% if factura.dias_para_vencer < 0 %}
+                                <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                            {% elif factura.dias_para_vencer == 0 %}
+                                <span class="badge-soft" style="background:#f97316;color:white;">Hoy vence</span>
+                            {% elif factura.dias_para_vencer <= 5 %}
+                                <span class="badge-soft" style="background:#f59e0b;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% else %}
+                                <span class="badge-soft" style="background:#16a34a;color:white;">
+                                    {{ factura.dias_para_vencer }} días
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">-</span>
+                        {% endif %}
+                    </td>
+
+                    <td>{{ factura.fecha_radicacion|date:"d/m/Y"|default:"Pendiente" }}</td>
+
+                    <td>
+                        {% if factura.estado == "pagada" %}
+                            <span class="badge-soft" style="background:#16a34a;color:white;">Pagada</span>
+                        {% elif factura.estado == "vencida" %}
+                            <span class="badge-soft" style="background:#dc2626;color:white;">Vencida</span>
+                        {% elif factura.estado == "facturado" %}
+                            <span class="badge-soft" style="background:#2563eb;color:white;">Facturada</span>
+                        {% elif factura.estado == "radicacion" %}
+                            <span class="badge-soft" style="background:#334155;color:white;">Radicada</span>
+                        {% else %}
+                            <span class="badge-soft" style="background:#94a3b8;color:white;">{{ factura.estado }}</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <a class="btn" href="{% url 'facturacion:detalle' factura.id %}">
+                            Consultar
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">Aún no hay facturas pagadas.</td>
                 </tr>
                 {% endfor %}
             </tbody>

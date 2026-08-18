@@ -318,12 +318,43 @@ def dashboard_finanzas(request):
         messages.error(request, "No tienes acceso a Finanzas.")
         return redirect("/")
 
-    items = FinanceApproval.objects.select_related(
-        "purchase_request"
-    ).order_by("-actualizado_en")
+    # Separamos el tablero en dos bloques:
+    # - pendientes: PAW con al menos una linea que Finanzas todavia debe atender/pagar.
+    # - historial: PAW cuyas lineas financieras ya quedaron pagadas.
+    #
+    # Se hace por LINEA para que un PAW con pagos parciales no desaparezca
+    # de pendientes hasta que Finanzas termine todas sus lineas.
+    items = list(
+        FinanceApproval.objects
+        .select_related("purchase_request")
+        .prefetch_related("lineas")
+        .order_by("-actualizado_en")
+    )
+
+    pendientes = []
+    historial = []
+
+    for item in items:
+        lineas = list(item.lineas.all())
+
+        item.total_lineas_finanzas = len(lineas)
+        item.total_pagadas = sum(1 for linea in lineas if linea.pagado)
+        item.total_pendientes = item.total_lineas_finanzas - item.total_pagadas
+
+        # Si aun existe por lo menos una linea sin pagar, permanece arriba.
+        # Cuando todas las lineas quedan pagadas pasa automaticamente al historial.
+        if item.total_lineas_finanzas == 0 or item.total_pendientes > 0:
+            pendientes.append(item)
+        else:
+            historial.append(item)
 
     return render(request, "finanzas/dashboard.html", {
-        "items": items
+        # Se conserva items para no romper el template actual mientras se actualiza.
+        "items": items,
+        "pendientes": pendientes,
+        "historial": historial,
+        "total_pendientes": len(pendientes),
+        "total_historial": len(historial),
     })
 
 

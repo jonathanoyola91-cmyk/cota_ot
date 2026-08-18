@@ -116,14 +116,40 @@ def dashboard_facturacion(request):
     analisis_og = _analisis_empresa(facturas, "OG", cuatrimestre)
     analisis_imp = _analisis_empresa(facturas, "IMP", cuatrimestre)
 
+    # Separación operativa del tablero.
+    # Pagadas funciona como historial final.
+    facturadas = []
+    radicadas = []
+    vencidas = []
+    pagadas = []
+
+    for factura in facturas:
+        estado = (factura.estado or "").lower()
+
+        if estado == "pagada":
+            pagadas.append(factura)
+        elif estado == "vencida":
+            vencidas.append(factura)
+        elif estado == "radicacion":
+            radicadas.append(factura)
+        else:
+            # Incluye "facturado" y cualquier registro todavía en proceso.
+            facturadas.append(factura)
+
     return render(request, "facturacion/dashboard.html", {
-        "facturas": facturas,
+        "facturas": facturas,  # compatibilidad con código existente
+        "facturadas": facturadas,
+        "radicadas": radicadas,
+        "vencidas": vencidas,
+        "pagadas": pagadas,
+        "total_facturadas": len(facturadas),
+        "total_radicadas": len(radicadas),
+        "total_vencidas": len(vencidas),
+        "total_pagadas": len(pagadas),
         "analisis_og": analisis_og,
         "analisis_imp": analisis_imp,
         "cuatrimestre_selected": cuatrimestre,
     })
-
-
 @login_required
 def crear_desde_paw(request, paw_id):
     if not tiene_rol(request.user, ["COMERCIAL", "GERENTE", "ADMIN"]):
@@ -243,5 +269,8 @@ def marcar_pagada(request, pk):
     factura.fecha_pago = timezone.now().date()
     factura.save(update_fields=["estado", "fecha_pago", "actualizado_en"])
 
+    # La factura pagada se considera finalizada para el tablero de Facturación.
+    # No se cambia aquí el estado operativo del PAW porque el modelo Paw actual
+    # no tiene un estado "PAGADO" definido en sus choices.
     messages.success(request, "Factura marcada como pagada correctamente.")
     return redirect("facturacion:detalle", pk=factura.pk)
