@@ -4,7 +4,7 @@
 {% block content %}
 
 <div class="cards">
-    <div class="card"><small>Recepciones</small><strong>{{ total_recepciones }}</strong></div>
+    <div class="card"><small>Recepciones pendientes</small><strong>{{ total_recepciones }}</strong></div>
     <div class="card"><small>Entregas pendientes</small><strong>{{ total_entregas }}</strong></div>
     <div class="card"><small>Historial entregas</small><strong>{{ total_historial_entregas }}</strong></div>
     <div class="card"><small>Líneas pendientes</small><strong>{{ lineas_pendientes }}</strong></div>
@@ -13,6 +13,9 @@
 
 <div class="panel">
     <h3>Recepciones de inventario</h3>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">
+        Solo se muestran recepciones pendientes o parciales. Al completar toda la recepción, el PAW sale de este bloque.
+    </div>
 
     <table>
         <thead>
@@ -128,7 +131,7 @@
         <div>
             <h3 style="margin-bottom:4px;">Historial de entregas</h3>
             <div style="font-size:12px;color:#64748b;">
-                PAW cuya entrega fue completada en su totalidad.
+                PAW ya despachados por Inventario: entrega completa a Taller, salida a Campo o despacho directo al cliente.
             </div>
         </div>
         <span class="badge">{{ total_historial_entregas }} finalizada{{ total_historial_entregas|pluralize:"s" }}</span>
@@ -142,6 +145,7 @@
                 <th>PAW</th>
                 <th>Nombre</th>
                 <th>Líneas</th>
+                <th>Destino</th>
                 <th>Estado</th>
                 <th>Actualizado</th>
                 <th>Acción</th>
@@ -153,7 +157,16 @@
                 <td><strong>{{ e.purchase_request.paw_numero }}</strong></td>
                 <td>{{ e.purchase_request.paw_nombre }}</td>
                 <td>{{ e.lineas_completas }} / {{ e.total_lineas }}</td>
-                <td><span class="badge">✓ Entrega completa</span></td>
+                <td>{{ e.get_destino_display }}</td>
+                <td>
+                    {% if e.destino_codigo == "TALLER" %}
+                        <span class="badge">✓ Entrega completa</span>
+                    {% elif e.destino_codigo == "CAMPO" %}
+                        <span class="badge">✓ Salida a Campo</span>
+                    {% else %}
+                        <span class="badge">✓ Salida a cliente / Inventario</span>
+                    {% endif %}
+                </td>
                 <td>{{ e.actualizado_en|date:"d/m/Y H:i" }}</td>
                 <td>
                     <a class="btn" href="{% url 'inventario:entrega_taller_detail' e.id %}">
@@ -167,7 +180,7 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="6">Aún no hay entregas finalizadas.</td></tr>
+            <tr><td colspan="7">Aún no hay entregas finalizadas.</td></tr>
             {% endfor %}
         </tbody>
     </table>

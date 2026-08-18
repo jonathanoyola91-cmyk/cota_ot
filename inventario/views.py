@@ -18,25 +18,52 @@ from .models import InventoryReception, InventoryReceptionLine, WorkshopDelivery
 
 @login_required
 def inventario_dashboard(request):
-    recepciones = (
+    # ======================================================
+    # RECEPCIONES: solo pendientes o parciales
+    # ======================================================
+    recepciones_qs = (
         InventoryReception.objects
         .select_related("purchase_request", "creado_por")
         .prefetch_related("lineas")
         .order_by("-actualizado_en")
     )
 
-    for r in recepciones:
-        total = r.lineas.count()
-        listas = r.lineas.filter(cantidad_recibida__gte=F("cantidad_esperada")).count()
+    recepciones_pendientes = []
+    recepciones_completas = []
+
+    for r in recepciones_qs:
+        lineas = list(r.lineas.all())
+        total = len(lineas)
+        listas = 0
+        parciales = 0
+
+        for linea in lineas:
+            esperada = Decimal(linea.cantidad_esperada or 0)
+            recibida = Decimal(linea.cantidad_recibida or 0)
+
+            if esperada > 0 and recibida >= esperada:
+                listas += 1
+            elif recibida > 0:
+                parciales += 1
 
         r.total_lineas = total
         r.lineas_listas = listas
+        r.lineas_parciales = parciales
+        r.recepcion_completa = total > 0 and listas == total
 
         if total > 0:
             r.porcentaje = round((listas / total) * 100)
         else:
             r.porcentaje = 0
 
+        if r.recepcion_completa:
+            recepciones_completas.append(r)
+        else:
+            recepciones_pendientes.append(r)
+
+    # ======================================================
+    # ENTREGAS: separar taller activo vs historial
+    # ======================================================
     entregas_qs = (
         WorkshopDelivery.objects
         .select_related("purchase_request", "creado_por")
@@ -44,10 +71,7 @@ def inventario_dashboard(request):
         .order_by("-actualizado_en")
     )
 
-    # Separamos las entregas activas del historial sin modificar el modelo.
-    # Una entrega pasa al historial únicamente cuando TODAS sus líneas
-    # tienen cantidad_entregada >= cantidad_requerida.
-    entregas_pendientes = []
+    entregas_taller_pendientes = []
     historial_entregas = []
 
     for entrega in entregas_qs:
@@ -62,42 +86,64 @@ def inventario_dashboard(request):
             entregada = Decimal(linea.cantidad_entregada or 0)
 
             cantidad_requerida_total += requerida
-            cantidad_entregada_total += min(entregada, requerida) if requerida > 0 else Decimal("0")
+            if requerida > 0:
+                cantidad_entregada_total += min(entregada, requerida)
 
             if requerida <= 0 or entregada >= requerida:
                 lineas_completas += 1
 
         entrega.total_lineas = total_lineas
         entrega.lineas_completas = lineas_completas
-
-        if cantidad_requerida_total > 0:
-            entrega.porcentaje_entrega = min(
-                100,
-                round(float((cantidad_entregada_total / cantidad_requerida_total) * 100))
-            )
-        else:
-            entrega.porcentaje_entrega = 0
-
         entrega.entrega_completa = (
             total_lineas > 0
             and lineas_completas == total_lineas
         )
 
-        if entrega.entrega_completa:
-            historial_entregas.append(entrega)
+        if cantidad_requerida_total > 0:
+            entrega.porcentaje_entrega = min(
+                100,
+                round(float(
+                    (cantidad_entregada_total / cantidad_requerida_total) * 100
+                ))
+            )
         else:
-            entregas_pendientes.append(entrega)
+            entrega.porcentaje_entrega = 0
+
+        destino = str(getattr(entrega, "destino", "TALLER") or "TALLER").upper()
+        entrega.destino_codigo = destino
+
+        # TALLER:
+        # - pendiente/parcial permanece en el bloque operativo.
+        # - completa pasa a historial.
+        #
+        # CAMPO / INVENTARIO (cliente):
+        # - se consideran salida de Inventario y se muestran en historial,
+        #   porque Inventario ya no tiene una entrega a Taller que gestionar.
+        if destino == "TALLER" and not entrega.entrega_completa:
+            entregas_taller_pendientes.append(entrega)
+        else:
+            historial_entregas.append(entrega)
 
     return render(request, "inventario/dashboard.html", {
-        "recepciones": recepciones,
-        "entregas": entregas_pendientes,
+        "recepciones": recepciones_pendientes,
+        "recepciones_completas": recepciones_completas,
+        "entregas": entregas_taller_pendientes,
         "historial_entregas": historial_entregas,
-        "total_recepciones": recepciones.count(),
-        "total_entregas": len(entregas_pendientes),
+
+        "total_recepciones": len(recepciones_pendientes),
+        "total_recepciones_completas": len(recepciones_completas),
+        "total_entregas": len(entregas_taller_pendientes),
         "total_historial_entregas": len(historial_entregas),
-        "lineas_pendientes": InventoryReceptionLine.objects.filter(estado="PENDIENTE").count(),
-        "lineas_parciales": InventoryReceptionLine.objects.filter(estado="PARCIAL").count(),
-        "lineas_listas": InventoryReceptionLine.objects.filter(estado="LISTO").count(),
+
+        "lineas_pendientes": InventoryReceptionLine.objects.filter(
+            estado="PENDIENTE"
+        ).count(),
+        "lineas_parciales": InventoryReceptionLine.objects.filter(
+            estado="PARCIAL"
+        ).count(),
+        "lineas_listas": InventoryReceptionLine.objects.filter(
+            estado="LISTO"
+        ).count(),
     })
 @login_required
 def recepcion_detail(request, pk):
