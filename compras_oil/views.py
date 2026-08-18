@@ -156,6 +156,16 @@ def _recepcion_creada(compra):
     return InventoryReception.objects.filter(purchase_request=compra).exists()
 
 
+def _linea_en_inventario(linea):
+    """Indica si la línea de compra ya fue enviada a Inventario."""
+    try:
+        from inventario.models import InventoryReceptionLine
+    except Exception:
+        return False
+
+    return InventoryReceptionLine.objects.filter(purchase_line=linea).exists()
+
+
 def _recepcion_completa(compra):
     """
     La recepción solo se considera completa cuando existe recepción
@@ -685,18 +695,39 @@ def paw_detail(request, pk):
         form.instance.flujo_texto = info["texto"]
         form.instance.flujo_aprobado = info["aprobado"]
         form.instance.flujo_enviado = info["enviado"]
+        form.instance.en_inventario = _linea_en_inventario(form.instance)
+        form.instance.puede_enviar_inventario = (
+            info["aprobado"]
+            and not form.instance.en_inventario
+            and Decimal(form.instance.cantidad_a_comprar or 0) > 0
+            and compra.estado != "CERRADA"
+        )
 
     paw = _get_paw_from_compra(compra)
     resumen = _resumen_aprobaciones(compra)
     flujo_recepcion_creada = _recepcion_creada(compra)
+
+    # Recepción activa: permite entrar a Inventario sin volver a ejecutar un envío general.
+    try:
+        from inventario.models import InventoryReception
+        recepcion = InventoryReception.objects.filter(purchase_request=compra).first()
+    except Exception:
+        recepcion = None
+
     flujo_recepcion_ok = _recepcion_completa(compra)
     entrega = _get_entrega(compra)
     flujo_entrega_creada = entrega is not None
     flujo_entrega_ok = _entrega_completa(compra)
 
+    lineas_aprobadas_pendientes_inventario = [
+        ln for ln in queryset
+        if _estado_flujo_linea(ln)["aprobado"]
+        and Decimal(ln.cantidad_a_comprar or 0) > 0
+        and not _linea_en_inventario(ln)
+    ]
+
     puede_enviar_inventario = (
-        resumen["todas_aprobadas"]
-        and not flujo_recepcion_creada
+        bool(lineas_aprobadas_pendientes_inventario)
         and compra.estado != "CERRADA"
     )
     puede_registrar_recepcion = (
@@ -710,6 +741,11 @@ def paw_detail(request, pk):
 
     if compra.estado == "CERRADA":
         siguiente_paso = "Compra cerrada"
+    elif lineas_aprobadas_pendientes_inventario:
+        siguiente_paso = (
+            f"Enviar a Inventario los ítems aprobados "
+            f"({len(lineas_aprobadas_pendientes_inventario)} pendiente(s) de envío)"
+        )
     elif not resumen["todas_aprobadas"]:
         siguiente_paso = f"Completar aprobaciones por ítem ({resumen['aprobadas']}/{resumen['total']})"
     elif not flujo_recepcion_creada:
@@ -733,11 +769,13 @@ def paw_detail(request, pk):
         "paw": paw,
         "resumen_aprobaciones": resumen,
         "flujo_recepcion_creada": flujo_recepcion_creada,
+        "recepcion": recepcion,
         "flujo_recepcion_ok": flujo_recepcion_ok,
         "flujo_entrega_creada": flujo_entrega_creada,
         "flujo_entrega_ok": flujo_entrega_ok,
         "entrega": entrega,
         "puede_enviar_inventario": puede_enviar_inventario,
+        "lineas_aprobadas_pendientes_inventario": lineas_aprobadas_pendientes_inventario,
         "puede_registrar_recepcion": puede_registrar_recepcion,
         "puede_generar_entrega": puede_generar_entrega,
         "puede_cerrar_compra": puede_cerrar_compra,
@@ -957,7 +995,73 @@ def enviar_aprobacion(request, pk):
 
 @require_POST
 @login_required
+def enviar_linea_inventario(request, linea_id):
+    """Envía a Inventario una sola línea, siempre que ya esté aprobada."""
+    if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
+        messages.error(request, "No tienes permiso para enviar ítems a Inventario.")
+        return redirect("/")
+
+    from inventario.models import InventoryReception, InventoryReceptionLine
+
+    linea = get_object_or_404(
+        PurchaseLine.objects.select_related("request", "proveedor"),
+        pk=linea_id,
+    )
+    compra = linea.request
+
+    if compra.estado == "CERRADA":
+        messages.error(request, "No puedes modificar una compra cerrada.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    info = _estado_flujo_linea(linea)
+    if not info["aprobado"]:
+        messages.error(
+            request,
+            f"El ítem {linea.codigo or linea.id} todavía no está aprobado y no puede enviarse a Inventario."
+        )
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    cantidad = Decimal(linea.cantidad_a_comprar or 0)
+    if cantidad <= 0:
+        messages.error(request, "Este ítem no tiene cantidad pendiente por comprar.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+    recepcion, _ = InventoryReception.objects.get_or_create(
+        purchase_request=compra,
+        defaults={"creado_por": request.user},
+    )
+
+    recepcion_linea, created = InventoryReceptionLine.objects.get_or_create(
+        recepcion=recepcion,
+        purchase_line=linea,
+        defaults={
+            "codigo": linea.codigo or "",
+            "descripcion": linea.descripcion or "",
+            "unidad": linea.unidad or "",
+            "cantidad_esperada": cantidad,
+            "cantidad_recibida": 0,
+            "estado": "PENDIENTE",
+        },
+    )
+
+    if created:
+        messages.success(
+            request,
+            f"Ítem {linea.codigo or linea.id} enviado a Inventario. Ya puede ser recibido independientemente."
+        )
+    else:
+        messages.info(
+            request,
+            f"El ítem {linea.codigo or linea.id} ya había sido enviado a Inventario."
+        )
+
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+
+@require_POST
+@login_required
 def enviar_inventario(request, pk):
+    """Envía a Inventario todos los ítems que ya estén aprobados y aún no hayan sido enviados."""
     if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
         messages.error(request, "No tienes permiso para enviar a Inventario.")
         return redirect("/")
@@ -973,12 +1077,13 @@ def enviar_inventario(request, pk):
         messages.error(request, "No puedes modificar una compra cerrada.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    resumen = _resumen_aprobaciones(compra)
-    if not resumen["todas_aprobadas"]:
-        messages.error(
-            request,
-            f"No puedes enviar a Inventario. Solo hay {resumen['aprobadas']} de {resumen['total']} ítems aprobados."
-        )
+    lineas_aprobadas = []
+    for linea in compra.lineas.filter(cantidad_a_comprar__gt=0):
+        if _estado_flujo_linea(linea)["aprobado"]:
+            lineas_aprobadas.append(linea)
+
+    if not lineas_aprobadas:
+        messages.error(request, "No hay ítems aprobados pendientes para enviar a Inventario.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     recepcion, _ = InventoryReception.objects.get_or_create(
@@ -986,15 +1091,11 @@ def enviar_inventario(request, pk):
         defaults={"creado_por": request.user},
     )
 
-    for ln in compra.lineas.all():
-
-        cantidad = ln.cantidad_a_comprar or 0
-
-        # Solo se crean líneas reales de compra.
-        if cantidad <= 0:
-            continue
-
-        InventoryReceptionLine.objects.get_or_create(
+    creadas = 0
+    existentes = 0
+    for ln in lineas_aprobadas:
+        cantidad = Decimal(ln.cantidad_a_comprar or 0)
+        _, created = InventoryReceptionLine.objects.get_or_create(
             recepcion=recepcion,
             purchase_line=ln,
             defaults={
@@ -1006,8 +1107,20 @@ def enviar_inventario(request, pk):
                 "estado": "PENDIENTE",
             },
         )
+        if created:
+            creadas += 1
+        else:
+            existentes += 1
 
-    messages.success(request, "PAW enviado a Inventario. Registra la recepción del material.")
+    if creadas:
+        messages.success(
+            request,
+            f"Se enviaron {creadas} ítem(s) aprobado(s) a Inventario. "
+            f"Los demás pueden enviarse después cuando sean aprobados."
+        )
+    else:
+        messages.info(request, "Todos los ítems aprobados ya estaban enviados a Inventario.")
+
     return redirect("inventario:recepcion_detail", pk=recepcion.pk)
 
 @require_POST

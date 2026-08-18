@@ -12,6 +12,7 @@ urlpatterns = [
     path("paw/<int:pk>/", views.paw_detail, name="paw_detail"),
     path("linea/<int:linea_id>/enviar-finanzas/", views.enviar_linea_finanzas, name="enviar_linea_finanzas"),
     path("linea/<int:linea_id>/enviar-gerencia/", views.enviar_linea_gerencia, name="enviar_linea_gerencia"),
+    path("linea/<int:linea_id>/enviar-inventario/", views.enviar_linea_inventario, name="enviar_linea_inventario"),
     path("paw/<int:pk>/enviar-finanzas/", views.enviar_finanzas, name="enviar_finanzas"),
     path("paw/<int:pk>/enviar-aprobacion/", views.enviar_aprobacion, name="enviar_aprobacion"),
     path("paw/<int:pk>/enviar-inventario/", views.enviar_inventario, name="enviar_inventario"),

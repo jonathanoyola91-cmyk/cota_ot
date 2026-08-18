@@ -208,7 +208,7 @@
             <strong class="flow-help-title">Flujo de compra por ítem</strong>
             <div class="flow-help-text">
                 1. Cada ítem se aprueba según su tipo de pago: Contado → Finanzas / Crédito → Gerencia ·
-                2. Cuando todos estén aprobados, enviar a Inventario ·
+                2. Cada ítem aprobado se envía a Inventario únicamente desde el botón de su misma línea ·
                 3. Registrar recepción ·
                 4. Entregar material ·
                 5. Cerrar compra
@@ -243,23 +243,21 @@
         {% endif %}
 
         <div class="flow-actions">
-            <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
-                {% csrf_token %}
-                <button class="flow-btn {% if flujo_recepcion_creada %}step-done{% elif puede_enviar_inventario %}step-active{% else %}step-pending{% endif %}"
-                        type="submit" {% if not puede_enviar_inventario %}disabled{% endif %}>
-                    {% if flujo_recepcion_creada %}✅{% elif puede_enviar_inventario %}🔵{% else %}⚪{% endif %}
-                    2. Enviar a Inventario
-                </button>
-            </form>
+            <div class="flow-muted-note" style="margin:0 8px 0 0;">
+                📦 Solo Compras libera material a Inventario desde el botón de cada línea aprobada. Finanzas/Gerencia únicamente aprueban.
+            </div>
 
-            <form method="post" action="{% url 'compras_oil:enviar_inventario' compra.pk %}">
-                {% csrf_token %}
-                <button class="flow-btn {% if flujo_recepcion_ok %}step-done{% elif puede_registrar_recepcion %}step-active{% else %}step-pending{% endif %}"
-                        type="submit" {% if not puede_registrar_recepcion %}disabled{% endif %}>
-                    {% if flujo_recepcion_ok %}✅{% elif puede_registrar_recepcion %}🔵{% else %}⚪{% endif %}
+            {% if recepcion %}
+                <a class="flow-btn {% if flujo_recepcion_ok %}step-done{% else %}step-active{% endif %}"
+                   href="{% url 'inventario:recepcion_detail' recepcion.pk %}">
+                    {% if flujo_recepcion_ok %}✅{% else %}🔵{% endif %}
                     3. Registrar recepción
+                </a>
+            {% else %}
+                <button class="flow-btn step-pending" type="button" disabled>
+                    ⚪ 3. Registrar recepción
                 </button>
-            </form>
+            {% endif %}
 
             {% if flujo_entrega_creada %}
                 <a class="flow-btn {% if flujo_entrega_ok %}step-done{% else %}step-active{% endif %}"
@@ -443,6 +441,14 @@
                                     {% elif form.instance.tipo_pago == "CREDITO" %}
                                         <button class="line-action-btn" type="submit" form="send-ger-{{ form.instance.id }}">Reenviar Gerencia</button>
                                     {% endif %}
+                                {% elif form.instance.flujo_estado == "APROBADO" %}
+                                    {% if form.instance.en_inventario %}
+                                        <span class="line-status status-ok">✓ Enviado a Inventario</span>
+                                    {% elif form.instance.puede_enviar_inventario %}
+                                        <button class="line-action-btn" type="submit" form="send-inv-{{ form.instance.id }}" style="background:#16a34a;">Enviar a Inventario</button>
+                                    {% else %}
+                                        <span style="color:#64748b;font-size:12px;font-weight:800;">Aprobado</span>
+                                    {% endif %}
                                 {% else %}
                                     <span style="color:#64748b;font-size:12px;font-weight:800;">Sin acción</span>
                                 {% endif %}
@@ -478,6 +484,9 @@
             {% csrf_token %}
         </form>
         <form id="send-ger-{{ form.instance.id }}" method="post" action="{% url 'compras_oil:enviar_linea_gerencia' form.instance.id %}" style="display:none;">
+            {% csrf_token %}
+        </form>
+        <form id="send-inv-{{ form.instance.id }}" method="post" action="{% url 'compras_oil:enviar_linea_inventario' form.instance.id %}" style="display:none;">
             {% csrf_token %}
         </form>
     {% endfor %}
