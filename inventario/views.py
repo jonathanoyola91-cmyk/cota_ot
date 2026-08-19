@@ -225,18 +225,23 @@ def _enviar_alerta_recepcion(recepcion, porcentaje, pendientes, umbral):
             )
 
         pendientes_html = f"""
-        <h3 style="margin-top:22px;">Materiales aún pendientes</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead>
-                <tr style="background:#f8fafc;">
-                    <th style="text-align:left;padding:8px;">Código</th>
-                    <th style="text-align:left;padding:8px;">Descripción</th>
-                    <th style="text-align:left;padding:8px;">Faltante</th>
-                    <th style="text-align:left;padding:8px;">Unidad</th>
-                </tr>
-            </thead>
-            <tbody>{''.join(filas)}</tbody>
-        </table>
+        <div style="margin-top:24px;">
+            <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:10px;">
+                Materiales aún pendientes
+            </div>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                   style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e2e8f0;">
+                <thead>
+                    <tr style="background:#f8fafc;">
+                        <th align="left" style="padding:9px;border-bottom:1px solid #e2e8f0;">Código</th>
+                        <th align="left" style="padding:9px;border-bottom:1px solid #e2e8f0;">Descripción</th>
+                        <th align="left" style="padding:9px;border-bottom:1px solid #e2e8f0;">Faltante</th>
+                        <th align="left" style="padding:9px;border-bottom:1px solid #e2e8f0;">Unidad</th>
+                    </tr>
+                </thead>
+                <tbody>{''.join(filas)}</tbody>
+            </table>
+        </div>
         """
 
     texto = (
@@ -252,39 +257,92 @@ def _enviar_alerta_recepcion(recepcion, porcentaje, pendientes, umbral):
     html = f"""
     <!doctype html>
     <html>
-    <body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
-        <div style="max-width:850px;margin:auto;padding:24px;">
-            <div style="background:#0f172a;color:#fff;padding:22px 24px;border-radius:14px 14px 0 0;">
-                <div style="font-size:12px;color:#cbd5e1;font-weight:700;">IMPETUS CONTROL</div>
-                <div style="font-size:24px;font-weight:800;margin-top:6px;">{titulo}</div>
-            </div>
-            <div style="background:#fff;padding:24px;border-radius:0 0 14px 14px;">
-                <p><strong>PAW #{paw_numero}</strong> — {paw_nombre}</p>
-                <p style="font-size:28px;font-weight:800;margin:16px 0;">Recepción: {porcentaje}%</p>
-                <p style="color:#475569;">{mensaje_estado}</p>
+    <body style="margin:0;padding:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+               style="background:#eef2f7;padding:24px 12px;">
+            <tr>
+                <td align="center">
+                    <table role="presentation" width="760" cellspacing="0" cellpadding="0" border="0"
+                           style="width:760px;max-width:760px;background:#ffffff;border-radius:14px;overflow:hidden;
+                                  box-shadow:0 4px 14px rgba(15,23,42,.08);">
 
-                {pendientes_html}
+                        <tr>
+                            <td style="background:#0f172a;padding:20px 24px;">
+                                <div style="font-size:12px;letter-spacing:.8px;font-weight:800;color:#cbd5e1;">
+                                    IMPETUS CONTROL
+                                </div>
+                                <div style="font-size:24px;line-height:1.25;font-weight:800;color:#ffffff;margin-top:6px;">
+                                    {titulo}
+                                </div>
+                            </td>
+                        </tr>
 
-                <div style="margin-top:26px;">
-                    <a href="{inventario_url}"
-                       style="display:inline-block;background:#2563eb;color:#fff;
-                              padding:11px 16px;border-radius:8px;text-decoration:none;
-                              font-weight:800;margin-right:8px;">
-                        Revisar recepción
-                    </a>
-                    <a href="{taller_url}"
-                       style="display:inline-block;background:#16a34a;color:#fff;
-                              padding:11px 16px;border-radius:8px;text-decoration:none;
-                              font-weight:800;">
-                        Revisar Taller
-                    </a>
-                </div>
+                        <tr>
+                            <td style="padding:24px;">
+                                <div style="font-size:14px;color:#64748b;margin-bottom:8px;">
+                                    PAW #{paw_numero}
+                                </div>
 
-                <p style="margin-top:24px;color:#64748b;font-size:12px;">
-                    Notificación automática generada al alcanzar este umbral por primera vez.
-                </p>
-            </div>
-        </div>
+                                <div style="font-size:19px;font-weight:800;color:#0f172a;margin-bottom:18px;">
+                                    {paw_nombre}
+                                </div>
+
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                                       style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+                                    <tr>
+                                        <td style="padding:18px 20px;">
+                                            <div style="font-size:12px;font-weight:800;color:#64748b;
+                                                        text-transform:uppercase;letter-spacing:.5px;">
+                                                Avance de recepción
+                                            </div>
+                                            <div style="font-size:34px;line-height:1.1;font-weight:900;
+                                                        color:{'#16a34a' if umbral == 100 else '#f59e0b'};
+                                                        margin-top:6px;">
+                                                {porcentaje}%
+                                            </div>
+                                            <div style="font-size:14px;line-height:1.6;color:#475569;margin-top:10px;">
+                                                {mensaje_estado}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                {pendientes_html}
+
+                                <table role="presentation" cellspacing="0" cellpadding="0" border="0"
+                                       style="margin-top:24px;">
+                                    <tr>
+                                        <td style="padding-right:10px;">
+                                            <a href="{inventario_url}"
+                                               style="display:inline-block;background:#2563eb;color:#ffffff;
+                                                      text-decoration:none;padding:11px 16px;border-radius:8px;
+                                                      font-size:13px;font-weight:800;">
+                                                Revisar recepción
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <a href="{taller_url}"
+                                               style="display:inline-block;background:#16a34a;color:#ffffff;
+                                                      text-decoration:none;padding:11px 16px;border-radius:8px;
+                                                      font-size:13px;font-weight:800;">
+                                                Revisar Taller
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;
+                                            color:#94a3b8;font-size:11px;line-height:1.5;">
+                                    Notificación automática generada por Impetus Control al alcanzar este umbral
+                                    por primera vez.
+                                </div>
+                            </td>
+                        </tr>
+
+                    </table>
+                </td>
+            </tr>
+        </table>
     </body>
     </html>
     """
