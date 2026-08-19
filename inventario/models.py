@@ -27,6 +27,10 @@ class InventoryReception(models.Model):
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
+    # Controla que las alertas de recepción se envíen una sola vez por umbral.
+    notificacion_80_en = models.DateTimeField(null=True, blank=True)
+    notificacion_100_en = models.DateTimeField(null=True, blank=True)
+
     def __str__(self):
         pr = getattr(self, "purchase_request", None)
         paw = getattr(pr, "paw_numero", None) if pr else None

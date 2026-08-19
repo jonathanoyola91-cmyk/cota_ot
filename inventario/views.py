@@ -3,10 +3,13 @@ from io import BytesIO
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
-from django.db.models import F
+from django.db.models import F, Q
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -145,6 +148,165 @@ def inventario_dashboard(request):
             estado="LISTO"
         ).count(),
     })
+
+def _enviar_alerta_recepcion(recepcion, porcentaje, pendientes, umbral):
+    """
+    Envía una alerta inmediata cuando una recepción alcanza por primera vez
+    el 80% o el 100%. Los destinatarios son COMPRAS, ALERTAS_TALLER y
+    superusuarios activos con correo.
+    """
+    User = get_user_model()
+
+    destinatarios = list(
+        User.objects.filter(is_active=True)
+        .filter(
+            Q(groups__name="COMPRAS")
+            | Q(groups__name="ALERTAS_TALLER")
+            | Q(is_superuser=True)
+        )
+        .exclude(email="")
+        .values_list("email", flat=True)
+        .distinct()
+    )
+
+    if not destinatarios:
+        return 0
+
+    pr = recepcion.purchase_request
+    paw_numero = getattr(pr, "paw_numero", None) or "-"
+    paw_nombre = getattr(pr, "paw_nombre", "") or ""
+
+    base_url = getattr(
+        settings,
+        "IMPETUS_CONTROL_URL",
+        "https://www.impetuscontrol.com",
+    ).rstrip("/")
+
+    inventario_url = f"{base_url}/inventario/recepcion/{recepcion.pk}/"
+    taller_url = f"{base_url}/taller/"
+
+    if umbral == 100:
+        asunto = f"IMPETUS CONTROL · PAW #{paw_numero} · Recepción 100% completa"
+        titulo = "Recepción de material 100% completa"
+        mensaje_estado = (
+            "Inventario confirmó la recepción completa de los materiales "
+            "asociados al PAW. Taller puede continuar con la programación "
+            "correspondiente."
+        )
+    else:
+        asunto = f"IMPETUS CONTROL · PAW #{paw_numero} · Recepción {porcentaje}%"
+        titulo = "Recepción de material alcanzó el 80%"
+        mensaje_estado = (
+            "La recepción alcanzó al menos el 80%. Se recomienda a Taller "
+            "evaluar si los componentes recibidos permiten iniciar o avanzar "
+            "el ensamble."
+        )
+
+    pendientes_texto = ""
+    pendientes_html = ""
+
+    if pendientes:
+        pendientes_texto = "\n\nMATERIALES AÚN PENDIENTES:\n"
+        filas = []
+
+        for item in pendientes:
+            pendientes_texto += (
+                f"- {item['codigo']} | {item['descripcion']} | "
+                f"Pendiente: {item['faltante']} {item['unidad']}\n"
+            )
+
+            filas.append(
+                "<tr>"
+                f"<td style='padding:8px;border-bottom:1px solid #e5e7eb;'>{item['codigo']}</td>"
+                f"<td style='padding:8px;border-bottom:1px solid #e5e7eb;'>{item['descripcion']}</td>"
+                f"<td style='padding:8px;border-bottom:1px solid #e5e7eb;'>{item['faltante']}</td>"
+                f"<td style='padding:8px;border-bottom:1px solid #e5e7eb;'>{item['unidad']}</td>"
+                "</tr>"
+            )
+
+        pendientes_html = f"""
+        <h3 style="margin-top:22px;">Materiales aún pendientes</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+                <tr style="background:#f8fafc;">
+                    <th style="text-align:left;padding:8px;">Código</th>
+                    <th style="text-align:left;padding:8px;">Descripción</th>
+                    <th style="text-align:left;padding:8px;">Faltante</th>
+                    <th style="text-align:left;padding:8px;">Unidad</th>
+                </tr>
+            </thead>
+            <tbody>{''.join(filas)}</tbody>
+        </table>
+        """
+
+    texto = (
+        f"{titulo}\n\n"
+        f"PAW #{paw_numero} - {paw_nombre}\n"
+        f"Recepción actual: {porcentaje}%\n\n"
+        f"{mensaje_estado}"
+        f"{pendientes_texto}\n"
+        f"Revisar recepción: {inventario_url}\n"
+        f"Revisar Taller: {taller_url}\n"
+    )
+
+    html = f"""
+    <!doctype html>
+    <html>
+    <body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+        <div style="max-width:850px;margin:auto;padding:24px;">
+            <div style="background:#0f172a;color:#fff;padding:22px 24px;border-radius:14px 14px 0 0;">
+                <div style="font-size:12px;color:#cbd5e1;font-weight:700;">IMPETUS CONTROL</div>
+                <div style="font-size:24px;font-weight:800;margin-top:6px;">{titulo}</div>
+            </div>
+            <div style="background:#fff;padding:24px;border-radius:0 0 14px 14px;">
+                <p><strong>PAW #{paw_numero}</strong> — {paw_nombre}</p>
+                <p style="font-size:28px;font-weight:800;margin:16px 0;">Recepción: {porcentaje}%</p>
+                <p style="color:#475569;">{mensaje_estado}</p>
+
+                {pendientes_html}
+
+                <div style="margin-top:26px;">
+                    <a href="{inventario_url}"
+                       style="display:inline-block;background:#2563eb;color:#fff;
+                              padding:11px 16px;border-radius:8px;text-decoration:none;
+                              font-weight:800;margin-right:8px;">
+                        Revisar recepción
+                    </a>
+                    <a href="{taller_url}"
+                       style="display:inline-block;background:#16a34a;color:#fff;
+                              padding:11px 16px;border-radius:8px;text-decoration:none;
+                              font-weight:800;">
+                        Revisar Taller
+                    </a>
+                </div>
+
+                <p style="margin-top:24px;color:#64748b;font-size:12px;">
+                    Notificación automática generada al alcanzar este umbral por primera vez.
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    enviados = 0
+    for correo in destinatarios:
+        try:
+            msg = EmailMultiAlternatives(
+                subject=asunto,
+                body=texto,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[correo],
+            )
+            msg.attach_alternative(html, "text/html")
+            enviados += msg.send(fail_silently=False)
+        except Exception:
+            # Una dirección inválida no debe impedir que Inventario guarde la recepción.
+            continue
+
+    return enviados
+
+
 @login_required
 def recepcion_detail(request, pk):
     recepcion = get_object_or_404(
@@ -216,6 +378,78 @@ def recepcion_detail(request, pk):
             paw.save(update_fields=["estado_operativo"])
         except Exception:
             pass
+
+        # ======================================================
+        # ALERTAS EN VIVO DE RECEPCIÓN: 80% Y 100%
+        # Se calcula por cantidad recibida / cantidad esperada,
+        # no por número de líneas, para representar mejor el avance real.
+        # ======================================================
+        cantidad_esperada_total = Decimal("0")
+        cantidad_recibida_total = Decimal("0")
+        pendientes = []
+
+        for linea in recepcion.lineas.all():
+            esperada = Decimal(linea.cantidad_esperada or 0)
+            recibida = Decimal(linea.cantidad_recibida or 0)
+
+            if esperada <= 0:
+                continue
+
+            cantidad_esperada_total += esperada
+            cantidad_recibida_total += min(max(recibida, Decimal("0")), esperada)
+
+            faltante = max(esperada - recibida, Decimal("0"))
+            if faltante > 0:
+                pendientes.append({
+                    "codigo": linea.codigo or "-",
+                    "descripcion": linea.descripcion or "",
+                    "faltante": f"{faltante.normalize()}",
+                    "unidad": linea.unidad or "",
+                })
+
+        if cantidad_esperada_total > 0:
+            porcentaje_recepcion = int(
+                (cantidad_recibida_total / cantidad_esperada_total) * Decimal("100")
+            )
+            porcentaje_recepcion = min(100, max(0, porcentaje_recepcion))
+        else:
+            porcentaje_recepcion = 0
+
+        # Primero 80%. Si una recepción pasa directamente de <80 a 100,
+        # se envía únicamente la alerta de 100% para evitar dos correos simultáneos.
+        if porcentaje_recepcion >= 100 and not recepcion.notificacion_100_en:
+            enviados = _enviar_alerta_recepcion(
+                recepcion=recepcion,
+                porcentaje=100,
+                pendientes=[],
+                umbral=100,
+            )
+            if enviados:
+                ahora = timezone.now()
+                recepcion.notificacion_100_en = ahora
+                # También marcamos 80 como cumplido: no debe enviarse después.
+                if not recepcion.notificacion_80_en:
+                    recepcion.notificacion_80_en = ahora
+                recepcion.save(
+                    update_fields=[
+                        "notificacion_80_en",
+                        "notificacion_100_en",
+                        "actualizado_en",
+                    ]
+                )
+
+        elif porcentaje_recepcion >= 80 and not recepcion.notificacion_80_en:
+            enviados = _enviar_alerta_recepcion(
+                recepcion=recepcion,
+                porcentaje=porcentaje_recepcion,
+                pendientes=pendientes,
+                umbral=80,
+            )
+            if enviados:
+                recepcion.notificacion_80_en = timezone.now()
+                recepcion.save(
+                    update_fields=["notificacion_80_en", "actualizado_en"]
+                )
 
         messages.success(request, "Recepción de inventario actualizada correctamente.")
         return redirect("inventario:recepcion_detail", pk=recepcion.pk)
