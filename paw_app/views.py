@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -272,6 +273,286 @@ def actualizar_gestion_paw(request, paw_id):
 
     return redirect("paw_list")
 
+@login_required
+def activar_seguimiento_publico(request, paw_id):
+    if not tiene_rol(
+        request.user,
+        ["ADMIN", "GERENTE", "INGENIERIA", "TALLER"]
+    ):
+        messages.error(
+            request,
+            "No tienes permiso para administrar el seguimiento público."
+        )
+        return redirect("paw_detail", paw_id=paw_id)
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+        from datetime import timedelta
+
+        paw.seguimiento_publico_activo = True
+
+        # Mientras el PAW esté abierto dejamos el enlace sin vencimiento.
+        paw.seguimiento_publico_vence = None
+
+        paw.save(
+            update_fields=[
+                "seguimiento_publico_activo",
+                "seguimiento_publico_vence",
+                "actualizado_en",
+            ]
+        )
+
+        messages.success(
+            request,
+            f"Seguimiento público del PAW {paw.numero_paw} activado."
+        )
+
+    return redirect("paw_detail", paw_id=paw.id)
+
+
+@login_required
+def desactivar_seguimiento_publico(request, paw_id):
+    if not tiene_rol(
+        request.user,
+        ["ADMIN", "GERENTE", "INGENIERIA", "TALLER"]
+    ):
+        messages.error(
+            request,
+            "No tienes permiso para administrar el seguimiento público."
+        )
+        return redirect("paw_detail", paw_id=paw_id)
+
+    paw = get_object_or_404(Paw, id=paw_id)
+
+    if request.method == "POST":
+        paw.seguimiento_publico_activo = False
+
+        paw.save(
+            update_fields=[
+                "seguimiento_publico_activo",
+                "actualizado_en",
+            ]
+        )
+
+        messages.success(
+            request,
+            f"Seguimiento público del PAW {paw.numero_paw} desactivado."
+        )
+
+    return redirect("paw_detail", paw_id=paw.id)
+
+def seguimiento_publico(request, token):
+
+    paw = get_object_or_404(
+        Paw.objects.select_related(
+            "cotizacion",
+            "creado_por",
+        ).prefetch_related("ots"),
+        public_token=token,
+    )
+
+    if not paw.seguimiento_publico_activo:
+        return render(
+            request,
+            "paw_app/seguimiento_publico.html",
+            {
+                "seguimiento_inactivo": True,
+            },
+            status=404,
+        )
+
+    seguimiento_vencido = False
+
+    if paw.seguimiento_publico_vence:
+        if timezone.now() > paw.seguimiento_publico_vence:
+            seguimiento_vencido = True
+
+    if seguimiento_vencido:
+        return render(
+            request,
+            "paw_app/seguimiento_publico.html",
+            {
+                "paw": paw,
+                "seguimiento_vencido": True,
+            },
+        )
+
+    ot = paw.ots.first()
+
+    tiene_ot = bool(ot)
+
+    tiene_bom = bool(
+        ot and getattr(ot, "bom", None)
+    )
+
+    estado = paw.estado_operativo
+
+    paso_recibido = True
+    paso_inspeccion = tiene_ot
+    paso_diagnostico = tiene_bom
+
+    estados_repuestos = {
+        "EN_COMPRAS",
+        "EN_FINANZAS",
+        "EN_APROBACION",
+        "PAGO_OK",
+        "MATERIAL_RECIBIDO",
+        "ENTREGADO_TALLER",
+        "PRODUCTO_OK",
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    }
+
+    paso_repuestos = (
+        not paw.aplica_compras
+        or estado in estados_repuestos
+    )
+
+    estados_reparacion = {
+        "ENTREGADO_TALLER",
+        "PRODUCTO_OK",
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    }
+
+    paso_reparacion = (
+        not paw.aplica_taller
+        or estado in estados_reparacion
+    )
+
+    estados_pruebas = {
+        "PRODUCTO_OK",
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    }
+
+    paso_pruebas = (
+        not paw.aplica_taller
+        or estado in estados_pruebas
+    )
+
+    paso_finalizado = (
+        paw.listo_para_facturar
+        or estado in {
+            "EN_FACTURACION",
+            "FACTURADO",
+            "RADICADO",
+        }
+    )
+
+    if paso_finalizado:
+        etapa_actual = 7
+        estado_publico = "Servicio finalizado"
+        titulo_actual = "Servicio finalizado"
+        descripcion_actual = (
+            "El proceso técnico asociado a este equipo "
+            "ha sido completado."
+        )
+
+    elif paso_pruebas:
+        etapa_actual = 6
+        estado_publico = "Pruebas finales"
+        titulo_actual = "Pruebas y validación"
+        descripcion_actual = (
+            "El equipo se encuentra en proceso de pruebas "
+            "y validación final."
+        )
+
+    elif paso_reparacion:
+        etapa_actual = 5
+        estado_publico = "Reparación en proceso"
+        titulo_actual = "Reparación / Ensamble"
+        descripcion_actual = (
+            "Nuestro equipo técnico se encuentra ejecutando "
+            "el proceso de reparación y ensamble."
+        )
+
+    elif paso_repuestos:
+        etapa_actual = 4
+        estado_publico = "Gestión de repuestos"
+        titulo_actual = "Gestión de repuestos"
+        descripcion_actual = (
+            "Los componentes necesarios para continuar "
+            "el proceso se encuentran en gestión."
+        )
+
+    elif paso_diagnostico:
+        etapa_actual = 3
+        estado_publico = "Diagnóstico técnico"
+        titulo_actual = "Diagnóstico"
+        descripcion_actual = (
+            "Se está evaluando técnicamente el equipo y "
+            "definiendo el alcance de la intervención."
+        )
+
+    elif paso_inspeccion:
+        etapa_actual = 2
+        estado_publico = "Inspección"
+        titulo_actual = "Inspección inicial"
+        descripcion_actual = (
+            "El equipo se encuentra en proceso de inspección "
+            "y evaluación inicial."
+        )
+
+    else:
+        etapa_actual = 1
+        estado_publico = "Equipo recibido"
+        titulo_actual = "Recepción"
+        descripcion_actual = (
+            "El equipo ha sido registrado y recibido "
+            "para iniciar el proceso técnico."
+        )
+
+    etapas = [
+        {"numero": 1, "nombre": "Recibido", "completo": paso_recibido},
+        {"numero": 2, "nombre": "Inspección", "completo": paso_inspeccion},
+        {"numero": 3, "nombre": "Diagnóstico", "completo": paso_diagnostico},
+        {"numero": 4, "nombre": "Repuestos", "completo": paso_repuestos},
+        {"numero": 5, "nombre": "Reparación", "completo": paso_reparacion},
+        {"numero": 6, "nombre": "Pruebas", "completo": paso_pruebas},
+        {"numero": 7, "nombre": "Finalizado", "completo": paso_finalizado},
+    ]
+
+    contexto = {
+        "paw": paw,
+        "etapas": etapas,
+        "etapa_actual": etapa_actual,
+        "estado_publico": estado_publico,
+        "titulo_actual": titulo_actual,
+        "descripcion_actual": descripcion_actual,
+    }
+
+    return render(
+        request,
+        "paw_app/seguimiento_publico.html",
+        contexto,
+    )
+
+
+@login_required
+def paw_detail(request, paw_id):
+    paw = get_object_or_404(
+        Paw.objects.select_related("cotizacion", "creado_por"),
+        id=paw_id,
+    )
+
+    if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
+        if not paw.aplica_campo:
+            messages.error(
+                request,
+                "No tienes acceso a este PAW porque no incluye servicio en campo."
+            )
+            return redirect("campo:dashboard")
+
+    return render(
+        request,
+        "paw_app/paw_detail.html",
+        {"paw": paw}
+    )
 @login_required
 def paw_detail(request, paw_id):
     paw = get_object_or_404(

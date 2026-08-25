@@ -1,6 +1,7 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
-
 
 class Criticidad(models.TextChoices):
     ALTA = "ALTA", "Alta"
@@ -62,7 +63,28 @@ class Paw(models.Model):
 
     fecha_entrega = models.DateField(null=True, blank=True)
     fecha_salida = models.DateField(null=True, blank=True)
+    # ==========================================================
+    # SEGUIMIENTO PÚBLICO DEL CLIENTE
+    # ==========================================================
 
+    public_token = models.UUIDField(
+        "Token público de seguimiento",
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+    )
+
+    seguimiento_publico_activo = models.BooleanField(
+        "Seguimiento público activo",
+        default=False,
+    )
+
+    seguimiento_publico_vence = models.DateTimeField(
+        "Vencimiento del seguimiento público",
+        null=True,
+        blank=True,
+    )
+                           
     tipo_operacion = models.CharField(
         "Tipo de operación",
         max_length=30,

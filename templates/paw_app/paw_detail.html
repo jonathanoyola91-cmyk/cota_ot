@@ -275,6 +275,133 @@
     background:#b91c1c;
 }
 
+/* =========================================================
+   SEGUIMIENTO PÚBLICO DEL CLIENTE
+========================================================= */
+
+.seguimiento-admin-card {
+    border-left: 5px solid #2563eb;
+}
+
+.seguimiento-admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.seguimiento-description {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.tracking-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 13px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.tracking-active {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.tracking-inactive {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+}
+
+.tracking-url-box {
+    margin-top: 18px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+
+.tracking-url-box small {
+    display: block;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+    margin-bottom: 5px;
+}
+
+.tracking-url {
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 650;
+    word-break: break-all;
+}
+
+.tracking-actions {
+    display: flex;
+    gap: 9px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.tracking-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 9px 13px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}
+
+.tracking-btn-primary {
+    background: #2563eb;
+    color: white;
+}
+
+.tracking-btn-primary:hover {
+    background: #1d4ed8;
+    color: white;
+}
+
+.tracking-btn-copy {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.tracking-btn-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.tracking-disabled-info {
+    display: flex;
+    gap: 13px;
+    align-items: center;
+
+    margin: 17px 0;
+
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+
+    padding: 14px;
+}
+
+.tracking-disabled-icon {
+    font-size: 24px;
+}
+
+.tracking-disabled-info p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 12px;
+}
     @media (max-width:1200px) {
         .progress-grid { grid-template-columns:repeat(4,1fr); }
         .summary-grid,
@@ -312,7 +439,138 @@
             </div>
         </div>
     </div>
+    <div class="section-card seguimiento-admin-card">
 
+    <div class="seguimiento-admin-header">
+
+        <div>
+            <h3 class="section-title" style="margin-bottom:5px;">
+                🔗 Seguimiento del cliente
+            </h3>
+
+            <div class="seguimiento-description">
+                Enlace público de solo lectura para consultar
+                el avance del servicio.
+            </div>
+        </div>
+
+        {% if paw.seguimiento_publico_activo %}
+
+            <span class="tracking-status tracking-active">
+                ● Activo
+            </span>
+
+        {% else %}
+
+            <span class="tracking-status tracking-inactive">
+                ● Inactivo
+            </span>
+
+        {% endif %}
+
+    </div>
+
+
+    {% if paw.seguimiento_publico_activo %}
+
+        <div class="tracking-url-box">
+
+            <div>
+
+                <small>ENLACE PÚBLICO</small>
+
+                <div
+                    id="publicTrackingUrl"
+                    class="tracking-url"
+                >
+                    {{ request.scheme }}://{{ request.get_host }}{% url 'seguimiento_publico' paw.public_token %}
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="tracking-actions">
+
+            <a
+                class="tracking-btn tracking-btn-primary"
+                href="{% url 'seguimiento_publico' paw.public_token %}"
+                target="_blank"
+            >
+                👁 Ver como cliente
+            </a>
+
+
+            <button
+                type="button"
+                class="tracking-btn tracking-btn-copy"
+                onclick="copiarSeguimiento()"
+            >
+                📋 Copiar enlace
+            </button>
+
+
+            <form
+                method="post"
+                action="{% url 'desactivar_seguimiento_publico' paw.id %}"
+                style="display:inline;"
+                onsubmit="return confirm('¿Desea desactivar el seguimiento público de este PAW?');"
+            >
+
+                {% csrf_token %}
+
+                <button
+                    type="submit"
+                    class="tracking-btn tracking-btn-danger"
+                >
+                    🔒 Desactivar
+                </button>
+
+            </form>
+
+        </div>
+
+
+    {% else %}
+
+        <div class="tracking-disabled-info">
+
+            <div class="tracking-disabled-icon">
+                🔒
+            </div>
+
+            <div>
+                <strong>El cliente todavía no tiene acceso.</strong>
+
+                <p>
+                    Al activar el seguimiento se habilitará
+                    un enlace público seguro y exclusivo para este PAW.
+                </p>
+            </div>
+
+        </div>
+
+
+        <form
+            method="post"
+            action="{% url 'activar_seguimiento_publico' paw.id %}"
+        >
+
+            {% csrf_token %}
+
+            <button
+                type="submit"
+                class="tracking-btn tracking-btn-primary"
+            >
+                🔗 Activar seguimiento
+            </button>
+
+        </form>
+
+    {% endif %}
+
+</div>
     <div class="progress-card">
         <div class="progress-title">Progreso general del PAW</div>
 
@@ -926,5 +1184,35 @@
     </div>
 
 </div>
+<script>
+function copiarSeguimiento() {
+
+    const elemento = document.getElementById(
+        "publicTrackingUrl"
+    );
+
+    if (!elemento) {
+        return;
+    }
+
+    const url = elemento.innerText.trim();
+
+    navigator.clipboard.writeText(url)
+        .then(function () {
+
+            alert(
+                "Enlace de seguimiento copiado correctamente."
+            );
+
+        })
+        .catch(function () {
+
+            alert(
+                "No fue posible copiar el enlace automáticamente."
+            );
+
+        });
+}
+</script>
 
 {% endblock %}
