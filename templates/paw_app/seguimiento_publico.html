@@ -404,6 +404,54 @@
         }
 
 
+
+        /* ==========================================
+           AVANCE DE REPUESTOS
+        ========================================== */
+
+        .parts-progress {
+            margin-top: 18px;
+            max-width: 520px;
+        }
+
+        .parts-progress-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 8px;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 750;
+        }
+
+        .parts-progress-top strong {
+            color: #0d65c2;
+            font-size: 13px;
+        }
+
+        .parts-progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #dbeafe;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .parts-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0d65c2, #38a3ff);
+            border-radius: 999px;
+            transition: width .5s ease;
+        }
+
+        .parts-progress-note {
+            margin-top: 7px;
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
         /* ==========================================
            SEGURIDAD
         ========================================== */
@@ -785,13 +833,36 @@
             </div>
 
             <div class="current-description">
-                {{ descripcion_actual }}
-            </div>
+    {{ descripcion_actual }}
+</div>
 
-            <div class="update">
-                Última actualización:
-                {{ paw.actualizado_en|date:"d/m/Y · H:i" }}
-            </div>
+{% if etapa_actual == 4 %}
+    <div class="parts-progress">
+
+        <div class="parts-progress-top">
+            <span>Avance de repuestos</span>
+            <strong>{{ avance_repuestos }}%</strong>
+        </div>
+
+        <div class="parts-progress-bar">
+            <div
+                class="parts-progress-fill"
+                style="width: {{ avance_repuestos }}%;"
+            ></div>
+        </div>
+
+        <div class="parts-progress-note">
+            Progreso calculado según materiales recibidos
+            frente a los materiales esperados.
+        </div>
+
+    </div>
+{% endif %}
+
+<div class="update">
+    Última actualización:
+    {{ paw.actualizado_en|date:"d/m/Y · H:i" }}
+</div>
 
         </div>
 

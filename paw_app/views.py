@@ -392,6 +392,63 @@ def seguimiento_publico(request, token):
     paso_inspeccion = tiene_ot
     paso_diagnostico = tiene_bom
 
+    # ---------------------------------------------------------
+    # ETAPA 4 - REPUESTOS
+    # Se determina por el movimiento REAL de Compras / Inventario
+    # ---------------------------------------------------------
+
+    avance_repuestos = 0
+    total_esperado = 0
+    total_recibido = 0
+    gestion_repuestos_iniciada = False
+    compra = None
+
+    if paw.aplica_compras:
+
+        # Buscar la solicitud de compra asociada al PAW
+        from compras_oil.models import PurchaseRequest
+
+        compra = (
+            PurchaseRequest.objects
+            .filter(paw_numero=paw.numero_paw)
+            .first()
+        )
+
+        if compra:
+
+            # Si existe una compra, la gestión de repuestos ya inició.
+            gestion_repuestos_iniciada = True
+
+            # Intentamos obtener la recepción de inventario
+            recepcion = getattr(
+                compra,
+                "recepcion_inventario",
+                None
+            )
+
+            if recepcion:
+
+                lineas_recepcion = recepcion.lineas.all()
+
+                for linea in lineas_recepcion:
+
+                    esperado = linea.cantidad_esperada or 0
+                    recibido = linea.cantidad_recibida or 0
+
+                    total_esperado += esperado
+                    total_recibido += recibido
+
+                if total_esperado > 0:
+
+                    avance_repuestos = int(
+                        min(
+                            (total_recibido / total_esperado) * 100,
+                            100
+                        )
+                    )
+
+    # Estados históricos / posteriores.
+    # Se mantienen como respaldo para PAW existentes.
     estados_repuestos = {
         "EN_COMPRAS",
         "EN_FINANZAS",
@@ -407,9 +464,30 @@ def seguimiento_publico(request, token):
 
     paso_repuestos = (
         not paw.aplica_compras
+        or gestion_repuestos_iniciada
         or estado in estados_repuestos
     )
 
+    # ---------------------------------------------------------
+    # ETAPA 5 - REPARACIÓN
+    # Se activa cuando Inventario genera una entrega
+    # con destino TALLER.
+    # ---------------------------------------------------------
+
+    material_entregado_taller = False
+
+    if compra:
+        entrega = getattr(
+            compra,
+            "entrega_taller",
+            None,
+        )
+
+        if entrega and entrega.destino == "TALLER":
+            material_entregado_taller = True
+
+    # Estados históricos / posteriores.
+    # Se mantienen como respaldo para PAW existentes.
     estados_reparacion = {
         "ENTREGADO_TALLER",
         "PRODUCTO_OK",
@@ -420,6 +498,7 @@ def seguimiento_publico(request, token):
 
     paso_reparacion = (
         not paw.aplica_taller
+        or material_entregado_taller
         or estado in estados_reparacion
     )
 
@@ -524,6 +603,7 @@ def seguimiento_publico(request, token):
         "estado_publico": estado_publico,
         "titulo_actual": titulo_actual,
         "descripcion_actual": descripcion_actual,
+        "avance_repuestos": avance_repuestos,
     }
 
     return render(
@@ -533,26 +613,6 @@ def seguimiento_publico(request, token):
     )
 
 
-@login_required
-def paw_detail(request, paw_id):
-    paw = get_object_or_404(
-        Paw.objects.select_related("cotizacion", "creado_por"),
-        id=paw_id,
-    )
-
-    if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
-        if not paw.aplica_campo:
-            messages.error(
-                request,
-                "No tienes acceso a este PAW porque no incluye servicio en campo."
-            )
-            return redirect("campo:dashboard")
-
-    return render(
-        request,
-        "paw_app/paw_detail.html",
-        {"paw": paw}
-    )
 @login_required
 def paw_detail(request, paw_id):
     paw = get_object_or_404(
