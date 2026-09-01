@@ -625,7 +625,125 @@ def paw_detail(request, paw_id):
             messages.error(request, "No tienes acceso a este PAW porque no incluye servicio en campo.")
             return redirect("campo:dashboard")
 
-    return render(request, "paw_app/paw_detail.html", {"paw": paw})
+    # ---------------------------------------------------------
+    # CHAT INTERNO DEL PAW
+    # ---------------------------------------------------------
+    # El chat es exclusivamente interno. No se expone en el
+    # seguimiento público del cliente.
+    from internal_chat.models import Conversacion, Mensaje
+
+    chat_paw = (
+        Conversacion.objects
+        .filter(
+            paw=paw,
+            tipo="PAW",
+            activa=True,
+        )
+        .first()
+    )
+
+    chat_paw_no_leidos = 0
+    chat_paw_es_participante = False
+
+    if chat_paw:
+        chat_paw_es_participante = chat_paw.participantes.filter(
+            id=request.user.id
+        ).exists()
+
+        if chat_paw_es_participante:
+            chat_paw_no_leidos = (
+                Mensaje.objects
+                .filter(
+                    conversacion=chat_paw,
+                    eliminado=False,
+                )
+                .exclude(autor=request.user)
+                .exclude(lecturas__usuario=request.user)
+                .distinct()
+                .count()
+            )
+
+    return render(
+        request,
+        "paw_app/paw_detail.html",
+        {
+            "paw": paw,
+            "chat_paw": chat_paw,
+            "chat_paw_no_leidos": chat_paw_no_leidos,
+            "chat_paw_es_participante": chat_paw_es_participante,
+        },
+    )
+
+
+@login_required
+def abrir_chat_paw(request, paw_id):
+    """
+    Abre el chat interno asociado a un PAW.
+
+    - Existe una sola conversación por PAW.
+    - El creador del PAW queda incluido automáticamente.
+    - El usuario que abre el chat queda incluido automáticamente.
+    - Se respeta la misma restricción de acceso usada en paw_detail.
+    """
+    paw = get_object_or_404(
+        Paw.objects.select_related("creado_por"),
+        id=paw_id,
+    )
+
+    if tiene_rol(request.user, ["CAMPO"]) and not request.user.is_superuser:
+        if not paw.aplica_campo:
+            messages.error(
+                request,
+                "No tienes acceso a este PAW porque no incluye servicio en campo.",
+            )
+            return redirect("campo:dashboard")
+
+    from internal_chat.models import Conversacion
+
+    nombre_chat = f"PAW {paw.numero_paw}"
+    if paw.nombre_paw:
+        nombre_chat += f" - {paw.nombre_paw}"
+    elif paw.cliente:
+        nombre_chat += f" - {paw.cliente}"
+
+    with transaction.atomic():
+        conversacion, creada = Conversacion.objects.get_or_create(
+            paw=paw,
+            defaults={
+                "tipo": "PAW",
+                "nombre": nombre_chat[:200],
+                "activa": True,
+            },
+        )
+
+        # Si existía, aseguramos que conserve el tipo correcto y un nombre útil.
+        cambios = []
+
+        if conversacion.tipo != "PAW":
+            conversacion.tipo = "PAW"
+            cambios.append("tipo")
+
+        if not conversacion.nombre:
+            conversacion.nombre = nombre_chat[:200]
+            cambios.append("nombre")
+
+        if not conversacion.activa:
+            conversacion.activa = True
+            cambios.append("activa")
+
+        if cambios:
+            cambios.append("actualizado_en")
+            conversacion.save(update_fields=cambios)
+
+        conversacion.participantes.add(request.user)
+
+        if paw.creado_por_id:
+            conversacion.participantes.add(paw.creado_por)
+
+    return redirect(
+        "internal_chat:conversacion",
+        conversacion_id=conversacion.id,
+    )
 
 
 @login_required

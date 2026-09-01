@@ -10,6 +10,7 @@ urlpatterns = [
     path("dashboard/", include("dashboard.urls")),
 
     path("accounts/", include("accounts.urls")),
+    path("chat/", include("internal_chat.urls")),
 
     # módulos    
     path("compras/", include("compras_oil.urls")),

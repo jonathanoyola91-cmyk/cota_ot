@@ -7,6 +7,7 @@ urlpatterns = [
     path("<int:paw_id>/activar-seguimiento/",views.activar_seguimiento_publico,name="activar_seguimiento_publico",),
     path("<int:paw_id>/desactivar-seguimiento/",views.desactivar_seguimiento_publico,name="desactivar_seguimiento_publico",),
     path("<int:paw_id>/", views.paw_detail, name="paw_detail"),
+    path("<int:paw_id>/chat/", views.abrir_chat_paw, name="abrir_chat_paw"),
     path("crear/<int:cotizacion_id>/", views.crear_paw, name="crear_paw"),
     path("<int:paw_id>/registrar-ensamble/", views.registrar_ensamble, name="registrar_ensamble"),
     path("<int:paw_id>/producto-ok/", views.marcar_producto_ok, name="marcar_producto_ok"),

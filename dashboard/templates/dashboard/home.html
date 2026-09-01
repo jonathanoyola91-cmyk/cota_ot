@@ -343,6 +343,53 @@ tbody tr:hover{background:#f8fafc;}
     box-shadow:0 10px 20px rgba(0,0,0,.15);
 }
 
+.chat-menu-link{position:relative;}
+.chat-menu-badge{
+    margin-left:auto;
+    min-width:19px;
+    height:19px;
+    padding:0 5px;
+    border-radius:999px;
+    background:#dc2626;
+    color:#fff;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    font-size:9px;
+    font-weight:900;
+    line-height:1;
+    box-shadow:0 0 0 2px rgba(255,255,255,.08);
+}
+.chat-menu-badge.show{display:inline-flex;}
+
+.toast.chat-toast{
+    background:linear-gradient(135deg,#1959cf,#1f6bf0);
+    min-width:280px;
+    max-width:360px;
+    cursor:pointer;
+    border:1px solid rgba(255,255,255,.18);
+}
+.chat-toast-title{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-weight:900;
+    font-size:12px;
+    margin-bottom:5px;
+}
+.chat-toast-message{
+    font-size:11px;
+    line-height:1.45;
+    opacity:.96;
+    word-break:break-word;
+}
+.chat-toast-action{
+    margin-top:7px;
+    font-size:9px;
+    font-weight:850;
+    opacity:.9;
+}
+
 /* Contenedores frecuentes de módulos antiguos */
 .content-card,.table-card,.section-card{
     background:#fff;
@@ -451,6 +498,15 @@ tbody tr:hover{background:#f8fafc;}
         {% if request.user.is_superuser %}
         <a href="/admin/" class="{% if '/admin/' in request.path %}active{% endif %}"><span class="menu-icon">⚙</span> Admin Django</a>
         {% endif %}
+        {% if request.user.is_authenticated %}
+        <div class="menu-section">COMUNICACIÓN</div>
+        <a href="{% url 'internal_chat:bandeja' %}"
+           class="chat-menu-link {% if '/chat/' in request.path %}active{% endif %}">
+            <span class="menu-icon">💬</span>
+            <span>Chat</span>
+            <span id="chat-unread-badge" class="chat-menu-badge">0</span>
+        </a>
+        {% endif %}
     </nav>
 
     <div class="sidebar-support">
@@ -534,6 +590,10 @@ tbody tr:hover{background:#f8fafc;}
 </main>
 </div>
 
+{% if request.user.is_authenticated %}
+<div id="chatToastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+{% endif %}
+
 <script>
 window.addEventListener("load", function(){
     const loader=document.getElementById("page-loader");
@@ -563,6 +623,141 @@ document.addEventListener("click",function(e){
     }
 });
 </script>
+
+{% if request.user.is_authenticated %}
+<script>
+(function(){
+    const badge = document.getElementById("chat-unread-badge");
+    const toastWrap = document.getElementById("chatToastWrap");
+
+    if(!badge) return;
+
+    let notificationSocket = null;
+    let reconnectTimer = null;
+
+    function websocketUrl(){
+        const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        return protocol + window.location.host + "/ws/notificaciones/";
+    }
+
+    function actualizarContador(total){
+        total = Number(total || 0);
+
+        if(total > 0){
+            badge.textContent = total > 99 ? "99+" : String(total);
+            badge.classList.add("show");
+        }else{
+            badge.textContent = "0";
+            badge.classList.remove("show");
+        }
+    }
+
+    function estaEnConversacion(conversationId){
+        const actual = window.location.pathname.replace(/\/+$/, "");
+        const destino = ("/chat/" + conversationId).replace(/\/+$/, "");
+        return actual === destino;
+    }
+
+    function mostrarToastChat(data){
+        if(!toastWrap || estaEnConversacion(data.conversation_id)) return;
+
+        const toast = document.createElement("div");
+        toast.className = "toast chat-toast";
+
+        const title = document.createElement("div");
+        title.className = "chat-toast-title";
+        title.textContent = "💬 " + (data.sender || "Nuevo mensaje");
+
+        const message = document.createElement("div");
+        message.className = "chat-toast-message";
+
+        let preview = data.message || "Tienes un nuevo mensaje.";
+        if(preview.length > 110){
+            preview = preview.substring(0, 110) + "...";
+        }
+        message.textContent = preview;
+
+        const action = document.createElement("div");
+        action.className = "chat-toast-action";
+        action.textContent = "Abrir conversación →";
+
+        toast.appendChild(title);
+        toast.appendChild(message);
+        toast.appendChild(action);
+        toastWrap.appendChild(toast);
+
+        toast.addEventListener("click", function(){
+            window.location.href = "/chat/" + data.conversation_id + "/";
+        });
+
+        setTimeout(function(){
+            toast.style.transition = "opacity .35s ease, transform .35s ease";
+            toast.style.opacity = "0";
+            toast.style.transform = "translateY(-8px)";
+
+            setTimeout(function(){
+                if(toast.parentNode){
+                    toast.remove();
+                }
+            }, 350);
+        }, 6000);
+    }
+
+    function conectarNotificaciones(){
+        if(
+            notificationSocket &&
+            (
+                notificationSocket.readyState === WebSocket.OPEN ||
+                notificationSocket.readyState === WebSocket.CONNECTING
+            )
+        ){
+            return;
+        }
+
+        notificationSocket = new WebSocket(websocketUrl());
+
+        notificationSocket.onopen = function(){
+            console.log("🔔 Notificaciones del chat conectadas");
+            if(reconnectTimer){
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        };
+
+        notificationSocket.onmessage = function(event){
+            let data;
+
+            try{
+                data = JSON.parse(event.data);
+            }catch(error){
+                console.error("Error leyendo notificación del chat:", error);
+                return;
+            }
+
+            if(data.type === "unread_count" || data.type === "new_message"){
+                actualizarContador(data.count);
+            }
+
+            if(data.type === "new_message"){
+                mostrarToastChat(data);
+            }
+        };
+
+        notificationSocket.onerror = function(error){
+            console.error("Error WebSocket de notificaciones:", error);
+        };
+
+        notificationSocket.onclose = function(){
+            console.log("🔔 Notificaciones del chat desconectadas");
+            reconnectTimer = setTimeout(conectarNotificaciones, 3000);
+        };
+    }
+
+    conectarNotificaciones();
+})();
+</script>
+{% endif %}
+
 {% block extra_js %}{% endblock %}
 </body>
 </html>

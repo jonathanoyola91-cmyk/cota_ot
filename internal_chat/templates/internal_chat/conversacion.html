@@ -1,0 +1,1174 @@
+{% extends "dashboard/home.html" %}
+
+{% block title %}Conversación | IMPETUS CONTROL{% endblock %}
+{% block page_title %}Chat Interno{% endblock %}
+{% block page_subtitle %}Comunicación y trazabilidad operativa del equipo{% endblock %}
+
+{% block content %}
+<style>
+.chat-workspace{
+    height:calc(100vh - 125px);min-height:650px;display:grid;grid-template-columns:320px minmax(0,1fr);
+    background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow);
+}
+.chat-sidebar{min-width:0;display:flex;flex-direction:column;border-right:1px solid #e8edf4;background:#fbfcfe;}
+.chat-sidebar-head{padding:16px 14px 12px;border-bottom:1px solid #edf1f5;background:#fff;}
+.chat-sidebar-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.chat-sidebar-title{font-size:14px;font-weight:950;color:#14233d;}
+.chat-home-link{font-size:9px;color:#1f66e5;text-decoration:none;font-weight:850;}
+.chat-search-box{position:relative;margin-top:10px;}
+.chat-search-box span{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:#8a96a9;}
+.chat-search-box input{
+    width:100%;height:36px;padding:0 10px 0 31px;border:1px solid #dfe6ef;border-radius:9px;
+    background:#f8fafc;color:#22314a;font-size:10px;outline:none;
+}
+.chat-list{flex:1;overflow-y:auto;padding:7px;}
+.chat-row{
+    display:grid;grid-template-columns:39px minmax(0,1fr) auto;gap:9px;align-items:center;
+    padding:9px;border-radius:11px;text-decoration:none;color:inherit;margin-bottom:2px;transition:.15s ease;
+}
+.chat-row:hover{background:#f0f5fb;}
+.chat-row.active{background:#eaf2ff;box-shadow:inset 3px 0 0 #1f66e5;}
+.chat-row-avatar{
+    width:39px;height:39px;border-radius:50%;display:grid;place-items:center;background:#eaf2ff;color:#17478c;
+    font-size:12px;font-weight:950;border:1px solid #d7e4f8;
+}
+.chat-row-avatar.multi{border-radius:11px;background:#eef0ff;color:#4f46e5;}
+.chat-row-copy{min-width:0;}
+.chat-row-name{font-size:10.5px;font-weight:900;color:#1c2b45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-row-preview{margin-top:3px;font-size:8.5px;color:#748198;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-row-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
+.chat-row-time{font-size:7.5px;color:#93a0b2;white-space:nowrap;}
+.chat-row-unread{
+    min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#1f66e5;color:#fff;
+    display:grid;place-items:center;font-size:7.5px;font-weight:950;
+}
+.chat-main{min-width:0;display:flex;flex-direction:column;background:#f7f9fc;}
+.chat-header{
+    min-height:72px;padding:12px 17px;background:#fff;border-bottom:1px solid #e8edf4;
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+}
+.chat-user{display:flex;align-items:center;gap:11px;min-width:0;}
+.chat-avatar{
+    width:40px;height:40px;min-width:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:#1f66e5;color:#fff;font-size:13px;font-weight:950;
+}
+.chat-avatar.group{border-radius:12px;background:#eef0ff;color:#4f46e5;border:1px solid #dcdfff;}
+.chat-title{font-size:12.5px;font-weight:950;color:#1b2b44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:560px;}
+.chat-subtitle{font-size:8.5px;color:#77869b;margin-top:3px;}
+.chat-members{font-size:7.5px;color:#95a1b2;margin-top:2px;max-width:600px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-presence{display:flex;align-items:center;gap:5px;font-size:8.5px;font-weight:800;margin-top:3px;}
+.chat-presence .presence-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;}
+.chat-presence.online{color:#16834b}.chat-presence.online .presence-dot{background:#22c55e;}
+.chat-presence.offline{color:#8491a3}.chat-presence.offline .presence-dot{background:#94a3b8;}
+.chat-presence.typing{color:#2563eb}.chat-presence.typing .presence-dot{background:#3b82f6;}
+.group-typing{display:none;font-size:8.5px;color:#2563eb;font-weight:800;margin-top:3px;}
+.group-typing.visible{display:block;}
+.chat-header-actions{display:flex;align-items:center;gap:7px;}
+.chat-header-chip{
+    background:#f3f6fa;border:1px solid #e3e9f1;color:#53627a;border-radius:9px;padding:7px 9px;
+    font-size:8.5px;font-weight:850;text-decoration:none;
+}
+.chat-messages{
+    flex:1;overflow-y:auto;padding:20px 20px 14px;background:
+        radial-gradient(circle at 20% 10%,rgba(31,102,229,.028),transparent 23%),
+        #f7f9fc;
+}
+.message-row{display:flex;margin-bottom:10px;}
+.message-row.mine{justify-content:flex-end}.message-row.other{justify-content:flex-start;}
+.message-bubble{
+    max-width:min(68%,720px);padding:9px 11px;border-radius:13px;background:#fff;border:1px solid #e5ebf3;
+    box-shadow:0 3px 9px rgba(17,42,85,.04);word-break:break-word;
+}
+.message-row.mine .message-bubble{background:#e8f1ff;border-color:#d4e5ff;border-bottom-right-radius:4px;}
+.message-row.other .message-bubble{border-bottom-left-radius:4px;}
+.message-author{font-size:8px;font-weight:900;color:#1f66e5;margin-bottom:4px;}
+.message-text{font-size:10px;line-height:1.52;color:#25344d;white-space:pre-wrap;}
+.message-meta{display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:5px;font-size:7px;color:#8794a7;}
+.read-status{font-weight:950;color:#6682a6}.read-status.read{color:#1f66e5;}
+.chat-compose{
+    display:flex;align-items:flex-end;gap:8px;padding:11px 14px;background:#fff;border-top:1px solid #e8edf4;
+}
+.chat-compose .form-control{
+    min-height:39px;height:39px;border:1px solid #dce4ee;background:#f8fafc;border-radius:11px;font-size:10px;padding:9px 11px;
+}
+.chat-compose .form-control:focus{background:#fff;border-color:#9bbaf0;box-shadow:0 0 0 3px rgba(31,102,229,.08);}
+.chat-attach{
+    width:39px;height:39px;min-width:39px;border-radius:10px;border:1px solid #dfe6ef;background:#f8fafc;color:#52627a;
+    cursor:pointer;font-size:16px;display:grid;place-items:center;
+}
+.chat-send{
+    height:39px;min-width:74px;border-radius:10px;background:#1f66e5;color:#fff;border:0;font-size:9.5px;font-weight:900;cursor:pointer;
+}
+.chat-send:hover{background:#1858cd;}
+.upload-status{display:none;padding:7px 14px;background:#fff7dc;color:#846300;border-top:1px solid #f4e4a4;font-size:8.5px;font-weight:800;}
+.upload-status.visible{display:block;}
+.empty-chat{text-align:center;color:#8b98aa;font-size:9px;padding:30px;}
+.attachment-image{
+    display:block;max-width:320px;max-height:280px;width:auto;height:auto;border-radius:10px;border:1px solid #dfe6ef;margin-top:6px;object-fit:cover;
+}
+.attachment-card{
+    display:flex;align-items:center;gap:9px;margin-top:6px;padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.72);
+    border:1px solid #dce4ee;text-decoration:none;color:#30415b;max-width:340px;
+}
+.attachment-icon{font-size:18px}.attachment-info{min-width:0}.attachment-name{font-size:8.5px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.attachment-size{font-size:7px;color:#8491a3;margin-top:2px;}
+@media(max-width:1050px){.chat-workspace{grid-template-columns:280px minmax(0,1fr)}}
+@media(max-width:820px){
+    .chat-workspace{height:calc(100vh - 165px);min-height:600px;grid-template-columns:1fr;}
+    .chat-sidebar{display:none}.message-bubble{max-width:86%}.chat-title{max-width:220px}
+}
+</style>
+
+<div class="chat-workspace">
+    <aside class="chat-sidebar">
+        <div class="chat-sidebar-head">
+            <div class="chat-sidebar-title-row">
+                <div class="chat-sidebar-title">Conversaciones</div>
+                <a class="chat-home-link" href="{% url 'internal_chat:bandeja' %}">+ Nuevo</a>
+            </div>
+            <div class="chat-search-box">
+                <span>⌕</span>
+                <input id="chatSidebarSearch" type="text" placeholder="Buscar...">
+            </div>
+        </div>
+
+        <div class="chat-list" id="chatSidebarList">
+            {% for item in lista_conversaciones %}
+            <a class="chat-row {% if item.conversacion.id == conversacion.id %}active{% endif %}"
+               href="{% url 'internal_chat:conversacion' item.conversacion.id %}"
+               data-chat-name="{{ item.buscar }}">
+                <div class="chat-row-avatar {% if item.es_multipersonal %}multi{% endif %}">{{ item.avatar }}</div>
+                <div class="chat-row-copy">
+                    <div class="chat-row-name">{{ item.nombre }}</div>
+                    <div class="chat-row-preview">
+                        {% if item.ultimo_mensaje and item.ultimo_mensaje.autor_id == request.user.id %}Tú: {% endif %}
+                        {{ item.ultimo_texto|truncatechars:42 }}
+                    </div>
+                </div>
+                <div class="chat-row-meta">
+                    {% if item.ultimo_mensaje %}
+                    <span class="chat-row-time">{{ item.ultimo_mensaje.creado_en|date:"H:i" }}</span>
+                    {% endif %}
+                    {% if item.no_leidos and item.conversacion.id != conversacion.id %}
+                    <span class="chat-row-unread">{{ item.no_leidos }}</span>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </aside>
+
+    <section class="chat-main">
+        <div class="chat-header">
+            <div class="chat-user">
+                {% if es_multipersonal %}
+                    <div class="chat-avatar group">
+                        {% if es_paw %}📋{% elif conversacion.tipo == "OT" %}🛠️{% else %}👥{% endif %}
+                    </div>
+                    <div style="min-width:0;">
+                        <div class="chat-title">
+                            {% if es_paw %}{{ conversacion.nombre|default:"Chat del PAW" }}
+                            {% elif conversacion.tipo == "OT" %}{{ conversacion.nombre|default:"Chat de la OT" }}
+                            {% else %}{{ conversacion.nombre|default:"Grupo" }}{% endif %}
+                        </div>
+                        <div class="chat-subtitle">{{ total_participantes }} participante{% if total_participantes != 1 %}s{% endif %}</div>
+                        <div class="chat-members">
+                            {% for usuario in conversacion.participantes.all %}
+                                {{ usuario.get_full_name|default:usuario.username }}{% if not forloop.last %} · {% endif %}
+                            {% endfor %}
+                        </div>
+                        <div id="grupo-escribiendo" class="group-typing"></div>
+                    </div>
+                {% else %}
+                    <div class="chat-avatar">
+                        {% for usuario in otros %}{{ usuario.username|first|upper }}{% endfor %}
+                    </div>
+                    <div style="min-width:0;">
+                        <div class="chat-title">
+                            {% for usuario in otros %}{{ usuario.get_full_name|default:usuario.username }}{% endfor %}
+                        </div>
+                        <div id="estado-usuario" class="chat-presence offline">
+                            <span class="presence-dot"></span>
+                            <span id="estado-usuario-texto">Desconectado</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="chat-header-actions">
+                {% if es_paw and conversacion.paw_id %}
+                <a class="chat-header-chip" href="/paw/{{ conversacion.paw_id }}/">📋 Ver PAW</a>
+                {% endif %}
+                <a class="chat-header-chip" href="{% url 'internal_chat:bandeja' %}">Conversaciones</a>
+            </div>
+        </div>
+
+<div id="mensajes" class="chat-messages">
+
+        {% for mensaje in mensajes %}
+
+            <div
+                class="message-row {% if mensaje.autor_id == request.user.id %}mine{% else %}other{% endif %}"
+                data-message-id="{{ mensaje.id }}"
+            >
+
+                <div class="message-bubble">
+
+                    {% if mensaje.autor_id != request.user.id %}
+                        <div class="message-author">
+                            {{ mensaje.autor.get_full_name|default:mensaje.autor.username }}
+                        </div>
+                    {% endif %}
+
+                    {% if mensaje.texto %}
+                        <div class="message-text">
+                            {{ mensaje.texto }}
+                        </div>
+                    {% endif %}
+
+                    {% for adjunto in mensaje.adjuntos.all %}
+                        <div class="chat-attachment">
+
+                            {% if adjunto.es_imagen %}
+
+                                <a
+                                    href="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    <img
+                                        src="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
+                                        alt="{{ adjunto.nombre_original }}"
+                                        class="chat-attachment-image"
+                                        loading="lazy"
+                                    >
+                                </a>
+
+                            {% else %}
+
+                                <a
+                                    class="chat-attachment-file"
+                                    href="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    <span class="chat-attachment-icon">📎</span>
+
+                                    <span class="chat-attachment-info">
+
+                                        <span class="chat-attachment-name">
+                                            {{ adjunto.nombre_original }}
+                                        </span>
+
+                                        <span class="chat-attachment-size">
+                                            {{ adjunto.tamano|filesizeformat }}
+                                        </span>
+
+                                    </span>
+
+                                </a>
+
+                            {% endif %}
+
+                        </div>
+                    {% endfor %}
+
+                    <div class="message-meta">
+
+                        {{ mensaje.creado_en|date:"H:i" }}
+
+                        {% if mensaje.autor_id == request.user.id %}
+
+                            {% if es_grupo %}
+
+                                {% with leidos=mensaje.lecturas.all|length %}
+                                    <span
+                                        class="read-status"
+                                        data-read-count="{{ leidos }}"
+                                        data-read-total="{{ total_destinatarios }}"
+                                    >
+                                        {% if leidos >= total_destinatarios %}
+                                            ✓✓
+                                        {% else %}
+                                            ✓ {{ leidos }}/{{ total_destinatarios }}
+                                        {% endif %}
+                                    </span>
+                                {% endwith %}
+
+                            {% else %}
+
+                                <span class="read-status">
+                                    {% if mensaje.lecturas.all %}
+                                        ✓✓
+                                    {% else %}
+                                        ✓
+                                    {% endif %}
+                                </span>
+
+                            {% endif %}
+
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        {% empty %}
+
+            <div id="sin-mensajes" class="chat-empty">
+                Todavía no hay mensajes.<br>
+                Escribe el primero.
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <div class="chat-compose">
+
+        <button
+            id="adjuntar-archivo"
+            class="attach-button"
+            type="button"
+            title="Adjuntar archivo"
+            aria-label="Adjuntar archivo"
+        >
+            📎
+        </button>
+
+        <input
+            id="archivo-input"
+            type="file"
+            hidden
+            accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+        >
+
+        <input
+            id="mensaje-input"
+            type="text"
+            class="form-control"
+            placeholder="Escribe un mensaje..."
+            autocomplete="off"
+            maxlength="5000"
+        >
+
+        <button
+            id="enviar-mensaje"
+            class="btn chat-send"
+            type="button"
+        >
+            Enviar
+        </button>
+
+    </div>
+
+    <div id="upload-status" class="upload-status"></div>
+
+</div>
+
+
+
+<form id="csrf-form" style="display:none;">
+    {% csrf_token %}
+</form>
+    </section>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+    const search = document.getElementById("chatSidebarSearch");
+    const rows = Array.from(document.querySelectorAll("#chatSidebarList .chat-row"));
+    search?.addEventListener("input", function(){
+        const term = search.value.trim().toLowerCase();
+        rows.forEach(function(row){
+            row.style.display = (row.dataset.chatName || "").includes(term) ? "" : "none";
+        });
+    });
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const conversacionId = "{{ conversacion.id }}";
+    const usuarioActualId = Number("{{ request.user.id }}");
+    const esGrupo = "{{ es_multipersonal|yesno:'true,false' }}" === "true";
+    const totalDestinatarios = Number("{{ total_destinatarios }}");
+
+    const contenedor = document.getElementById("mensajes");
+    const input = document.getElementById("mensaje-input");
+    const boton = document.getElementById("enviar-mensaje");
+    const botonAdjuntar = document.getElementById("adjuntar-archivo");
+    const archivoInput = document.getElementById("archivo-input");
+    const uploadStatus = document.getElementById("upload-status");
+
+    const csrfToken = document.querySelector(
+        '#csrf-form input[name="csrfmiddlewaretoken"]'
+    ).value;
+
+    const estadoUsuario =
+        document.getElementById("estado-usuario");
+
+    const estadoUsuarioTexto =
+        document.getElementById("estado-usuario-texto");
+
+    const grupoEscribiendo =
+        document.getElementById("grupo-escribiendo");
+
+    let otroUsuarioOnline = false;
+    let typingTimer = null;
+    let typingEnviado = false;
+
+    const usuariosEscribiendo = new Map();
+
+    const protocolo =
+        window.location.protocol === "https:"
+        ? "wss://"
+        : "ws://";
+
+    const socket = new WebSocket(
+        protocolo +
+        window.location.host +
+        "/ws/chat/" +
+        conversacionId +
+        "/"
+    );
+
+
+    socket.onopen = function () {
+
+        console.log("Chat conectado");
+
+        socket.send(JSON.stringify({
+            type: "mark_read"
+        }));
+
+    };
+
+
+    socket.onmessage = function (event) {
+
+        const data = JSON.parse(event.data);
+
+        if (data.type === "chat_message") {
+
+            agregarMensaje(data);
+
+            if (Number(data.autor_id) !== usuarioActualId) {
+
+                socket.send(JSON.stringify({
+                    type: "mark_read"
+                }));
+
+            }
+        }
+
+        if (data.type === "chat_attachment") {
+
+            agregarAdjunto(data);
+
+            if (Number(data.autor_id) !== usuarioActualId) {
+
+                socket.send(JSON.stringify({
+                    type: "mark_read"
+                }));
+
+            }
+        }
+
+        if (
+            data.type === "presence_status" &&
+            !esGrupo
+        ) {
+
+            otroUsuarioOnline = Boolean(data.online);
+            actualizarEstadoUsuario();
+
+        }
+
+        if (data.type === "typing_status") {
+
+            if (esGrupo) {
+
+                if (data.is_typing) {
+                    usuariosEscribiendo.set(
+                        Number(data.usuario_id),
+                        data.usuario_nombre
+                    );
+                } else {
+                    usuariosEscribiendo.delete(
+                        Number(data.usuario_id)
+                    );
+                }
+
+                actualizarGrupoEscribiendo();
+
+            } else {
+
+                if (data.is_typing) {
+
+                    estadoUsuario.className =
+                        "chat-presence typing";
+
+                    estadoUsuarioTexto.textContent =
+                        "Escribiendo...";
+
+                } else {
+
+                    actualizarEstadoUsuario();
+
+                }
+            }
+        }
+
+        if (data.type === "messages_read") {
+
+            if (Number(data.usuario_id) !== usuarioActualId) {
+
+                (data.estados || []).forEach(function (estado) {
+
+                    const mensaje = document.querySelector(
+                        '[data-message-id="' +
+                        estado.mensaje_id +
+                        '"]'
+                    );
+
+                    if (!mensaje) return;
+
+                    const readStatus =
+                        mensaje.querySelector(".read-status");
+
+                    if (!readStatus) return;
+
+                    if (
+                        estado.tipo_conversacion === "GRUPO"
+                    ) {
+
+                        const leidos =
+                            Number(estado.leidos || 0);
+
+                        const total =
+                            Number(
+                                estado.total_destinatarios ||
+                                totalDestinatarios
+                            );
+
+                        readStatus.dataset.readCount = leidos;
+                        readStatus.dataset.readTotal = total;
+
+                        if (leidos >= total) {
+                            readStatus.textContent = "✓✓";
+                        } else {
+                            readStatus.textContent =
+                                "✓ " + leidos + "/" + total;
+                        }
+
+                    } else {
+
+                        readStatus.textContent = "✓✓";
+
+                    }
+
+                });
+
+            }
+        }
+
+    };
+
+
+    socket.onclose = function () {
+        console.log("Chat desconectado");
+    };
+
+
+    function actualizarEstadoUsuario() {
+
+        if (!estadoUsuario || !estadoUsuarioTexto) {
+            return;
+        }
+
+        if (otroUsuarioOnline) {
+
+            estadoUsuario.className =
+                "chat-presence online";
+
+            estadoUsuarioTexto.textContent =
+                "En línea";
+
+        } else {
+
+            estadoUsuario.className =
+                "chat-presence offline";
+
+            estadoUsuarioTexto.textContent =
+                "Desconectado";
+
+        }
+    }
+
+
+    function actualizarGrupoEscribiendo() {
+
+        if (!grupoEscribiendo) return;
+
+        const nombres =
+            Array.from(usuariosEscribiendo.values());
+
+        if (!nombres.length) {
+
+            grupoEscribiendo.classList.remove("visible");
+            grupoEscribiendo.textContent = "";
+            return;
+
+        }
+
+        let texto = "";
+
+        if (nombres.length === 1) {
+            texto = nombres[0] + " está escribiendo...";
+        } else if (nombres.length === 2) {
+            texto =
+                nombres[0] +
+                " y " +
+                nombres[1] +
+                " están escribiendo...";
+        } else {
+            texto =
+                nombres.length +
+                " personas están escribiendo...";
+        }
+
+        grupoEscribiendo.textContent = texto;
+        grupoEscribiendo.classList.add("visible");
+    }
+
+
+    function enviarEstadoEscritura(isTyping) {
+
+        if (socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+
+        socket.send(JSON.stringify({
+            type: "typing",
+            is_typing: isTyping
+        }));
+
+        typingEnviado = isTyping;
+    }
+
+
+    function quitarVacio() {
+
+        const vacio =
+            document.getElementById("sin-mensajes");
+
+        if (vacio) {
+            vacio.remove();
+        }
+    }
+
+
+    function crearBaseMensaje(data) {
+
+        quitarVacio();
+
+        const propio =
+            Number(data.autor_id) === usuarioActualId;
+
+        const fila =
+            document.createElement("div");
+
+        fila.className =
+            "message-row " +
+            (propio ? "mine" : "other");
+
+        fila.dataset.messageId =
+            data.mensaje_id;
+
+        const burbuja =
+            document.createElement("div");
+
+        burbuja.className =
+            "message-bubble";
+
+        if (!propio) {
+
+            const autor =
+                document.createElement("div");
+
+            autor.className =
+                "message-author";
+
+            autor.textContent =
+                data.autor;
+
+            burbuja.appendChild(autor);
+        }
+
+        return {
+            propio: propio,
+            fila: fila,
+            burbuja: burbuja
+        };
+    }
+
+
+    function agregarMeta(base, data) {
+
+        const meta =
+            document.createElement("div");
+
+        meta.className =
+            "message-meta";
+
+        const hora =
+            document.createElement("span");
+
+        hora.textContent =
+            data.creado_en;
+
+        meta.appendChild(hora);
+
+        if (base.propio) {
+
+            const estado =
+                document.createElement("span");
+
+            estado.className =
+                "read-status";
+
+            if (
+                data.tipo_conversacion === "GRUPO" ||
+                esGrupo
+            ) {
+
+                const leidos =
+                    Number(data.leidos || 0);
+
+                const total =
+                    Number(
+                        data.total_destinatarios ||
+                        totalDestinatarios
+                    );
+
+                estado.dataset.readCount =
+                    leidos;
+
+                estado.dataset.readTotal =
+                    total;
+
+                estado.textContent =
+                    leidos >= total
+                    ? "✓✓"
+                    : "✓ " + leidos + "/" + total;
+
+            } else {
+
+                estado.textContent = "✓";
+
+            }
+
+            meta.appendChild(estado);
+        }
+
+        base.burbuja.appendChild(meta);
+        base.fila.appendChild(base.burbuja);
+        contenedor.appendChild(base.fila);
+
+        contenedor.scrollTop =
+            contenedor.scrollHeight;
+    }
+
+
+    function agregarMensaje(data) {
+
+        const base =
+            crearBaseMensaje(data);
+
+        const texto =
+            document.createElement("div");
+
+        texto.className =
+            "message-text";
+
+        texto.textContent =
+            data.message;
+
+        base.burbuja.appendChild(texto);
+
+        agregarMeta(base, data);
+    }
+
+
+    function formatearTamano(bytes) {
+
+        if (!bytes) return "0 B";
+
+        const unidades =
+            ["B", "KB", "MB", "GB"];
+
+        let valor =
+            Number(bytes);
+
+        let indice = 0;
+
+        while (
+            valor >= 1024 &&
+            indice < unidades.length - 1
+        ) {
+            valor /= 1024;
+            indice++;
+        }
+
+        return (
+            (indice === 0 ? valor : valor.toFixed(1)) +
+            " " +
+            unidades[indice]
+        );
+    }
+
+
+    function agregarAdjunto(data) {
+
+        const base =
+            crearBaseMensaje(data);
+
+        const contAdjunto =
+            document.createElement("div");
+
+        contAdjunto.className =
+            "chat-attachment";
+
+        if (data.es_imagen) {
+
+            const enlace =
+                document.createElement("a");
+
+            enlace.href =
+                data.url;
+
+            enlace.target =
+                "_blank";
+
+            enlace.rel =
+                "noopener";
+
+            const imagen =
+                document.createElement("img");
+
+            imagen.src =
+                data.url;
+
+            imagen.alt =
+                data.nombre;
+
+            imagen.className =
+                "chat-attachment-image";
+
+            imagen.loading =
+                "lazy";
+
+            enlace.appendChild(imagen);
+            contAdjunto.appendChild(enlace);
+
+        } else {
+
+            const enlace =
+                document.createElement("a");
+
+            enlace.className =
+                "chat-attachment-file";
+
+            enlace.href =
+                data.url;
+
+            enlace.target =
+                "_blank";
+
+            enlace.rel =
+                "noopener";
+
+            const icono =
+                document.createElement("span");
+
+            icono.className =
+                "chat-attachment-icon";
+
+            icono.textContent =
+                "📎";
+
+            const info =
+                document.createElement("span");
+
+            info.className =
+                "chat-attachment-info";
+
+            const nombre =
+                document.createElement("span");
+
+            nombre.className =
+                "chat-attachment-name";
+
+            nombre.textContent =
+                data.nombre;
+
+            const tamano =
+                document.createElement("span");
+
+            tamano.className =
+                "chat-attachment-size";
+
+            tamano.textContent =
+                formatearTamano(data.tamano);
+
+            info.appendChild(nombre);
+            info.appendChild(tamano);
+
+            enlace.appendChild(icono);
+            enlace.appendChild(info);
+
+            contAdjunto.appendChild(enlace);
+        }
+
+        base.burbuja.appendChild(contAdjunto);
+
+        agregarMeta(base, data);
+    }
+
+
+    function enviarMensaje() {
+
+        const mensaje =
+            input.value.trim();
+
+        if (!mensaje) {
+            return;
+        }
+
+        if (
+            socket.readyState !==
+            WebSocket.OPEN
+        ) {
+
+            alert(
+                "El chat no está conectado."
+            );
+
+            return;
+        }
+
+        socket.send(JSON.stringify({
+            type: "chat_message",
+            message: mensaje
+        }));
+
+        input.value = "";
+        input.focus();
+
+    }
+
+
+    async function subirArchivo(archivo) {
+
+        if (!archivo) return;
+
+        const maxBytes =
+            15 * 1024 * 1024;
+
+        if (archivo.size > maxBytes) {
+
+            alert(
+                "El archivo supera el límite de 15 MB."
+            );
+
+            return;
+        }
+
+        botonAdjuntar.disabled = true;
+
+        uploadStatus.textContent =
+            "Subiendo " +
+            archivo.name +
+            "...";
+
+        uploadStatus.classList.add(
+            "visible"
+        );
+
+        const formData =
+            new FormData();
+
+        formData.append(
+            "archivo",
+            archivo
+        );
+
+        try {
+
+            const respuesta =
+                await fetch(
+                    "{% url 'internal_chat:subir_adjunto' conversacion.id %}",
+                    {
+                        method: "POST",
+                        headers: {
+                            "X-CSRFToken": csrfToken
+                        },
+                        body: formData
+                    }
+                );
+
+            const data =
+                await respuesta.json();
+
+            if (
+                !respuesta.ok ||
+                !data.ok
+            ) {
+
+                throw new Error(
+                    data.error ||
+                    "No fue posible subir el archivo."
+                );
+            }
+
+            uploadStatus.textContent =
+                "Archivo enviado correctamente.";
+
+            setTimeout(function () {
+
+                uploadStatus.classList.remove(
+                    "visible"
+                );
+
+            }, 1800);
+
+        } catch (error) {
+
+            uploadStatus.textContent =
+                error.message ||
+                "Error subiendo el archivo.";
+
+            alert(
+                uploadStatus.textContent
+            );
+
+        } finally {
+
+            botonAdjuntar.disabled = false;
+            archivoInput.value = "";
+
+        }
+    }
+
+
+    boton.addEventListener(
+        "click",
+        enviarMensaje
+    );
+
+
+    botonAdjuntar.addEventListener(
+        "click",
+        function () {
+            archivoInput.click();
+        }
+    );
+
+
+    archivoInput.addEventListener(
+        "change",
+        function () {
+            subirArchivo(
+                archivoInput.files[0]
+            );
+        }
+    );
+
+
+    input.addEventListener(
+        "keydown",
+        function (event) {
+
+            if (event.key === "Enter") {
+
+                event.preventDefault();
+
+                enviarEstadoEscritura(
+                    false
+                );
+
+                enviarMensaje();
+
+            }
+        }
+    );
+
+
+    input.addEventListener(
+        "input",
+        function () {
+
+            const escribiendo =
+                input.value.trim().length > 0;
+
+            if (
+                escribiendo &&
+                !typingEnviado
+            ) {
+                enviarEstadoEscritura(true);
+            }
+
+            if (
+                !escribiendo &&
+                typingEnviado
+            ) {
+                enviarEstadoEscritura(false);
+            }
+
+            clearTimeout(
+                typingTimer
+            );
+
+            if (escribiendo) {
+
+                typingTimer =
+                    setTimeout(
+                        function () {
+                            enviarEstadoEscritura(false);
+                        },
+                        1400
+                    );
+
+            }
+        }
+    );
+
+
+    input.addEventListener(
+        "blur",
+        function () {
+
+            clearTimeout(
+                typingTimer
+            );
+
+            if (typingEnviado) {
+                enviarEstadoEscritura(false);
+            }
+
+        }
+    );
+
+
+    contenedor.scrollTop =
+        contenedor.scrollHeight;
+
+});
+</script>
+
+
+{% endblock %}
