@@ -362,6 +362,46 @@ tbody tr:hover{background:#f8fafc;}
 }
 .chat-menu-badge.show{display:inline-flex;}
 
+
+/* =========================================================
+   CHAT DESTACADO / BOTÓN FLOTANTE
+   ========================================================= */
+.chat-menu-link.chat-primary-link{
+    margin-top:4px;
+    background:rgba(31,102,229,.12);
+    border:1px solid rgba(89,145,255,.18);
+}
+.chat-menu-link.chat-primary-link:hover{background:rgba(31,102,229,.22);}
+.chat-fab{
+    position:fixed;right:22px;bottom:22px;z-index:1450;width:58px;height:58px;border-radius:18px;
+    display:flex;align-items:center;justify-content:center;text-decoration:none;
+    background:linear-gradient(145deg,#1959cf,#1f6bf0);color:#fff;
+    box-shadow:0 16px 34px rgba(31,102,229,.34);border:1px solid rgba(255,255,255,.30);
+    transition:transform .18s ease,box-shadow .18s ease;
+}
+.chat-fab:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 20px 40px rgba(31,102,229,.42);}
+.chat-fab-icon{font-size:24px;line-height:1;}
+.chat-fab-badge{
+    position:absolute;top:-7px;right:-7px;min-width:23px;height:23px;padding:0 6px;border-radius:999px;
+    display:none;align-items:center;justify-content:center;background:#dc2626;color:#fff;border:3px solid var(--bg);
+    font-size:9px;font-weight:950;line-height:1;
+}
+.chat-fab-badge.show{display:flex;}
+.chat-fab.has-unread{animation:chatFabPulse 1.8s ease-in-out infinite;}
+@keyframes chatFabPulse{
+    0%,100%{box-shadow:0 16px 34px rgba(31,102,229,.34);}
+    50%{box-shadow:0 16px 34px rgba(31,102,229,.34),0 0 0 9px rgba(31,102,229,.10);}
+}
+.chat-menu-link.chat-arrival{animation:chatMenuFlash .9s ease 2;}
+@keyframes chatMenuFlash{
+    0%,100%{background:rgba(31,102,229,.12);}
+    50%{background:rgba(31,102,229,.38);}
+}
+@media(max-width:820px){
+    .chat-fab{width:52px;height:52px;right:16px;bottom:16px;border-radius:16px;}
+    .chat-fab-icon{font-size:21px;}
+}
+
 .toast.chat-toast{
     background:linear-gradient(135deg,#1959cf,#1f6bf0);
     min-width:280px;
@@ -433,6 +473,15 @@ tbody tr:hover{background:#f8fafc;}
             <span class="menu-icon">⌂</span> Inicio
         </a>
 
+        {% if request.user.is_authenticated %}
+        <a href="{% url 'internal_chat:bandeja' %}"
+           class="chat-menu-link chat-primary-link {% if '/chat/' in request.path %}active{% endif %}">
+            <span class="menu-icon">💬</span>
+            <span>Chat</span>
+            <span id="chat-unread-badge" class="chat-menu-badge">0</span>
+        </a>
+        {% endif %}
+
         {% if es_comercial %}
         <div class="menu-section">COMERCIAL</div>
         <a href="/quotes/" class="{% if '/quotes/' in request.path and not '/clientes/' in request.path %}active{% endif %}"><span class="menu-icon">▤</span> Cotizaciones</a>
@@ -497,15 +546,6 @@ tbody tr:hover{background:#f8fafc;}
         {% endif %}
         {% if request.user.is_superuser %}
         <a href="/admin/" class="{% if '/admin/' in request.path %}active{% endif %}"><span class="menu-icon">⚙</span> Admin Django</a>
-        {% endif %}
-        {% if request.user.is_authenticated %}
-        <div class="menu-section">COMUNICACIÓN</div>
-        <a href="{% url 'internal_chat:bandeja' %}"
-           class="chat-menu-link {% if '/chat/' in request.path %}active{% endif %}">
-            <span class="menu-icon">💬</span>
-            <span>Chat</span>
-            <span id="chat-unread-badge" class="chat-menu-badge">0</span>
-        </a>
         {% endif %}
     </nav>
 
@@ -592,6 +632,17 @@ tbody tr:hover{background:#f8fafc;}
 
 {% if request.user.is_authenticated %}
 <div id="chatToastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+
+{% if '/chat/' not in request.path %}
+<a href="{% url 'internal_chat:bandeja' %}"
+   id="chatFloatingButton"
+   class="chat-fab"
+   title="Abrir Chat Interno"
+   aria-label="Abrir Chat Interno">
+    <span class="chat-fab-icon">💬</span>
+    <span id="chat-floating-badge" class="chat-fab-badge">0</span>
+</a>
+{% endif %}
 {% endif %}
 
 <script>
@@ -628,12 +679,59 @@ document.addEventListener("click",function(e){
 <script>
 (function(){
     const badge = document.getElementById("chat-unread-badge");
+    const floatingBadge = document.getElementById("chat-floating-badge");
+    const floatingButton = document.getElementById("chatFloatingButton");
+    const chatMenuLink = document.querySelector(".chat-menu-link.chat-primary-link");
     const toastWrap = document.getElementById("chatToastWrap");
 
     if(!badge) return;
 
     let notificationSocket = null;
     let reconnectTimer = null;
+    let audioContext = null;
+    let audioEnabled = false;
+
+    function habilitarAudio(){
+        try{
+            if(!audioContext){
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if(AudioCtx){ audioContext = new AudioCtx(); }
+            }
+            if(audioContext && audioContext.state === "suspended"){ audioContext.resume(); }
+            audioEnabled = !!audioContext;
+        }catch(error){ audioEnabled = false; }
+    }
+
+    document.addEventListener("click", habilitarAudio, {once:true});
+    document.addEventListener("keydown", habilitarAudio, {once:true});
+    document.addEventListener("touchstart", habilitarAudio, {once:true, passive:true});
+
+    function reproducirSonidoChat(){
+        if(!audioEnabled || !audioContext) return;
+        try{
+            const now = audioContext.currentTime;
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(740, now);
+            oscillator.frequency.exponentialRampToValueAtTime(980, now + 0.10);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.055, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+            oscillator.connect(gain); gain.connect(audioContext.destination);
+            oscillator.start(now); oscillator.stop(now + 0.19);
+        }catch(error){ console.debug("No fue posible reproducir el sonido del chat.", error); }
+    }
+
+    function destacarChat(){
+        if(floatingButton){ floatingButton.classList.add("has-unread"); }
+        if(chatMenuLink){
+            chatMenuLink.classList.remove("chat-arrival");
+            void chatMenuLink.offsetWidth;
+            chatMenuLink.classList.add("chat-arrival");
+            setTimeout(function(){ chatMenuLink.classList.remove("chat-arrival"); }, 1900);
+        }
+    }
 
     function websocketUrl(){
         const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
@@ -642,14 +740,45 @@ document.addEventListener("click",function(e){
 
     function actualizarContador(total){
         total = Number(total || 0);
+        const valor = total > 99 ? "99+" : String(total);
 
         if(total > 0){
-            badge.textContent = total > 99 ? "99+" : String(total);
+            badge.textContent = valor;
             badge.classList.add("show");
+            if(floatingBadge){ floatingBadge.textContent = valor; floatingBadge.classList.add("show"); }
+            if(floatingButton){ floatingButton.classList.add("has-unread"); }
         }else{
             badge.textContent = "0";
             badge.classList.remove("show");
+            if(floatingBadge){ floatingBadge.textContent = "0"; floatingBadge.classList.remove("show"); }
+            if(floatingButton){ floatingButton.classList.remove("has-unread"); }
         }
+    }
+
+    function actualizarPresenciaGlobal(usuarioId, online){
+        const elementos = document.querySelectorAll(
+            '[data-presence-user-id="' + String(usuarioId) + '"]'
+        );
+
+        elementos.forEach(function(elemento){
+            const label = elemento.querySelector(".presence-label");
+
+            elemento.classList.toggle("online", Boolean(online));
+            elemento.classList.toggle("offline", !online);
+
+            if(label){
+                label.textContent = online ? "En línea" : "Desconectado";
+            }
+        });
+
+        window.dispatchEvent(
+            new CustomEvent("impetus:presence", {
+                detail: {
+                    usuario_id: Number(usuarioId),
+                    online: Boolean(online)
+                }
+            })
+        );
     }
 
     function estaEnConversacion(conversationId){
@@ -738,8 +867,20 @@ document.addEventListener("click",function(e){
                 actualizarContador(data.count);
             }
 
+            if(data.type === "presence_global"){
+                actualizarPresenciaGlobal(
+                    data.usuario_id,
+                    data.online
+                );
+            }
+
             if(data.type === "new_message"){
+                const yaEstoyEnChat = estaEnConversacion(data.conversation_id);
                 mostrarToastChat(data);
+                if(!yaEstoyEnChat){
+                    destacarChat();
+                    reproducirSonidoChat();
+                }
             }
         };
 

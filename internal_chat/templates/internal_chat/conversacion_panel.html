@@ -1,0 +1,222 @@
+<section class="chat-main"
+         data-conversation-id="{{ conversacion.id }}"
+         data-current-user-id="{{ request.user.id }}"
+         data-is-multipersonal="{{ es_multipersonal|yesno:'true,false' }}"
+         data-total-recipients="{{ total_destinatarios }}"
+         data-upload-url="{% url 'internal_chat:subir_adjunto' conversacion.id %}">
+        <div class="chat-header">
+            <div class="chat-user">
+                {% if es_multipersonal %}
+                    <div class="chat-avatar group">
+                        {% if es_paw %}📋{% elif conversacion.tipo == "OT" %}🛠️{% else %}👥{% endif %}
+                    </div>
+                    <div style="min-width:0;">
+                        <div class="chat-title">
+                            {% if es_paw %}{{ conversacion.nombre|default:"Chat del PAW" }}
+                            {% elif conversacion.tipo == "OT" %}{{ conversacion.nombre|default:"Chat de la OT" }}
+                            {% else %}{{ conversacion.nombre|default:"Grupo" }}{% endif %}
+                        </div>
+                        <div class="chat-subtitle">{{ total_participantes }} participante{% if total_participantes != 1 %}s{% endif %}</div>
+                        <div class="chat-members">
+                            {% for usuario in conversacion.participantes.all %}
+                                {{ usuario.get_full_name|default:usuario.username }}{% if not forloop.last %} · {% endif %}
+                            {% endfor %}
+                        </div>
+                        <div id="grupo-escribiendo" class="group-typing"></div>
+                    </div>
+                {% else %}
+                    <div class="chat-avatar">
+                        {% for usuario in otros %}{{ usuario.username|first|upper }}{% endfor %}
+                    </div>
+                    <div style="min-width:0;">
+                        <div class="chat-title">
+                            {% for usuario in otros %}{{ usuario.get_full_name|default:usuario.username }}{% endfor %}
+                        </div>
+                        <div id="estado-usuario" class="chat-presence offline">
+                            <span class="presence-dot"></span>
+                            <span id="estado-usuario-texto">Desconectado</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="chat-header-actions">
+                {% if es_paw and conversacion.paw_id %}
+                <a class="chat-header-chip" href="/paw/{{ conversacion.paw_id }}/">📋 Ver PAW</a>
+                {% endif %}
+                <a class="chat-header-chip" href="{% url 'internal_chat:bandeja' %}">Conversaciones</a>
+            </div>
+        </div>
+
+<div id="mensajes" class="chat-messages">
+
+        {% for mensaje in mensajes %}
+
+            <div
+                class="message-row {% if mensaje.autor_id == request.user.id %}mine{% else %}other{% endif %}"
+                data-message-id="{{ mensaje.id }}"
+            >
+
+                <div class="message-bubble">
+
+                    {% if mensaje.autor_id != request.user.id %}
+                        <div class="message-author">
+                            {{ mensaje.autor.get_full_name|default:mensaje.autor.username }}
+                        </div>
+                    {% endif %}
+
+                    {% if mensaje.texto %}
+                        <div class="message-text">
+                            {{ mensaje.texto }}
+                        </div>
+                    {% endif %}
+
+                    {% for adjunto in mensaje.adjuntos.all %}
+                        <div class="chat-attachment">
+
+                            {% if adjunto.es_imagen %}
+
+                                <a
+                                    href="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    <img
+                                        src="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
+                                        alt="{{ adjunto.nombre_original }}"
+                                        class="chat-attachment-image"
+                                        loading="lazy"
+                                    >
+                                </a>
+
+                            {% else %}
+
+                                <a
+                                    class="chat-attachment-file"
+                                    href="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    <span class="chat-attachment-icon">📎</span>
+
+                                    <span class="chat-attachment-info">
+
+                                        <span class="chat-attachment-name">
+                                            {{ adjunto.nombre_original }}
+                                        </span>
+
+                                        <span class="chat-attachment-size">
+                                            {{ adjunto.tamano|filesizeformat }}
+                                        </span>
+
+                                    </span>
+
+                                </a>
+
+                            {% endif %}
+
+                        </div>
+                    {% endfor %}
+
+                    <div class="message-meta">
+
+                        {{ mensaje.creado_en|date:"H:i" }}
+
+                        {% if mensaje.autor_id == request.user.id %}
+
+                            {% if es_grupo %}
+
+                                {% with leidos=mensaje.lecturas.all|length %}
+                                    <span
+                                        class="read-status"
+                                        data-read-count="{{ leidos }}"
+                                        data-read-total="{{ total_destinatarios }}"
+                                    >
+                                        {% if leidos >= total_destinatarios %}
+                                            ✓✓
+                                        {% else %}
+                                            ✓ {{ leidos }}/{{ total_destinatarios }}
+                                        {% endif %}
+                                    </span>
+                                {% endwith %}
+
+                            {% else %}
+
+                                <span class="read-status">
+                                    {% if mensaje.lecturas.all %}
+                                        ✓✓
+                                    {% else %}
+                                        ✓
+                                    {% endif %}
+                                </span>
+
+                            {% endif %}
+
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        {% empty %}
+
+            <div id="sin-mensajes" class="chat-empty">
+                Todavía no hay mensajes.<br>
+                Escribe el primero.
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <div class="chat-compose">
+
+        <button
+            id="adjuntar-archivo"
+            class="attach-button"
+            type="button"
+            title="Adjuntar archivo"
+            aria-label="Adjuntar archivo"
+        >
+            📎
+        </button>
+
+        <input
+            id="archivo-input"
+            type="file"
+            hidden
+            accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+        >
+
+        <input
+            id="mensaje-input"
+            type="text"
+            class="form-control"
+            placeholder="Escribe un mensaje..."
+            autocomplete="off"
+            maxlength="5000"
+        >
+
+        <button
+            id="enviar-mensaje"
+            class="btn chat-send"
+            type="button"
+        >
+            Enviar
+        </button>
+
+    </div>
+
+    <div id="upload-status" class="upload-status"></div>
+
+</div>
+
+
+
+<form id="csrf-form" style="display:none;">
+    {% csrf_token %}
+</form>
+    </section>

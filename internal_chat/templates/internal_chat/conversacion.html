@@ -13,7 +13,7 @@
 .chat-sidebar{min-width:0;display:flex;flex-direction:column;border-right:1px solid #e8edf4;background:#fbfcfe;}
 .chat-sidebar-head{padding:16px 14px 12px;border-bottom:1px solid #edf1f5;background:#fff;}
 .chat-sidebar-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
-.chat-sidebar-title{font-size:14px;font-weight:950;color:#14233d;}
+.chat-sidebar-title{font-size:16px;font-weight:950;color:#14233d;}
 .chat-home-link{font-size:9px;color:#1f66e5;text-decoration:none;font-weight:850;}
 .chat-search-box{position:relative;margin-top:10px;}
 .chat-search-box span{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:#8a96a9;}
@@ -34,10 +34,32 @@
 }
 .chat-row-avatar.multi{border-radius:11px;background:#eef0ff;color:#4f46e5;}
 .chat-row-copy{min-width:0;}
-.chat-row-name{font-size:10.5px;font-weight:900;color:#1c2b45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.chat-row-preview{margin-top:3px;font-size:8.5px;color:#748198;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-row-name{font-size:13px;font-weight:900;color:#1c2b45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-row-preview{margin-top:4px;font-size:11px;color:#748198;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .chat-row-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
-.chat-row-time{font-size:7.5px;color:#93a0b2;white-space:nowrap;}
+.chat-row-presence{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    margin-top:4px;
+    font-size:9.5px;
+    font-weight:750;
+    color:#8b98aa;
+}
+.chat-row-presence .dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#94a3b8;
+    flex:0 0 auto;
+}
+.chat-row-presence.online{color:#15803d;}
+.chat-row-presence.online .dot{
+    background:#22c55e;
+    box-shadow:0 0 0 3px rgba(34,197,94,.10);
+}
+.chat-row-presence.offline{color:#8b98aa;}
+.chat-row-time{font-size:9px;color:#93a0b2;white-space:nowrap;}
 .chat-row-unread{
     min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#1f66e5;color:#fff;
     display:grid;place-items:center;font-size:7.5px;font-weight:950;
@@ -53,15 +75,15 @@
     background:#1f66e5;color:#fff;font-size:13px;font-weight:950;
 }
 .chat-avatar.group{border-radius:12px;background:#eef0ff;color:#4f46e5;border:1px solid #dcdfff;}
-.chat-title{font-size:12.5px;font-weight:950;color:#1b2b44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:560px;}
-.chat-subtitle{font-size:8.5px;color:#77869b;margin-top:3px;}
-.chat-members{font-size:7.5px;color:#95a1b2;margin-top:2px;max-width:600px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.chat-presence{display:flex;align-items:center;gap:5px;font-size:8.5px;font-weight:800;margin-top:3px;}
+.chat-title{font-size:15px;font-weight:950;color:#1b2b44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:560px;}
+.chat-subtitle{font-size:10.5px;color:#77869b;margin-top:3px;}
+.chat-members{font-size:9.5px;color:#95a1b2;margin-top:2px;max-width:600px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chat-presence{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;margin-top:3px;}
 .chat-presence .presence-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;}
 .chat-presence.online{color:#16834b}.chat-presence.online .presence-dot{background:#22c55e;}
 .chat-presence.offline{color:#8491a3}.chat-presence.offline .presence-dot{background:#94a3b8;}
 .chat-presence.typing{color:#2563eb}.chat-presence.typing .presence-dot{background:#3b82f6;}
-.group-typing{display:none;font-size:8.5px;color:#2563eb;font-weight:800;margin-top:3px;}
+.group-typing{display:none;font-size:11px;color:#2563eb;font-weight:800;margin-top:3px;}
 .group-typing.visible{display:block;}
 .chat-header-actions{display:flex;align-items:center;gap:7px;}
 .chat-header-chip{
@@ -81,15 +103,15 @@
 }
 .message-row.mine .message-bubble{background:#e8f1ff;border-color:#d4e5ff;border-bottom-right-radius:4px;}
 .message-row.other .message-bubble{border-bottom-left-radius:4px;}
-.message-author{font-size:8px;font-weight:900;color:#1f66e5;margin-bottom:4px;}
-.message-text{font-size:10px;line-height:1.52;color:#25344d;white-space:pre-wrap;}
-.message-meta{display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:5px;font-size:7px;color:#8794a7;}
+.message-author{font-size:11px;font-weight:900;color:#1f66e5;margin-bottom:4px;}
+.message-text{font-size:14px;line-height:1.52;color:#25344d;white-space:pre-wrap;}
+.message-meta{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;font-size:9.5px;color:#8794a7;}
 .read-status{font-weight:950;color:#6682a6}.read-status.read{color:#1f66e5;}
 .chat-compose{
     display:flex;align-items:flex-end;gap:8px;padding:11px 14px;background:#fff;border-top:1px solid #e8edf4;
 }
 .chat-compose .form-control{
-    min-height:39px;height:39px;border:1px solid #dce4ee;background:#f8fafc;border-radius:11px;font-size:10px;padding:9px 11px;
+    min-height:42px;height:42px;border:1px solid #dce4ee;background:#f8fafc;border-radius:11px;font-size:13px;padding:10px 12px;
 }
 .chat-compose .form-control:focus{background:#fff;border-color:#9bbaf0;box-shadow:0 0 0 3px rgba(31,102,229,.08);}
 .chat-attach{
@@ -97,7 +119,7 @@
     cursor:pointer;font-size:16px;display:grid;place-items:center;
 }
 .chat-send{
-    height:39px;min-width:74px;border-radius:10px;background:#1f66e5;color:#fff;border:0;font-size:9.5px;font-weight:900;cursor:pointer;
+    height:42px;min-width:78px;border-radius:10px;background:#1f66e5;color:#fff;border:0;font-size:9.5px;font-weight:900;cursor:pointer;
 }
 .chat-send:hover{background:#1858cd;}
 .upload-status{display:none;padding:7px 14px;background:#fff7dc;color:#846300;border-top:1px solid #f4e4a4;font-size:8.5px;font-weight:800;}
@@ -117,6 +139,12 @@
     .chat-workspace{height:calc(100vh - 165px);min-height:600px;grid-template-columns:1fr;}
     .chat-sidebar{display:none}.message-bubble{max-width:86%}.chat-title{max-width:220px}
 }
+.chat-main.chat-panel-loading{
+    opacity:.45;
+    pointer-events:none;
+    transition:opacity .12s ease;
+}
+.chat-main{transition:opacity .12s ease;}
 </style>
 
 <div class="chat-workspace">
@@ -134,7 +162,7 @@
 
         <div class="chat-list" id="chatSidebarList">
             {% for item in lista_conversaciones %}
-            <a class="chat-row {% if item.conversacion.id == conversacion.id %}active{% endif %}"
+            <a class="chat-row js-chat-nav {% if item.conversacion.id == conversacion.id %}active{% endif %}"
                href="{% url 'internal_chat:conversacion' item.conversacion.id %}"
                data-chat-name="{{ item.buscar }}">
                 <div class="chat-row-avatar {% if item.es_multipersonal %}multi{% endif %}">{{ item.avatar }}</div>
@@ -144,6 +172,14 @@
                         {% if item.ultimo_mensaje and item.ultimo_mensaje.autor_id == request.user.id %}Tú: {% endif %}
                         {{ item.ultimo_texto|truncatechars:42 }}
                     </div>
+
+                    {% if item.conversacion.tipo == "PRIVADA" and item.usuario %}
+                    <div class="chat-row-presence offline"
+                         data-presence-user-id="{{ item.usuario.id }}">
+                        <span class="dot"></span>
+                        <span class="presence-label">Desconectado</span>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="chat-row-meta">
                     {% if item.ultimo_mensaje %}
@@ -158,244 +194,44 @@
         </div>
     </aside>
 
-    <section class="chat-main">
-        <div class="chat-header">
-            <div class="chat-user">
-                {% if es_multipersonal %}
-                    <div class="chat-avatar group">
-                        {% if es_paw %}📋{% elif conversacion.tipo == "OT" %}🛠️{% else %}👥{% endif %}
-                    </div>
-                    <div style="min-width:0;">
-                        <div class="chat-title">
-                            {% if es_paw %}{{ conversacion.nombre|default:"Chat del PAW" }}
-                            {% elif conversacion.tipo == "OT" %}{{ conversacion.nombre|default:"Chat de la OT" }}
-                            {% else %}{{ conversacion.nombre|default:"Grupo" }}{% endif %}
-                        </div>
-                        <div class="chat-subtitle">{{ total_participantes }} participante{% if total_participantes != 1 %}s{% endif %}</div>
-                        <div class="chat-members">
-                            {% for usuario in conversacion.participantes.all %}
-                                {{ usuario.get_full_name|default:usuario.username }}{% if not forloop.last %} · {% endif %}
-                            {% endfor %}
-                        </div>
-                        <div id="grupo-escribiendo" class="group-typing"></div>
-                    </div>
-                {% else %}
-                    <div class="chat-avatar">
-                        {% for usuario in otros %}{{ usuario.username|first|upper }}{% endfor %}
-                    </div>
-                    <div style="min-width:0;">
-                        <div class="chat-title">
-                            {% for usuario in otros %}{{ usuario.get_full_name|default:usuario.username }}{% endfor %}
-                        </div>
-                        <div id="estado-usuario" class="chat-presence offline">
-                            <span class="presence-dot"></span>
-                            <span id="estado-usuario-texto">Desconectado</span>
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
-
-            <div class="chat-header-actions">
-                {% if es_paw and conversacion.paw_id %}
-                <a class="chat-header-chip" href="/paw/{{ conversacion.paw_id }}/">📋 Ver PAW</a>
-                {% endif %}
-                <a class="chat-header-chip" href="{% url 'internal_chat:bandeja' %}">Conversaciones</a>
-            </div>
-        </div>
-
-<div id="mensajes" class="chat-messages">
-
-        {% for mensaje in mensajes %}
-
-            <div
-                class="message-row {% if mensaje.autor_id == request.user.id %}mine{% else %}other{% endif %}"
-                data-message-id="{{ mensaje.id }}"
-            >
-
-                <div class="message-bubble">
-
-                    {% if mensaje.autor_id != request.user.id %}
-                        <div class="message-author">
-                            {{ mensaje.autor.get_full_name|default:mensaje.autor.username }}
-                        </div>
-                    {% endif %}
-
-                    {% if mensaje.texto %}
-                        <div class="message-text">
-                            {{ mensaje.texto }}
-                        </div>
-                    {% endif %}
-
-                    {% for adjunto in mensaje.adjuntos.all %}
-                        <div class="chat-attachment">
-
-                            {% if adjunto.es_imagen %}
-
-                                <a
-                                    href="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
-                                    target="_blank"
-                                    rel="noopener"
-                                >
-                                    <img
-                                        src="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
-                                        alt="{{ adjunto.nombre_original }}"
-                                        class="chat-attachment-image"
-                                        loading="lazy"
-                                    >
-                                </a>
-
-                            {% else %}
-
-                                <a
-                                    class="chat-attachment-file"
-                                    href="{% url 'internal_chat:ver_adjunto' adjunto.id %}"
-                                    target="_blank"
-                                    rel="noopener"
-                                >
-                                    <span class="chat-attachment-icon">📎</span>
-
-                                    <span class="chat-attachment-info">
-
-                                        <span class="chat-attachment-name">
-                                            {{ adjunto.nombre_original }}
-                                        </span>
-
-                                        <span class="chat-attachment-size">
-                                            {{ adjunto.tamano|filesizeformat }}
-                                        </span>
-
-                                    </span>
-
-                                </a>
-
-                            {% endif %}
-
-                        </div>
-                    {% endfor %}
-
-                    <div class="message-meta">
-
-                        {{ mensaje.creado_en|date:"H:i" }}
-
-                        {% if mensaje.autor_id == request.user.id %}
-
-                            {% if es_grupo %}
-
-                                {% with leidos=mensaje.lecturas.all|length %}
-                                    <span
-                                        class="read-status"
-                                        data-read-count="{{ leidos }}"
-                                        data-read-total="{{ total_destinatarios }}"
-                                    >
-                                        {% if leidos >= total_destinatarios %}
-                                            ✓✓
-                                        {% else %}
-                                            ✓ {{ leidos }}/{{ total_destinatarios }}
-                                        {% endif %}
-                                    </span>
-                                {% endwith %}
-
-                            {% else %}
-
-                                <span class="read-status">
-                                    {% if mensaje.lecturas.all %}
-                                        ✓✓
-                                    {% else %}
-                                        ✓
-                                    {% endif %}
-                                </span>
-
-                            {% endif %}
-
-                        {% endif %}
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        {% empty %}
-
-            <div id="sin-mensajes" class="chat-empty">
-                Todavía no hay mensajes.<br>
-                Escribe el primero.
-            </div>
-
-        {% endfor %}
-
-    </div>
-
-
-    <div class="chat-compose">
-
-        <button
-            id="adjuntar-archivo"
-            class="attach-button"
-            type="button"
-            title="Adjuntar archivo"
-            aria-label="Adjuntar archivo"
-        >
-            📎
-        </button>
-
-        <input
-            id="archivo-input"
-            type="file"
-            hidden
-            accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-        >
-
-        <input
-            id="mensaje-input"
-            type="text"
-            class="form-control"
-            placeholder="Escribe un mensaje..."
-            autocomplete="off"
-            maxlength="5000"
-        >
-
-        <button
-            id="enviar-mensaje"
-            class="btn chat-send"
-            type="button"
-        >
-            Enviar
-        </button>
-
-    </div>
-
-    <div id="upload-status" class="upload-status"></div>
+    
+{% include "internal_chat/conversacion_panel.html" %}
 
 </div>
-
-
-
-<form id="csrf-form" style="display:none;">
-    {% csrf_token %}
-</form>
-    </section>
-</div>
-
 <script>
-document.addEventListener("DOMContentLoaded", function(){
-    const search = document.getElementById("chatSidebarSearch");
-    const rows = Array.from(document.querySelectorAll("#chatSidebarList .chat-row"));
-    search?.addEventListener("input", function(){
-        const term = search.value.trim().toLowerCase();
-        rows.forEach(function(row){
-            row.style.display = (row.dataset.chatName || "").includes(term) ? "" : "none";
+(function(){
+
+    function configurarBusquedaLateral(){
+        const search = document.getElementById("chatSidebarSearch");
+        if(!search || search.dataset.ready === "1") return;
+
+        search.dataset.ready = "1";
+
+        search.addEventListener("input", function(){
+            const term = search.value.trim().toLowerCase();
+
+            document
+                .querySelectorAll("#chatSidebarList .chat-row")
+                .forEach(function(row){
+                    row.style.display =
+                        (row.dataset.chatName || "").includes(term)
+                        ? ""
+                        : "none";
+                });
         });
-    });
-});
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
+    }
 
-    const conversacionId = "{{ conversacion.id }}";
-    const usuarioActualId = Number("{{ request.user.id }}");
-    const esGrupo = "{{ es_multipersonal|yesno:'true,false' }}" === "true";
-    const totalDestinatarios = Number("{{ total_destinatarios }}");
+    window.inicializarConversacionChat = function(){
+
+
+    const panel = document.querySelector(".chat-main");
+    if (!panel) return;
+
+    const conversacionId = panel.dataset.conversationId;
+    const usuarioActualId = Number(panel.dataset.currentUserId);
+    const esGrupo = panel.dataset.isMultipersonal === "true";
+    const totalDestinatarios = Number(panel.dataset.totalRecipients || 1);
+    const uploadUrl = panel.dataset.uploadUrl;
 
     const contenedor = document.getElementById("mensajes");
     const input = document.getElementById("mensaje-input");
@@ -404,9 +240,23 @@ document.addEventListener("DOMContentLoaded", function () {
     const archivoInput = document.getElementById("archivo-input");
     const uploadStatus = document.getElementById("upload-status");
 
-    const csrfToken = document.querySelector(
+    const csrfInput = panel.querySelector(
         '#csrf-form input[name="csrfmiddlewaretoken"]'
-    ).value;
+    );
+
+    if (
+        !contenedor ||
+        !input ||
+        !boton ||
+        !botonAdjuntar ||
+        !archivoInput ||
+        !uploadStatus ||
+        !csrfInput
+    ) {
+        return;
+    }
+
+    const csrfToken = csrfInput.value;
 
     const estadoUsuario =
         document.getElementById("estado-usuario");
@@ -428,6 +278,19 @@ document.addEventListener("DOMContentLoaded", function () {
         ? "wss://"
         : "ws://";
 
+    if (
+        window.impetusChatSocket &&
+        (
+            window.impetusChatSocket.readyState === WebSocket.OPEN ||
+            window.impetusChatSocket.readyState === WebSocket.CONNECTING
+        )
+    ) {
+        window.impetusChatSocket.close(
+            1000,
+            "Cambio de conversación"
+        );
+    }
+
     const socket = new WebSocket(
         protocolo +
         window.location.host +
@@ -435,6 +298,8 @@ document.addEventListener("DOMContentLoaded", function () {
         conversacionId +
         "/"
     );
+
+    window.impetusChatSocket = socket;
 
 
     socket.onopen = function () {
@@ -1011,7 +876,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             const respuesta =
                 await fetch(
-                    "{% url 'internal_chat:subir_adjunto' conversacion.id %}",
+                    uploadUrl,
                     {
                         method: "POST",
                         headers: {
@@ -1167,8 +1032,200 @@ document.addEventListener("DOMContentLoaded", function () {
     contenedor.scrollTop =
         contenedor.scrollHeight;
 
-});
+
+    };
+
+
+    async function cargarConversacionSinRecarga(url, pushHistory=true){
+
+        const actualPanel =
+            document.querySelector(".chat-main");
+
+        if(actualPanel){
+            actualPanel.classList.add(
+                "chat-panel-loading"
+            );
+        }
+
+        try{
+            const destino = new URL(
+                url,
+                window.location.origin
+            );
+
+            destino.searchParams.set(
+                "partial",
+                "1"
+            );
+
+            const response = await fetch(
+                destino.toString(),
+                {
+                    headers:{
+                        "X-Requested-With":
+                            "XMLHttpRequest"
+                    },
+                    credentials:"same-origin"
+                }
+            );
+
+            if(!response.ok){
+                throw new Error(
+                    "HTTP " + response.status
+                );
+            }
+
+            const html = await response.text();
+
+            const temporal =
+                document.createElement("div");
+
+            temporal.innerHTML =
+                html.trim();
+
+            const nuevoPanel =
+                temporal.querySelector(".chat-main");
+
+            if(!nuevoPanel){
+                throw new Error(
+                    "No se recibió el panel del chat."
+                );
+            }
+
+            const panelAnterior =
+                document.querySelector(".chat-main");
+
+            if(!panelAnterior){
+                window.location.href = url;
+                return;
+            }
+
+            panelAnterior.replaceWith(
+                nuevoPanel
+            );
+
+            const nuevoId =
+                nuevoPanel.dataset.conversationId;
+
+            document
+                .querySelectorAll(
+                    "#chatSidebarList .chat-row"
+                )
+                .forEach(function(row){
+
+                    const rowUrl =
+                        new URL(
+                            row.href,
+                            window.location.origin
+                        );
+
+                    const partes =
+                        rowUrl.pathname
+                            .split("/")
+                            .filter(Boolean);
+
+                    const rowId =
+                        partes[partes.length - 1];
+
+                    row.classList.toggle(
+                        "active",
+                        String(rowId) ===
+                        String(nuevoId)
+                    );
+
+                    if(
+                        String(rowId) ===
+                        String(nuevoId)
+                    ){
+                        const unread =
+                            row.querySelector(
+                                ".chat-row-unread"
+                            );
+
+                        if(unread){
+                            unread.remove();
+                        }
+                    }
+                });
+
+            if(pushHistory){
+                history.pushState(
+                    {chatUrl:url},
+                    "",
+                    url
+                );
+            }
+
+            window.inicializarConversacionChat();
+
+        }catch(error){
+
+            console.error(
+                "Error cambiando conversación:",
+                error
+            );
+
+            window.location.href = url;
+        }
+    }
+
+
+    document.addEventListener(
+        "click",
+        function(event){
+
+            const link =
+                event.target.closest(
+                    "#chatSidebarList .js-chat-nav"
+                );
+
+            if(!link) return;
+
+            if(
+                event.ctrlKey ||
+                event.metaKey ||
+                event.shiftKey ||
+                event.altKey
+            ){
+                return;
+            }
+
+            event.preventDefault();
+
+            cargarConversacionSinRecarga(
+                link.href,
+                true
+            );
+        }
+    );
+
+
+    window.addEventListener(
+        "popstate",
+        function(){
+
+            if(
+                /^\/chat\/\d+\/?$/.test(
+                    window.location.pathname
+                )
+            ){
+                cargarConversacionSinRecarga(
+                    window.location.href,
+                    false
+                );
+            }
+        }
+    );
+
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function(){
+            configurarBusquedaLateral();
+            window.inicializarConversacionChat();
+        }
+    );
+
+})();
 </script>
-
-
 {% endblock %}

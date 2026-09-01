@@ -317,20 +317,29 @@ def conversacion(request, conversacion_id):
     total_participantes = conversacion.participantes.count()
     total_destinatarios = max(total_participantes - 1, 1)
 
+    contexto = {
+        "conversacion": conversacion,
+        "mensajes": mensajes_chat,
+        "otros": otros,
+        "total_participantes": total_participantes,
+        "total_destinatarios": total_destinatarios,
+        "es_grupo": conversacion.tipo == "GRUPO",
+        "es_paw": conversacion.tipo == "PAW",
+        "es_multipersonal": conversacion.tipo != "PRIVADA",
+        "lista_conversaciones": _lista_conversaciones_usuario(request.user),
+    }
+
+    if request.GET.get("partial") == "1":
+        return render(
+            request,
+            "internal_chat/conversacion_panel.html",
+            contexto,
+        )
+
     return render(
         request,
         "internal_chat/conversacion.html",
-        {
-            "conversacion": conversacion,
-            "mensajes": mensajes_chat,
-            "otros": otros,
-            "total_participantes": total_participantes,
-            "total_destinatarios": total_destinatarios,
-            "es_grupo": conversacion.tipo == "GRUPO",
-            "es_paw": conversacion.tipo == "PAW",
-            "es_multipersonal": conversacion.tipo != "PRIVADA",
-            "lista_conversaciones": _lista_conversaciones_usuario(request.user),
-        }
+        contexto,
     )
 
 
