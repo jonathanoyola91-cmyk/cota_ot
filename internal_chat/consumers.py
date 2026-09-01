@@ -85,6 +85,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if tipo == "chat_message":
             texto = data.get("message", "").strip()
+            client_message_id = str(
+                data.get("client_message_id", "")
+            )[:100]
 
             if not texto:
                 return
@@ -98,6 +101,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 {
                     "type": "chat_message",
                     "mensaje_id": mensaje["id"],
+                    "client_message_id": client_message_id,
                     "message": mensaje["texto"],
                     "autor": mensaje["autor"],
                     "autor_id": mensaje["autor_id"],
@@ -171,6 +175,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps({
                 "type": "chat_message",
                 "mensaje_id": event["mensaje_id"],
+                "client_message_id": event.get("client_message_id", ""),
                 "message": event["message"],
                 "autor": event["autor"],
                 "autor_id": event["autor_id"],

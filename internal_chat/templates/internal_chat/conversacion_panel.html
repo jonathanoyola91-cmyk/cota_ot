@@ -3,6 +3,7 @@
          data-current-user-id="{{ request.user.id }}"
          data-is-multipersonal="{{ es_multipersonal|yesno:'true,false' }}"
          data-total-recipients="{{ total_destinatarios }}"
+         data-other-user-id="{% if not es_multipersonal %}{% for usuario in otros %}{{ usuario.id }}{% endfor %}{% endif %}"
          data-upload-url="{% url 'internal_chat:subir_adjunto' conversacion.id %}">
         <div class="chat-header">
             <div class="chat-user">
@@ -171,6 +172,14 @@
 
     </div>
 
+
+    <div id="chat-connection-status"
+         class="chat-connection-status connecting">
+        <span class="connection-dot"></span>
+        <span class="connection-text">
+            Conectando chat...
+        </span>
+    </div>
 
     <div class="chat-compose">
 

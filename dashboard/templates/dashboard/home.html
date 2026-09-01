@@ -781,6 +781,9 @@ document.addEventListener("click",function(e){
         );
     }
 
+    window.impetusActualizarPresenciaGlobal =
+        actualizarPresenciaGlobal;
+
     function estaEnConversacion(conversationId){
         const actual = window.location.pathname.replace(/\/+$/, "");
         const destino = ("/chat/" + conversationId).replace(/\/+$/, "");

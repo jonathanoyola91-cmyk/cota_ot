@@ -145,6 +145,55 @@
     transition:opacity .12s ease;
 }
 .chat-main{transition:opacity .12s ease;}
+
+.chat-connection-status{
+    min-height:25px;
+    padding:5px 14px;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    border-top:1px solid #edf1f5;
+    background:#fff;
+    color:#64748b;
+    font-size:10px;
+    font-weight:750;
+}
+.chat-connection-status .connection-dot{
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    background:#f59e0b;
+}
+.chat-connection-status.connected{
+    color:#15803d;
+}
+.chat-connection-status.connected .connection-dot{
+    background:#22c55e;
+}
+.chat-connection-status.reconnecting{
+    color:#b45309;
+}
+.chat-connection-status.reconnecting .connection-dot{
+    background:#f59e0b;
+}
+.chat-connection-status.error{
+    color:#b91c1c;
+}
+.chat-connection-status.error .connection-dot{
+    background:#ef4444;
+}
+.message-row.pending .message-bubble{
+    opacity:.78;
+}
+.pending-status{
+    font-weight:900;
+    color:#b7791f;
+}
+.chat-send:disabled{
+    opacity:.65;
+    cursor:wait;
+}
+
 </style>
 
 <div class="chat-workspace">
@@ -231,7 +280,16 @@
     const usuarioActualId = Number(panel.dataset.currentUserId);
     const esGrupo = panel.dataset.isMultipersonal === "true";
     const totalDestinatarios = Number(panel.dataset.totalRecipients || 1);
+    const otroUsuarioId = Number(panel.dataset.otherUserId || 0);
     const uploadUrl = panel.dataset.uploadUrl;
+
+    const connectionStatus =
+        panel.querySelector("#chat-connection-status");
+
+    const connectionText =
+        connectionStatus
+        ? connectionStatus.querySelector(".connection-text")
+        : null;
 
     const contenedor = document.getElementById("mensajes");
     const input = document.getElementById("mensaje-input");
@@ -270,8 +328,34 @@
     let otroUsuarioOnline = false;
     let typingTimer = null;
     let typingEnviado = false;
+    const colaMensajes = [];
 
     const usuariosEscribiendo = new Map();
+
+    function actualizarEstadoConexion(
+        estado,
+        texto
+    ) {
+        if (!connectionStatus) return;
+
+        connectionStatus.className =
+            "chat-connection-status " + estado;
+
+        if (connectionText) {
+            connectionText.textContent = texto;
+        }
+    }
+
+    function generarClientMessageId() {
+        return (
+            "msg_" +
+            Date.now() +
+            "_" +
+            Math.random()
+                .toString(36)
+                .slice(2, 10)
+        );
+    }
 
     const protocolo =
         window.location.protocol === "https:"
@@ -291,6 +375,13 @@
         );
     }
 
+    actualizarEstadoConexion(
+        "connecting",
+        "Conectando chat..."
+    );
+
+    boton.disabled = true;
+
     const socket = new WebSocket(
         protocolo +
         window.location.host +
@@ -306,9 +397,25 @@
 
         console.log("Chat conectado");
 
+        actualizarEstadoConexion(
+            "connected",
+            "Chat conectado · puedes enviar mensajes aunque el destinatario esté desconectado."
+        );
+
+        boton.disabled = false;
+
         socket.send(JSON.stringify({
             type: "mark_read"
         }));
+
+        while (colaMensajes.length) {
+            const pendiente =
+                colaMensajes.shift();
+
+            socket.send(
+                JSON.stringify(pendiente)
+            );
+        }
 
     };
 
@@ -319,9 +426,52 @@
 
         if (data.type === "chat_message") {
 
-            agregarMensaje(data);
+            const propio =
+                Number(data.autor_id) ===
+                usuarioActualId;
 
-            if (Number(data.autor_id) !== usuarioActualId) {
+            let confirmado = false;
+
+            if (
+                propio &&
+                data.client_message_id
+            ) {
+                const pendiente =
+                    contenedor.querySelector(
+                        '[data-client-message-id="' +
+                        data.client_message_id +
+                        '"]'
+                    );
+
+                if (pendiente) {
+                    pendiente.classList.remove(
+                        "pending"
+                    );
+
+                    pendiente.dataset.messageId =
+                        data.mensaje_id;
+
+                    const estadoPendiente =
+                        pendiente.querySelector(
+                            ".pending-status"
+                        );
+
+                    if (estadoPendiente) {
+                        estadoPendiente.className =
+                            "read-status";
+                        estadoPendiente.textContent =
+                            "✓";
+                    }
+
+                    confirmado = true;
+                }
+            }
+
+            if (!confirmado) {
+                agregarMensaje(data);
+            }
+
+            if (!propio) {
 
                 socket.send(JSON.stringify({
                     type: "mark_read"
@@ -348,8 +498,20 @@
             !esGrupo
         ) {
 
-            otroUsuarioOnline = Boolean(data.online);
+            otroUsuarioOnline =
+                Boolean(data.online);
+
             actualizarEstadoUsuario();
+
+            if (
+                otroUsuarioId &&
+                window.impetusActualizarPresenciaGlobal
+            ) {
+                window.impetusActualizarPresenciaGlobal(
+                    otroUsuarioId,
+                    otroUsuarioOnline
+                );
+            }
 
         }
 
@@ -444,8 +606,28 @@
     };
 
 
-    socket.onclose = function () {
+    socket.onerror = function () {
+        actualizarEstadoConexion(
+            "error",
+            "Problema de conexión. Intentando recuperar el chat..."
+        );
+    };
+
+    socket.onclose = function (event) {
         console.log("Chat desconectado");
+
+        if (
+            event.code === 1000 &&
+            event.reason ===
+                "Cambio de conversación"
+        ) {
+            return;
+        }
+
+        actualizarEstadoConexion(
+            "reconnecting",
+            "Conexión interrumpida. Cambia de conversación o recarga si no se recupera."
+        );
     };
 
 
@@ -473,6 +655,47 @@
 
         }
     }
+
+
+    if (window.impetusChatPresenceHandler) {
+        window.removeEventListener(
+            "impetus:presence",
+            window.impetusChatPresenceHandler
+        );
+    }
+
+    window.impetusChatPresenceHandler =
+        function(event) {
+
+            if (
+                esGrupo ||
+                !otroUsuarioId ||
+                !event.detail
+            ) {
+                return;
+            }
+
+            if (
+                Number(
+                    event.detail.usuario_id
+                ) !==
+                otroUsuarioId
+            ) {
+                return;
+            }
+
+            otroUsuarioOnline =
+                Boolean(
+                    event.detail.online
+                );
+
+            actualizarEstadoUsuario();
+        };
+
+    window.addEventListener(
+        "impetus:presence",
+        window.impetusChatPresenceHandler
+    );
 
 
     function actualizarGrupoEscribiendo() {
@@ -805,6 +1028,77 @@
     }
 
 
+    function agregarMensajePendiente(
+        textoMensaje,
+        clientMessageId
+    ) {
+        quitarVacio();
+
+        const fila =
+            document.createElement("div");
+
+        fila.className =
+            "message-row mine pending";
+
+        fila.dataset.clientMessageId =
+            clientMessageId;
+
+        const burbuja =
+            document.createElement("div");
+
+        burbuja.className =
+            "message-bubble";
+
+        const texto =
+            document.createElement("div");
+
+        texto.className =
+            "message-text";
+
+        texto.textContent =
+            textoMensaje;
+
+        const meta =
+            document.createElement("div");
+
+        meta.className =
+            "message-meta";
+
+        const hora =
+            document.createElement("span");
+
+        hora.textContent =
+            new Date().toLocaleTimeString(
+                [],
+                {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                }
+            );
+
+        const estado =
+            document.createElement("span");
+
+        estado.className =
+            "pending-status";
+
+        estado.textContent =
+            "⏳";
+
+        meta.appendChild(hora);
+        meta.appendChild(estado);
+
+        burbuja.appendChild(texto);
+        burbuja.appendChild(meta);
+        fila.appendChild(burbuja);
+        contenedor.appendChild(fila);
+
+        contenedor.scrollTop =
+            contenedor.scrollHeight;
+    }
+
+
     function enviarMensaje() {
 
         const mensaje =
@@ -814,25 +1108,80 @@
             return;
         }
 
+        const clientMessageId =
+            generarClientMessageId();
+
+        const payload = {
+            type: "chat_message",
+            message: mensaje,
+            client_message_id:
+                clientMessageId
+        };
+
+        agregarMensajePendiente(
+            mensaje,
+            clientMessageId
+        );
+
+        input.value = "";
+        input.focus();
+
+        /*
+         * IMPORTANTE:
+         * El estado En línea / Desconectado del
+         * DESTINATARIO no bloquea el envío.
+         * El mensaje se guarda en Django y quedará
+         * pendiente para cuando vuelva a conectarse.
+         */
         if (
-            socket.readyState !==
+            socket.readyState ===
             WebSocket.OPEN
         ) {
 
-            alert(
-                "El chat no está conectado."
+            socket.send(
+                JSON.stringify(payload)
             );
 
             return;
         }
 
-        socket.send(JSON.stringify({
-            type: "chat_message",
-            message: mensaje
-        }));
+        if (
+            socket.readyState ===
+            WebSocket.CONNECTING
+        ) {
 
-        input.value = "";
-        input.focus();
+            colaMensajes.push(payload);
+
+            actualizarEstadoConexion(
+                "reconnecting",
+                "Conectando... tu mensaje se enviará automáticamente."
+            );
+
+            return;
+        }
+
+        const pendiente =
+            contenedor.querySelector(
+                '[data-client-message-id="' +
+                clientMessageId +
+                '"]'
+            );
+
+        if (pendiente) {
+            const estado =
+                pendiente.querySelector(
+                    ".pending-status"
+                );
+
+            if (estado) {
+                estado.textContent = "⚠";
+            }
+        }
+
+        actualizarEstadoConexion(
+            "error",
+            "No hay conexión con el servidor. El destinatario puede estar desconectado; eso no impide enviar cuando tu conexión se recupere."
+        );
 
     }
 
@@ -951,6 +1300,109 @@
                 archivoInput.files[0]
             );
         }
+    );
+
+
+    async function procesarPegadoImagen(event) {
+
+        const clipboardData =
+            event.clipboardData ||
+            window.clipboardData;
+
+        if (
+            !clipboardData ||
+            !clipboardData.items
+        ) {
+            return;
+        }
+
+        let imagenPegada = null;
+
+        for (
+            const item of
+            clipboardData.items
+        ) {
+            if (
+                item.kind === "file" &&
+                item.type &&
+                item.type.startsWith("image/")
+            ) {
+                const original =
+                    item.getAsFile();
+
+                if (!original) continue;
+
+                let extension = "png";
+
+                if (
+                    item.type ===
+                    "image/jpeg"
+                ) {
+                    extension = "jpg";
+                } else if (
+                    item.type ===
+                    "image/webp"
+                ) {
+                    extension = "webp";
+                } else if (
+                    item.type ===
+                    "image/gif"
+                ) {
+                    extension = "gif";
+                }
+
+                imagenPegada =
+                    new File(
+                        [original],
+                        "imagen_portapapeles_" +
+                        Date.now() +
+                        "." +
+                        extension,
+                        {
+                            type:
+                                original.type ||
+                                item.type
+                        }
+                    );
+
+                break;
+            }
+        }
+
+        if (!imagenPegada) {
+            return;
+        }
+
+        event.preventDefault();
+
+        uploadStatus.textContent =
+            "Pegando imagen...";
+
+        uploadStatus.classList.add(
+            "visible"
+        );
+
+        await subirArchivo(
+            imagenPegada
+        );
+    }
+
+
+    if (
+        window.impetusChatPasteHandler
+    ) {
+        document.removeEventListener(
+            "paste",
+            window.impetusChatPasteHandler
+        );
+    }
+
+    window.impetusChatPasteHandler =
+        procesarPegadoImagen;
+
+    document.addEventListener(
+        "paste",
+        window.impetusChatPasteHandler
     );
 
 
