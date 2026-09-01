@@ -3,127 +3,265 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>{% block title %}Impetus Control{% endblock %}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}IMPETUS CONTROL{% endblock %}</title>
 
 <style>
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
+:root{
+    --navy:#071b3a;
+    --navy-2:#0b2a57;
+    --navy-3:#123d79;
+    --blue:#1f66e5;
+    --blue-soft:#eaf2ff;
+    --yellow:#f7b928;
+    --bg:#f4f7fb;
+    --panel:#ffffff;
+    --text:#0d1b35;
+    --muted:#6c7a91;
+    --line:#e6ebf2;
+    --shadow:0 8px 28px rgba(15, 35, 70, .08);
+    --radius:16px;
 }
 
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
 body{
-    font-family:Arial, Helvetica, sans-serif;
-    background:#eef2f6;
-    color:#1e293b;
+    min-height:100vh;
+    font-family:Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    background:var(--bg);
+    color:var(--text);
 }
 
-.layout{
-    display:flex;
-    min-height:100vh;
-}
+a{color:inherit;}
+
+.layout{display:flex;min-height:100vh;}
 
 .sidebar{
-    width:250px;
-    background:#0f172a;
-    padding:24px 16px;
-}
-
-.brand{
-    color:#fbbf24;
-    font-size:24px;
-    font-weight:700;
-    margin-bottom:30px;
-}
-
-.menu a{
-    display:block;
-    color:#cbd5e1;
-    text-decoration:none;
-    padding:12px 14px;
-    border-radius:10px;
-    margin-bottom:8px;
-    transition:.2s;
-    font-size:14px;
-}
-
-.menu a:hover,
-.menu a.active{
-    background:#1d4ed8;
+    position:fixed;
+    inset:0 auto 0 0;
+    width:238px;
+    padding:20px 14px;
+    background:linear-gradient(180deg,#06172f 0%,#071b3a 58%,#06214a 100%);
     color:#fff;
+    overflow-y:auto;
+    z-index:1000;
+    box-shadow:12px 0 35px rgba(1,13,35,.08);
 }
+
+.brand-wrap{
+    padding:2px 8px 18px;
+    border-bottom:1px solid rgba(255,255,255,.08);
+    margin-bottom:14px;
+}
+.brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#fff;
+    font-size:18px;
+    line-height:1.05;
+    font-weight:900;
+    letter-spacing:.2px;
+}
+.brand-mark{
+    width:38px;height:38px;border-radius:12px;
+    display:grid;place-items:center;
+    background:var(--yellow);
+    color:var(--navy);
+    font-size:20px;
+    box-shadow:0 8px 20px rgba(247,185,40,.25);
+}
+.brand strong{display:block;color:var(--yellow);font-size:16px;margin-top:2px;}
+.brand-caption{margin-top:9px;color:#9eb1cf;font-size:10px;font-weight:600;}
+.sidebar-brand-logo{
+    width:175px;
+    max-width:100%;
+    max-height:68px;
+    height:auto;
+    display:block;
+    object-fit:contain;
+    object-position:left center;
+}
+.brand-wrap-logo{
+    min-height:88px;
+    padding:12px 10px;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:center;
+}
+
+
+.menu-section{margin:15px 0 6px;padding:0 10px;color:#8fa5c7;font-size:10px;font-weight:900;letter-spacing:.8px;}
+.menu a{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#c8d4e7;
+    text-decoration:none;
+    padding:9px 10px;
+    border-radius:10px;
+    margin-bottom:3px;
+    transition:.18s ease;
+    font-size:12px;
+    font-weight:650;
+}
+.menu a:hover{background:rgba(255,255,255,.07);color:#fff;transform:translateX(2px);}
+.menu a.active{
+    background:linear-gradient(135deg,#1959cf,#1f6bf0);
+    color:#fff;
+    box-shadow:0 8px 18px rgba(20,92,220,.28);
+}
+.menu-icon{width:17px;text-align:center;opacity:.95;}
+
+.sidebar-support{
+    margin-top:18px;
+    padding:13px;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:13px;
+    background:rgba(255,255,255,.045);
+}
+.sidebar-support strong{font-size:11px;display:block;color:#fff;margin-bottom:4px;}
+.sidebar-support span{font-size:9px;color:#9eb1cf;}
 
 .main{
-    flex:1;
-    padding:24px;
+    width:calc(100% - 238px);
+    margin-left:238px;
+    min-height:100vh;
+    padding:18px 22px 30px;
 }
 
 .topbar{
-    background:#fff;
-    border-radius:16px;
-    padding:18px 24px;
+    min-height:68px;
     display:flex;
-    justify-content:space-between;
     align-items:center;
-    margin-bottom:24px;
-    box-shadow:0 10px 25px rgba(0,0,0,.05);
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:18px;
+}
+.page-heading h1{font-size:24px;line-height:1.1;font-weight:900;letter-spacing:-.5px;}
+.page-heading p{font-size:11px;color:var(--muted);margin-top:5px;font-weight:600;}
+
+.topbar-actions{display:flex;align-items:center;gap:9px;}
+.top-chip{
+    height:38px;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:#fff;
+    padding:0 11px;
+    color:#394862;
+    box-shadow:0 3px 12px rgba(15,35,70,.035);
+    font-size:11px;
+    font-weight:750;
+    white-space:nowrap;
+}
+.notification-chip{position:relative;width:38px;justify-content:center;padding:0;}
+.notification-dot{
+    position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;
+    border-radius:99px;background:#dc2626;color:#fff;font-size:9px;font-weight:900;
+    display:grid;place-items:center;border:2px solid var(--bg);
 }
 
-.topbar h1{
-    font-size:24px;
+.user-box{position:relative;}
+.user-trigger{
+    min-width:165px;
+    height:42px;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:0 11px;
+    cursor:pointer;
+    box-shadow:0 3px 12px rgba(15,35,70,.035);
+}
+.avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#eaf2ff;color:#17478c;font-weight:900;}
+.user-meta{min-width:0;flex:1;}
+.user-meta strong{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.user-meta span{display:block;font-size:9px;color:var(--muted);margin-top:1px;}
+.user-menu{
+    display:none;position:absolute;right:0;top:48px;z-index:1200;min-width:180px;
+    background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px;
+    box-shadow:0 18px 40px rgba(15,35,70,.16);
+}
+.user-menu.open{display:block;}
+.menu-item{display:block;text-decoration:none;padding:9px 10px;border-radius:8px;color:#32415b;font-size:11px;font-weight:700;}
+.menu-item:hover{background:#f2f6fb;}
+
+.btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    background:var(--blue);color:#fff;text-decoration:none;padding:9px 12px;border-radius:9px;
+    font-size:11px;font-weight:800;border:none;cursor:pointer;
+}
+.btn:hover{background:#1858cd;}
+
+#page-loader{
+    position:fixed;inset:0;background:rgba(5,20,45,.96);display:flex;align-items:center;justify-content:center;
+    z-index:99999;transition:opacity .3s ease,visibility .3s ease;
+}
+#page-loader.hide{opacity:0;visibility:hidden;}
+.loader-box{text-align:center;color:#cbd5e1;}
+.loader-logo-img{width:80px;margin-bottom:14px;filter:drop-shadow(0 0 12px rgba(247,185,40,.45));}
+.loader-spinner{width:38px;height:38px;border:3px solid rgba(255,255,255,.2);border-top-color:var(--yellow);border-radius:50%;margin:0 auto 12px;animation:spin .8s linear infinite;}
+.loader-box p{font-size:11px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:1050px){
+    .top-chip.org-chip,.top-chip.date-chip{display:none;}
+}
+@media(max-width:820px){
+    .sidebar{position:relative;width:100%;height:auto;max-height:none;}
+    .layout{display:block;}
+    .main{width:100%;margin-left:0;padding:14px;}
+    .menu{display:flex;overflow-x:auto;gap:4px;padding-bottom:4px;}
+    .menu-section{display:none;}
+    .menu a{flex:0 0 auto;white-space:nowrap;margin:0;}
+    .sidebar-support{display:none;}
+    .brand-wrap{margin-bottom:10px;padding-bottom:10px;}
+    .brand-caption{display:none;}
+    .topbar{align-items:flex-start;}
+    .page-heading h1{font-size:20px;}
+    .user-trigger{min-width:42px;width:42px;padding:0 5px;justify-content:center;}
+    .user-meta,.user-trigger>span:last-child{display:none;}
 }
 
-.user-box{
-    font-size:14px;
-    color:#64748b;
-}
 
+/* =========================================================
+   COMPATIBILIDAD CON MÓDULOS EXISTENTES
+   Mantiene el nuevo shell sin romper templates antiguos.
+   ========================================================= */
 .dashboard-grid{
     display:grid;
-    grid-template-columns:repeat(4,1fr);
+    grid-template-columns:repeat(4,minmax(0,1fr));
     gap:18px;
     margin-bottom:28px;
 }
-
 .quick-card{
     background:#fff;
     padding:22px;
     border-radius:16px;
-    box-shadow:0 10px 25px rgba(0,0,0,.05);
-    transition:.2s;
+    box-shadow:var(--shadow);
+    transition:.2s ease;
     text-decoration:none;
     color:#111827;
 }
-
-.quick-card:hover{
-    transform:translateY(-4px);
-}
-
-.quick-card small{
-    color:#64748b;
-    display:block;
-    margin-bottom:8px;
-}
-
-.quick-card strong{
-    font-size:18px;
-}
+.quick-card:hover{transform:translateY(-3px);}
+.quick-card small{color:#64748b;display:block;margin-bottom:8px;}
+.quick-card strong{font-size:18px;}
 
 .panel{
     background:#fff;
     padding:24px;
     border-radius:16px;
-    box-shadow:0 10px 25px rgba(0,0,0,.05);
+    box-shadow:var(--shadow);
+    border:1px solid var(--line);
 }
-
-.panel h3{
-    margin-bottom:16px;
-}
-
-.panel p{
-    color:#64748b;
-    line-height:1.6;
-}
+.panel h3{margin-bottom:16px;}
+.panel p{color:#64748b;line-height:1.6;}
 
 .cards{
     display:grid;
@@ -131,34 +269,22 @@ body{
     gap:18px;
     margin-bottom:24px;
 }
-
 .card{
-    background:#ffffff;
+    background:#fff;
     border-radius:16px;
     padding:20px;
-    box-shadow:0 10px 25px rgba(0,0,0,.05);
+    box-shadow:var(--shadow);
+    border:1px solid var(--line);
 }
+.card small{display:block;color:#64748b;margin-bottom:8px;font-size:13px;}
+.card strong{font-size:22px;color:#0f172a;}
 
-.card small{
-    display:block;
-    color:#64748b;
-    margin-bottom:8px;
-    font-size:13px;
-}
-
-.card strong{
-    font-size:22px;
-    color:#0f172a;
-}
-
+/* Tablas heredadas */
 table{
     width:100%;
     border-collapse:collapse;
     background:#fff;
-    border-radius:14px;
-    overflow:hidden;
 }
-
 th{
     background:#f8fafc;
     color:#475569;
@@ -167,57 +293,12 @@ th{
     font-size:13px;
     border-bottom:1px solid #e2e8f0;
 }
-
 td{
     padding:14px;
     border-bottom:1px solid #edf2f7;
     font-size:14px;
 }
-
-tr:hover{
-    background:#f8fafc;
-}
-
-.btn{
-    display:inline-block;
-    background:#2563eb;
-    color:#fff;
-    text-decoration:none;
-    padding:10px 14px;
-    border-radius:10px;
-    font-size:13px;
-    font-weight:600;
-    border:none;
-    cursor:pointer;
-}
-
-.btn:hover{
-    background:#1d4ed8;
-}
-
-.btn-secondary{
-    background:#64748b;
-}
-
-.btn-secondary:hover{
-    background:#475569;
-}
-
-.toast-wrap{
-    position:fixed;
-    top:18px;
-    right:20px;
-    z-index:9999;
-}
-
-.toast{
-    background:#16a34a;
-    color:#fff;
-    padding:12px 16px;
-    border-radius:10px;
-    margin-bottom:10px;
-    box-shadow:0 10px 20px rgba(0,0,0,.15);
-}
+tbody tr:hover{background:#f8fafc;}
 
 .form-control{
     width:100%;
@@ -227,372 +308,191 @@ tr:hover{
     font-size:14px;
     background:#fff;
 }
-
 .form-control:focus{
     outline:none;
     border-color:#2563eb;
     box-shadow:0 0 0 3px rgba(37,99,235,.15);
 }
+.btn-secondary{background:#64748b;}
+.btn-secondary:hover{background:#475569;}
+
+.toast-wrap{position:fixed;top:18px;right:20px;z-index:9999;}
+.toast{
+    background:#16a34a;
+    color:#fff;
+    padding:12px 16px;
+    border-radius:10px;
+    margin-bottom:10px;
+    box-shadow:0 10px 20px rgba(0,0,0,.15);
+}
+
+/* Contenedores frecuentes de módulos antiguos */
+.content-card,.table-card,.section-card{
+    background:#fff;
+    border-radius:16px;
+    box-shadow:var(--shadow);
+    border:1px solid var(--line);
+}
 
 @media(max-width:1100px){
-    .dashboard-grid{
-        grid-template-columns:repeat(2,1fr);
-    }
+    .dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
-
-@media(max-width:800px){
-    .layout{
-        flex-direction:column;
-    }
-
-    .sidebar{
-        width:100%;
-        padding:14px 12px;
-        position:sticky;
-        top:0;
-        z-index:1000;
-    }
-
-    .brand{
-        font-size:18px;
-        margin-bottom:12px;
-    }
-
-    .menu{
-        display:flex;
-        gap:8px;
-        overflow-x:auto;
-        padding-bottom:4px;
-        -webkit-overflow-scrolling:touch;
-    }
-
-    .menu a{
-        flex:0 0 auto;
-        white-space:nowrap;
-        margin-bottom:0;
-        padding:10px 12px;
-    }
-
-    .main{
-        padding:14px;
-    }
-
-    .topbar{
-        padding:14px;
-        gap:10px;
-        flex-wrap:wrap;
-    }
-
-    .topbar h1{
-        font-size:18px;
-    }
-
-    .dashboard-grid{
-        grid-template-columns:1fr;
-    }
-
-    .panel{
-        padding:16px;
-    }
-
-    .cards{
-        grid-template-columns:1fr;
-        gap:12px;
-    }
-
-    .card{
-        padding:16px;
-    }
+@media(max-width:820px){
+    .dashboard-grid{grid-template-columns:1fr;}
+    .cards{grid-template-columns:1fr;gap:12px;}
+    .panel{padding:16px;}
+    .card{padding:16px;}
 }
 </style>
+
+{% block extra_head %}{% endblock %}
 </head>
+<body>
 
 <div id="page-loader">
     <div class="loader-box">
-
-        <!-- LOGO EMPRESA -->
-        <img src="{% static 'img/logo_empresa.png' %}" class="loader-logo-img">
-
+        <img src="{% static 'img/logo_empresa.png' %}" class="loader-logo-img" alt="IMPETUS">
         <div class="loader-spinner"></div>
-
-        <p>Cargando módulo...</p>
+        <p>Cargando centro de control...</p>
     </div>
 </div>
 
-<style>
-#page-loader{
-    position:fixed;
-    inset:0;
-    background:rgba(15,23,42,.95);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    z-index:99999;
-    transition:opacity .3s ease, visibility .3s ease;
-}
-
-#page-loader.hide{
-    opacity:0;
-    visibility:hidden;
-}
-
-.loader-box{
-    text-align:center;
-}
-
-.loader-logo-img{
-    width:90px;
-    margin-bottom:16px;
-    animation:zoom 1.5s ease-in-out infinite;
-    filter: drop-shadow(0 0 12px rgba(251,191,36,.6));
-}
-
-.loader-spinner{
-    width:44px;
-    height:44px;
-    border:4px solid rgba(255,255,255,.25);
-    border-top-color:#fbbf24;
-    border-radius:50%;
-    margin:0 auto 14px;
-    animation:spin .8s linear infinite;
-}
-
-.loader-box p{
-    font-size:14px;
-    color:#cbd5e1;
-}
-
-@keyframes spin{
-    to{ transform:rotate(360deg); }
-}
-
-@keyframes zoom{
-    0%,100%{ transform:scale(1); }
-    50%{ transform:scale(1.1); }
-}
-</style>
-
-<script>
-window.addEventListener("load", function(){
-    const loader = document.getElementById("page-loader");
-    if(loader){
-        loader.classList.add("hide");
-    }
-});
-</script>
-
-<body>
-
 <div class="layout">
-
 <aside class="sidebar">
-<div class="brand">IMPETUS CONTROL</div>
+    <div class="brand-wrap brand-wrap-logo">
+        <img src="{% static 'img/logo_impetus_control_blanco.png' %}" class="sidebar-brand-logo" alt="IMPETUS CONTROL">
+        <div class="brand-caption">Centro de Control Operacional</div>
+    </div>
 
-<nav class="menu">
+    <nav class="menu">
+        <a href="/dashboard/" class="{% if request.path == '/dashboard/' or request.path == '/' %}active{% endif %}">
+            <span class="menu-icon">⌂</span> Inicio
+        </a>
 
-    <a href="/dashboard/"
-       class="{% if request.path == '/dashboard/' or request.path == '/' %}active{% endif %}">
-        🏠 Home
-    </a>
+        {% if es_comercial %}
+        <div class="menu-section">COMERCIAL</div>
+        <a href="/quotes/" class="{% if '/quotes/' in request.path and not '/clientes/' in request.path %}active{% endif %}"><span class="menu-icon">▤</span> Cotizaciones</a>
+        <a href="/quotes/clientes/" class="{% if '/clientes/' in request.path %}active{% endif %}"><span class="menu-icon">◉</span> Clientes</a>
+        {% endif %}
 
-    {% if es_compras %}
-    <a href="/compras/"
-       class="{% if '/compras/' in request.path %}active{% endif %}">
-        Compras OIL
-    </a>
-    {% endif %}
-    {% if not es_campo or es_ingenieria or es_gerente or request.user.is_superuser %}
-    <a href="/paw/"
-       class="{% if '/paw/' in request.path %}active{% endif %}">
-        PAW
-    </a>
-    {% endif %}
-    {% if es_compras or es_finanzas %}
-    <a href="/compras/proveedores/"
-       class="{% if '/proveedores/' in request.path %}active{% endif %}">
-        Proveedores
-    </a>
-    {% endif %} 
+        {% if not es_campo or es_ingenieria or es_gerente or request.user.is_superuser %}
+        <div class="menu-section">OPERACIONES</div>
+        <a href="/paw/" class="{% if '/paw/' in request.path %}active{% endif %}"><span class="menu-icon">▣</span> PAW</a>
+        {% endif %}
 
-    {% if es_gerente or request.user.is_superuser %}
-    <a href="{% url 'aprobacion:dashboard' %}"
-       class="{% if '/aprobacion/' in request.path %}active{% endif %}">
-        ✅ Aprobación compras
-    </a>
-    {% endif %}
+        {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente or es_finanzas %}
+        <a href="/campo/" class="{% if '/campo/' in request.path and not '/campo/reporte-bonos/' in request.path %}active{% endif %}"><span class="menu-icon">⌁</span> Campo</a>
+        {% endif %}
 
-    {% if es_finanzas or es_gerente or request.user.is_superuser %}
-    <a href="/finanzas/proveedores-cxp/"
-       onclick="document.getElementById('page-loader')?.classList.remove('hide')"
-       class="{% if '/proveedores-cxp/' in request.path %}active{% endif %}">
-        Cuentas por pagar
-    </a>
-    {% endif %}
- 
+        {% if es_compras or es_finanzas or es_gerente or request.user.is_superuser %}
+        <div class="menu-section">ABASTECIMIENTO</div>
+        {% endif %}
+        {% if es_compras %}
+        <a href="/compras/" class="{% if '/compras/' in request.path and not '/proveedores/' in request.path %}active{% endif %}"><span class="menu-icon">▧</span> Compras OIL</a>
+        {% endif %}
+        {% if es_compras or es_finanzas %}
+        <a href="/compras/proveedores/" class="{% if '/proveedores/' in request.path and not '/proveedores-cxp/' in request.path %}active{% endif %}"><span class="menu-icon">♙</span> Proveedores</a>
+        {% endif %}
+        {% if es_gerente or request.user.is_superuser %}
+        <a href="{% url 'aprobacion:dashboard' %}" class="{% if '/aprobacion/' in request.path %}active{% endif %}"><span class="menu-icon">✓</span> Aprobación compras</a>
+        {% endif %}
 
-    
-    {% if es_taller or es_ingenieria or es_gerente or request.user.is_superuser %}
+        {% if es_taller or es_ingenieria or es_gerente or request.user.is_superuser %}
+        <div class="menu-section">TALLER</div>
+        <a href="/taller/" class="{% if request.path == '/taller/' %}active{% endif %}"><span class="menu-icon">⚒</span> Taller</a>
+        <a href="{% url 'taller:camaras_taller' %}" class="{% if '/taller/camaras/' in request.path %}active{% endif %}"><span class="menu-icon">▥</span> Cámaras en Taller</a>
+        <a href="{% url 'taller:horas_dashboard' %}"><span class="menu-icon">◷</span> Horas de Ensamble</a>
+        {% endif %}
 
-<a href="/taller/"
-   class="{% if request.path == '/taller/' %}active{% endif %}">
-    Taller
-</a>
+        {% if es_finanzas or es_gerente or request.user.is_superuser %}
+        <div class="menu-section">FINANZAS</div>
+        <a href="/finanzas/proveedores-cxp/" onclick="document.getElementById('page-loader')?.classList.remove('hide')" class="{% if '/proveedores-cxp/' in request.path %}active{% endif %}"><span class="menu-icon">▰</span> Cuentas por pagar</a>
+        {% endif %}
+        {% if es_finanzas %}
+        <a href="/finanzas/" class="{% if request.path == '/finanzas/' %}active{% endif %}"><span class="menu-icon">$</span> Finanzas</a>
+        {% endif %}
+        {% if es_finanzas or es_comercial or es_gerente or request.user.is_superuser %}
+        <a href="/facturacion/" class="{% if '/facturacion/' in request.path %}active{% endif %}"><span class="menu-icon">▤</span> Facturación</a>
+        {% endif %}
+        {% if es_gerente %}
+        <a href="{% url 'finanzas:aprobacion_pagos' %}" class="{% if 'aprobacion-pagos' in request.path %}active{% endif %}"><span class="menu-icon">✓</span> Aprobación pagos</a>
+        {% endif %}
+        {% if es_finanzas or es_gerente or request.user.is_superuser %}
+        <a href="/campo/reporte-bonos/" class="{% if '/campo/reporte-bonos/' in request.path %}active{% endif %}"><span class="menu-icon">¤</span> Bonos técnicos</a>
+        {% endif %}
 
-<a href="{% url 'taller:camaras_taller' %}"
-   class="{% if '/taller/camaras/' in request.path %}active{% endif %}">
-    🏭 Cámaras en Taller
-</a>
+        {% if es_inventario or es_ingenieria or es_gerente or request.user.is_superuser %}
+        <div class="menu-section">ADMINISTRACIÓN</div>
+        {% endif %}
+        {% if es_inventario %}
+        <a href="/inventario/" class="{% if '/inventario/' in request.path %}active{% endif %}"><span class="menu-icon">▦</span> Inventario</a>
+        {% endif %}
+        {% if es_inventario or es_ingenieria or es_gerente or request.user.is_superuser %}
+        <a href="{% url 'item_oil_gas:item_list' %}" class="{% if '/item-oil-gas/' in request.path and '/impetus/' not in request.path %}active{% endif %}"><span class="menu-icon">◇</span> Items Oil & Gas</a>
+        <a href="{% url 'item_oil_gas:item_impetus_list' %}" class="{% if '/item-oil-gas/impetus/' in request.path %}active{% endif %}"><span class="menu-icon">◆</span> Items IMPETUS</a>
+        {% endif %}
+        {% if request.user.is_superuser %}
+        <a href="/admin/" class="{% if '/admin/' in request.path %}active{% endif %}"><span class="menu-icon">⚙</span> Admin Django</a>
+        {% endif %}
+    </nav>
 
-<a href="{% url 'taller:horas_dashboard' %}">
-    🔧 Horas de Ensamble
-</a>
-
-{% endif %}
-
-    {% if request.user.is_superuser or es_campo or es_ingenieria or es_gerente or es_finanzas %}
-    <a href="/campo/"
-       class="{% if '/campo/' in request.path and not '/campo/reporte-bonos/' in request.path %}active{% endif %}">
-        Campo
-    </a>
-    {% endif %}
-
-    {% if es_finanzas or es_gerente or request.user.is_superuser %}
-    <a href="/campo/reporte-bonos/"
-       class="{% if '/campo/reporte-bonos/' in request.path %}active{% endif %}">
-        💰 Bonos técnicos
-    </a>
-    {% endif %}
-
-    {% if es_finanzas %}
-    <a href="/finanzas/"
-       class="{% if request.path == '/finanzas/' %}active{% endif %}">
-        Finanzas
-    </a>
-    {% endif %}
-
-    {% if es_finanzas or es_comercial or es_gerente or request.user.is_superuser %}
-    <a href="/facturacion/"
-       class="{% if '/facturacion/' in request.path %}active{% endif %}">
-        Facturación
-    </a>
-    {% endif %}
-
-    {% if es_gerente %}
-    <a href="{% url 'finanzas:aprobacion_pagos' %}"
-       class="{% if 'aprobacion-pagos' in request.path %}active{% endif %}">
-        Aprobación pagos
-    </a>
-    {% endif %}
-
-    {% if es_inventario %}
-    <a href="/inventario/"
-       class="{% if '/inventario/' in request.path %}active{% endif %}">
-        Inventario
-    </a>
-    {% endif %}
-
-    {% if es_comercial %}
-    <a href="/quotes/"
-       class="{% if '/quotes/' in request.path and not '/clientes/' in request.path %}active{% endif %}">
-        Cotizaciones
-    </a>
-
-    <a href="/quotes/clientes/"
-       class="{% if '/clientes/' in request.path %}active{% endif %}">
-        Clientes
-    </a>
-    {% endif %}
-
-    {% if es_inventario or es_ingenieria or es_gerente or request.user.is_superuser %}
-
-<a href="{% url 'item_oil_gas:item_list' %}"
-   class="{% if '/item-oil-gas/' in request.path and '/impetus/' not in request.path %}active{% endif %}">
-    📦 Items Oil & Gas
-</a>
-
-<a href="{% url 'item_oil_gas:item_impetus_list' %}"
-   class="{% if '/item-oil-gas/impetus/' in request.path %}active{% endif %}">
-    🔧 Items IMPETUS
-</a>
-
-{% endif %}
-
-    {% if request.user.is_superuser %}
-    <a href="/admin/"
-       class="{% if '/admin/' in request.path %}active{% endif %}">
-        Admin Django
-    </a>
-    {% endif %}
-
-</nav>
-
+    <div class="sidebar-support">
+        <strong>◉ Soporte IMPETUS</strong>
+        <span>Gestión integral de tu operación</span>
+    </div>
 </aside>
 
 <main class="main">
+    <header class="topbar">
+        <div class="page-heading">
+            <h1>{% block page_title %}Centro de Control Operacional{% endblock %}</h1>
+            <p>{% block page_subtitle %}Visibilidad integral de tu operación en tiempo real{% endblock %}</p>
+        </div>
 
-<div class="topbar">
-<h1>Dashboard</h1>
+        <div class="topbar-actions">
+            <div class="top-chip org-chip">▦ IMPETUS CONTROL</div>
+            <div class="top-chip date-chip">▣ {% now "d M Y" %}</div>
+            <div class="top-chip notification-chip" title="Alertas">
+                ♢
+                {% if total_alertas %}<span class="notification-dot">{{ total_alertas }}</span>{% endif %}
+            </div>
 
-<div class="user-box" style="position:relative;">
+            <div class="user-box">
+                <div class="user-trigger" onclick="toggleMenu()">
+                    <div class="avatar">{{ request.user.first_name|default:request.user.username|slice:":1"|upper }}</div>
+                    <div class="user-meta">
+                        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                        <span>{% if request.user.is_superuser %}Administrador{% else %}Usuario{% endif %}</span>
+                    </div>
+                    <span>⌄</span>
+                </div>
+                <div id="userMenu" class="user-menu">
+                    <a href="/accounts/perfil/" class="menu-item">Mi perfil</a>
+                    <a href="/accounts/logout/" class="menu-item">Cerrar sesión</a>
+                </div>
+            </div>
+        </div>
+    </header>
 
-    <div onclick="toggleMenu()" style="cursor:pointer;">
-        👤 {{ request.user.get_full_name|default:request.user.username }}
-    </div>
-
-    <div id="userMenu" style="
-        display:none;
-        position:absolute;
-        right:0;
-        top:30px;
-        background:#fff;
-        border-radius:10px;
-        box-shadow:0 10px 20px rgba(0,0,0,.1);
-        overflow:hidden;
-        min-width:160px;
-    ">
-
-        <a href="/accounts/perfil/" class="menu-item">Mi perfil</a>
-        <a href="/accounts/logout/" class="menu-item">Cerrar sesión</a>
-
-    </div>
-
-</div>
-
-<style>
-.menu-item{
-    display:block;
-    padding:10px 14px;
-    text-decoration:none;
-    color:#1e293b;
-}
-
-.menu-item:hover{
-    background:#f1f5f9;
-}
-</style>
-
-<script>
-function toggleMenu(){
-    let m = document.getElementById("userMenu");
-    m.style.display = m.style.display === "block" ? "none" : "block";
-}
-</script>
-
-<a href="/dashboard/" class="btn" style="
-    background:#111827;
-    color:#fff;
-    border-radius:10px;
-    padding:6px 12px;
-    font-weight:600;
-">
-    🏠 Dashboard
-</a>
-</div>
-
-{% block content %}{% endblock %}
-
+    {% block content %}{% endblock %}
 </main>
 </div>
 
+<script>
+window.addEventListener("load", function(){
+    const loader=document.getElementById("page-loader");
+    if(loader) loader.classList.add("hide");
+});
+function toggleMenu(){
+    const menu=document.getElementById("userMenu");
+    if(menu) menu.classList.toggle("open");
+}
+document.addEventListener("click",function(e){
+    const box=document.querySelector(".user-box");
+    const menu=document.getElementById("userMenu");
+    if(box && menu && !box.contains(e.target)) menu.classList.remove("open");
+});
+</script>
+{% block extra_js %}{% endblock %}
 </body>
 </html>
