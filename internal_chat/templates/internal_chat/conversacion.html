@@ -336,6 +336,11 @@
     if (!panel) return;
 
     const conversacionId = panel.dataset.conversationId;
+
+    console.log(
+        "Inicializando chat conversación:",
+        conversacionId
+    );
     const usuarioActualId = Number(panel.dataset.currentUserId);
     const esGrupo = panel.dataset.isMultipersonal === "true";
     const totalDestinatarios = Number(panel.dataset.totalRecipients || 1);
@@ -369,19 +374,23 @@
         '#csrf-form input[name="csrfmiddlewaretoken"]'
     );
 
+    // El WebSocket del chat solo depende de estos elementos esenciales.
+    // Adjuntos/CSRF son opcionales y NO deben impedir que el chat conecte.
     if (
         !contenedor ||
         !input ||
-        !boton ||
-        !botonAdjuntar ||
-        !archivoInput ||
-        !uploadStatus ||
-        !csrfInput
+        !boton
     ) {
+        console.error(
+            "No se pudo inicializar el chat: faltan elementos esenciales."
+        );
         return;
     }
 
-    const csrfToken = csrfInput.value;
+    const csrfToken =
+        csrfInput
+        ? csrfInput.value
+        : "";
 
 
     irAlUltimoMensaje();
@@ -514,9 +523,17 @@
                 : "Conectando chat..."
         );
 
+        const urlSocket =
+            socketUrl();
+
+        console.log(
+            "Abriendo WebSocket:",
+            urlSocket
+        );
+
         socket =
             new WebSocket(
-                socketUrl()
+                urlSocket
             );
 
         window.impetusChatSocket =
@@ -760,7 +777,12 @@
             };
 
         socket.onerror =
-            function () {
+            function (event) {
+                console.error(
+                    "Error WebSocket chat:",
+                    event
+                );
+
                 actualizarEstadoConexion(
                     "reconnecting",
                     "Reconectando chat..."
@@ -812,6 +834,61 @@
     boton.disabled = false;
 
     conectarSocket();
+
+    // Si el navegador recupera Internet, reintenta inmediatamente.
+    if (window.impetusChatOnlineHandler) {
+        window.removeEventListener(
+            "online",
+            window.impetusChatOnlineHandler
+        );
+    }
+
+    window.impetusChatOnlineHandler =
+        function () {
+            if (
+                chatGeneration ===
+                window.impetusChatGeneration
+            ) {
+                conectarSocket();
+            }
+        };
+
+    window.addEventListener(
+        "online",
+        window.impetusChatOnlineHandler
+    );
+
+    // Safari/Chrome pueden suspender WebSockets al dejar la pestaña
+    // en segundo plano. Al volver, validamos/reconectamos.
+    if (window.impetusChatVisibilityHandler) {
+        document.removeEventListener(
+            "visibilitychange",
+            window.impetusChatVisibilityHandler
+        );
+    }
+
+    window.impetusChatVisibilityHandler =
+        function () {
+            if (
+                document.visibilityState ===
+                    "visible" &&
+                chatGeneration ===
+                    window.impetusChatGeneration
+            ) {
+                if (
+                    !socket ||
+                    socket.readyState ===
+                        WebSocket.CLOSED
+                ) {
+                    conectarSocket();
+                }
+            }
+        };
+
+    document.addEventListener(
+        "visibilitychange",
+        window.impetusChatVisibilityHandler
+    );
 
 
     function actualizarEstadoUsuario() {
@@ -899,180 +976,6 @@
         "impetus:presence",
         window.impetusChatPresenceHandler
     );
-
-
-    function actualizarGrupoEscribiendo() {
-
-        if (!grupoEscribiendo) return;
-
-        const nombres =
-            Array.from(usuariosEscribiendo.values());
-
-        if (!nombres.length) {
-
-            grupoEscribiendo.classList.remove("visible");
-            grupoEscribiendo.textContent = "";
-            return;
-
-        }
-
-        let texto = "";
-
-        if (nombres.length === 1) {
-            texto = nombres[0] + " está escribiendo...";
-        } else if (nombres.length === 2) {
-            texto =
-                nombres[0] +
-                " y " +
-                nombres[1] +
-                " están escribiendo...";
-        } else {
-            texto =
-                nombres.length +
-                " personas están escribiendo...";
-        }
-
-        grupoEscribiendo.textContent = texto;
-        grupoEscribiendo.classList.add("visible");
-    }
-
-
-    function enviarEstadoEscritura(isTyping) {
-
-        if (socket.readyState !== WebSocket.OPEN) {
-            return;
-        }
-
-        socket.send(JSON.stringify({
-            type: "typing",
-            is_typing: isTyping
-        }));
-
-        typingEnviado = isTyping;
-    }
-
-
-    function quitarVacio() {
-
-        const vacio =
-            document.getElementById("sin-mensajes");
-
-        if (vacio) {
-            vacio.remove();
-        }
-    }
-
-
-    function crearBaseMensaje(data) {
-
-        quitarVacio();
-
-        const propio =
-            Number(data.autor_id) === usuarioActualId;
-
-        const fila =
-            document.createElement("div");
-
-        fila.className =
-            "message-row " +
-            (propio ? "mine" : "other");
-
-        fila.dataset.messageId =
-            data.mensaje_id;
-
-        const burbuja =
-            document.createElement("div");
-
-        burbuja.className =
-            "message-bubble";
-
-        if (!propio) {
-
-            const autor =
-                document.createElement("div");
-
-            autor.className =
-                "message-author";
-
-            autor.textContent =
-                data.autor;
-
-            burbuja.appendChild(autor);
-        }
-
-        return {
-            propio: propio,
-            fila: fila,
-            burbuja: burbuja
-        };
-    }
-
-
-    function agregarMeta(base, data) {
-
-        const meta =
-            document.createElement("div");
-
-        meta.className =
-            "message-meta";
-
-        const hora =
-            document.createElement("span");
-
-        hora.textContent =
-            data.creado_en;
-
-        meta.appendChild(hora);
-
-        if (base.propio) {
-
-            const estado =
-                document.createElement("span");
-
-            estado.className =
-                "read-status";
-
-            if (
-                data.tipo_conversacion === "GRUPO" ||
-                esGrupo
-            ) {
-
-                const leidos =
-                    Number(data.leidos || 0);
-
-                const total =
-                    Number(
-                        data.total_destinatarios ||
-                        totalDestinatarios
-                    );
-
-                estado.dataset.readCount =
-                    leidos;
-
-                estado.dataset.readTotal =
-                    total;
-
-                estado.textContent =
-                    leidos >= total
-                    ? "✓✓"
-                    : "✓ " + leidos + "/" + total;
-
-            } else {
-
-                estado.textContent = "✓";
-
-            }
-
-            meta.appendChild(estado);
-        }
-
-        base.burbuja.appendChild(meta);
-        base.fila.appendChild(base.burbuja);
-        contenedor.appendChild(base.fila);
-
-        contenedor.scrollTop =
-            contenedor.scrollHeight;
-    }
 
 
     function agregarMensaje(data) {
@@ -1374,7 +1277,19 @@
 
     async function subirArchivo(archivo) {
 
-        if (!archivo) return;
+        if (
+            !archivo ||
+            !botonAdjuntar ||
+            !uploadStatus ||
+            !csrfToken
+        ) {
+            if (!archivo) return;
+
+            alert(
+                "Los adjuntos no están disponibles en este momento, pero el chat de texto sigue funcionando."
+            );
+            return;
+        }
 
         const maxBytes =
             15 * 1024 * 1024;
@@ -1471,12 +1386,17 @@
     );
 
 
-    botonAdjuntar.addEventListener(
-        "click",
-        function () {
-            archivoInput.click();
-        }
-    );
+    if (
+        botonAdjuntar &&
+        archivoInput
+    ) {
+        botonAdjuntar.addEventListener(
+            "click",
+            function () {
+                archivoInput.click();
+            }
+        );
+    }
 
 
     archivoInput.addEventListener(
