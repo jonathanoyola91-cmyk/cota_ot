@@ -194,6 +194,68 @@
     cursor:wait;
 }
 
+
+/* =========================================================
+   AJUSTE: compositor siempre visible y scroll solo mensajes
+   ========================================================= */
+.chat-workspace{
+    height: calc(100dvh - 92px) !important;
+    min-height: 560px;
+    max-height: calc(100dvh - 92px) !important;
+    overflow: hidden !important;
+}
+
+.chat-sidebar{
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+.chat-main{
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.chat-header{
+    flex: 0 0 auto !important;
+}
+
+.chat-messages{
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.chat-connection-status{
+    flex: 0 0 auto !important;
+}
+
+.chat-compose{
+    flex: 0 0 auto !important;
+    position: relative !important;
+    bottom: auto !important;
+    z-index: 20;
+    background: #fff;
+}
+
+/* En móviles el navegador cambia de altura al abrir teclado.
+   100dvh mantiene el compositor dentro del área visible. */
+@media (max-width: 768px){
+    .chat-workspace{
+        height: calc(100dvh - 74px) !important;
+        min-height: 420px;
+        max-height: calc(100dvh - 74px) !important;
+    }
+}
+
 </style>
 
 <div class="chat-workspace">
@@ -291,6 +353,14 @@
         ? connectionStatus.querySelector(".connection-text")
         : null;
 
+
+    function irAlUltimoMensaje() {
+        requestAnimationFrame(function () {
+            contenedor.scrollTop =
+                contenedor.scrollHeight;
+        });
+    }
+
     const contenedor = document.getElementById("mensajes");
     const input = document.getElementById("mensaje-input");
     const boton = document.getElementById("enviar-mensaje");
@@ -315,6 +385,9 @@
     }
 
     const csrfToken = csrfInput.value;
+
+
+    irAlUltimoMensaje();
 
     const estadoUsuario =
         document.getElementById("estado-usuario");
