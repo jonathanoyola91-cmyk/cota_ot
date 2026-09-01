@@ -374,6 +374,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
 class NotificationConsumer(AsyncWebsocketConsumer):
 
+    PRESENCE_GROUP = "presence_all_users"
+
     async def connect(self):
         self.user = self.scope["user"]
 
@@ -383,47 +385,41 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
         self.user_group_name = f"user_{self.user.id}"
 
+        # Grupo privado del usuario:
+        # notificaciones, no leídos y respuestas de presencia.
         await self.channel_layer.group_add(
             self.user_group_name,
             self.channel_name
         )
 
+        # Un único grupo liviano para presencia.
+        await self.channel_layer.group_add(
+            self.PRESENCE_GROUP,
+            self.channel_name
+        )
+
         await self.accept()
 
-        conversaciones = await self.obtener_conversaciones_usuario()
+        # Avisar una sola vez que este usuario está conectado.
+        await self.channel_layer.group_send(
+            self.PRESENCE_GROUP,
+            {
+                "type": "presence_broadcast",
+                "usuario_id": self.user.id,
+                "online": True,
+            }
+        )
 
-        for conversacion_id in conversaciones:
-            await self.channel_layer.group_send(
-                f"chat_{conversacion_id}",
-                {
-                    "type": "presence_status",
-                    "usuario_id": self.user.id,
-                    "online": True,
-                }
-            )
-
-        # Presencia global para la lista lateral de chats privados.
-        contactos_privados = await self.obtener_contactos_privados()
-
-        for contacto_id in contactos_privados:
-            await self.channel_layer.group_send(
-                f"user_{contacto_id}",
-                {
-                    "type": "presence_global",
-                    "usuario_id": self.user.id,
-                    "online": True,
-                }
-            )
-
-            # Preguntamos si el contacto está conectado para pintar
-            # correctamente el estado inicial en nuestra lista lateral.
-            await self.channel_layer.group_send(
-                f"user_{contacto_id}",
-                {
-                    "type": "presence_probe_global",
-                    "requester_user_id": self.user.id,
-                }
-            )
+        # Solicitar una fotografía de los usuarios que están
+        # conectados en este momento. Cada socket global activo
+        # responde directamente al grupo privado del solicitante.
+        await self.channel_layer.group_send(
+            self.PRESENCE_GROUP,
+            {
+                "type": "presence_snapshot_request",
+                "requester_user_id": self.user.id,
+            }
+        )
 
         total = await self.obtener_total_no_leidos()
 
@@ -435,41 +431,56 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         )
 
     async def disconnect(self, close_code):
+        if not getattr(self, "user", None):
+            return
+
+        if not self.user.is_authenticated:
+            return
+
+        # Un solo evento de salida, sin recorrer conversaciones
+        # ni contactos.
+        await self.channel_layer.group_send(
+            self.PRESENCE_GROUP,
+            {
+                "type": "presence_broadcast",
+                "usuario_id": self.user.id,
+                "online": False,
+            }
+        )
+
         if hasattr(self, "user_group_name"):
-            conversaciones = await self.obtener_conversaciones_usuario()
-
-            for conversacion_id in conversaciones:
-                await self.channel_layer.group_send(
-                    f"chat_{conversacion_id}",
-                    {
-                        "type": "presence_status",
-                        "usuario_id": self.user.id,
-                        "online": False,
-                    }
-                )
-
-            contactos_privados = await self.obtener_contactos_privados()
-
-            for contacto_id in contactos_privados:
-                await self.channel_layer.group_send(
-                    f"user_{contacto_id}",
-                    {
-                        "type": "presence_global",
-                        "usuario_id": self.user.id,
-                        "online": False,
-                    }
-                )
-
             await self.channel_layer.group_discard(
                 self.user_group_name,
                 self.channel_name
             )
 
-    async def presence_probe(self, event):
-        await self.channel_layer.send(
-            event["requester_channel"],
+        await self.channel_layer.group_discard(
+            self.PRESENCE_GROUP,
+            self.channel_name
+        )
+
+    async def presence_broadcast(self, event):
+        await self.send(
+            text_data=json.dumps({
+                "type": "presence_global",
+                "usuario_id": event["usuario_id"],
+                "online": event["online"],
+            })
+        )
+
+    async def presence_snapshot_request(self, event):
+        requester_user_id = int(
+            event["requester_user_id"]
+        )
+
+        # No necesitamos respondernos a nosotros mismos.
+        if requester_user_id == self.user.id:
+            return
+
+        await self.channel_layer.group_send(
+            f"user_{requester_user_id}",
             {
-                "type": "presence_status",
+                "type": "presence_global",
                 "usuario_id": self.user.id,
                 "online": True,
             }
@@ -482,18 +493,6 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 "usuario_id": event["usuario_id"],
                 "online": event["online"],
             })
-        )
-
-    async def presence_probe_global(self, event):
-        # Si recibimos este evento es porque nuestro WebSocket global
-        # está conectado, por lo que respondemos "online".
-        await self.channel_layer.group_send(
-            f"user_{event['requester_user_id']}",
-            {
-                "type": "presence_global",
-                "usuario_id": self.user.id,
-                "online": True,
-            }
         )
 
     async def unread_count(self, event):
@@ -514,29 +513,6 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 "message": event["message"],
                 "count": event["count"],
             })
-        )
-
-    @database_sync_to_async
-    def obtener_conversaciones_usuario(self):
-        return list(
-            Conversacion.objects
-            .filter(participantes=self.user, activa=True)
-            .values_list("id", flat=True)
-            .distinct()
-        )
-
-    @database_sync_to_async
-    def obtener_contactos_privados(self):
-        return list(
-            Conversacion.objects
-            .filter(
-                participantes=self.user,
-                activa=True,
-                tipo="PRIVADA",
-            )
-            .values_list("participantes__id", flat=True)
-            .exclude(participantes__id=self.user.id)
-            .distinct()
         )
 
     @database_sync_to_async

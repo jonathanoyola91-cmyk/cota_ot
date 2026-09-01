@@ -82,9 +82,6 @@
 .chat-presence .presence-dot{width:7px;height:7px;border-radius:50%;background:#94a3b8;}
 .chat-presence.online{color:#16834b}.chat-presence.online .presence-dot{background:#22c55e;}
 .chat-presence.offline{color:#8491a3}.chat-presence.offline .presence-dot{background:#94a3b8;}
-.chat-presence.typing{color:#2563eb}.chat-presence.typing .presence-dot{background:#3b82f6;}
-.group-typing{display:none;font-size:11px;color:#2563eb;font-weight:800;margin-top:3px;}
-.group-typing.visible{display:block;}
 .chat-header-actions{display:flex;align-items:center;gap:7px;}
 .chat-header-chip{
     background:#f3f6fa;border:1px solid #e3e9f1;color:#53627a;border-radius:9px;padding:7px 9px;
@@ -395,15 +392,18 @@
     const estadoUsuarioTexto =
         document.getElementById("estado-usuario-texto");
 
-    const grupoEscribiendo =
-        document.getElementById("grupo-escribiendo");
-
     let otroUsuarioOnline = false;
-    let typingTimer = null;
-    let typingEnviado = false;
     const colaMensajes = [];
 
-    const usuariosEscribiendo = new Map();
+    let socket = null;
+    let reconnectTimer = null;
+    let reconnectAttempt = 0;
+
+    window.impetusChatGeneration =
+        (window.impetusChatGeneration || 0) + 1;
+
+    const chatGeneration =
+        window.impetusChatGeneration;
 
     function actualizarEstadoConexion(
         estado,
@@ -435,273 +435,383 @@
         ? "wss://"
         : "ws://";
 
-    if (
-        window.impetusChatSocket &&
-        (
-            window.impetusChatSocket.readyState === WebSocket.OPEN ||
-            window.impetusChatSocket.readyState === WebSocket.CONNECTING
-        )
-    ) {
-        window.impetusChatSocket.close(
-            1000,
-            "Cambio de conversación"
+    function socketUrl() {
+        return (
+            protocolo +
+            window.location.host +
+            "/ws/chat/" +
+            conversacionId +
+            "/"
         );
     }
 
-    actualizarEstadoConexion(
-        "connecting",
-        "Conectando chat..."
-    );
-
-    boton.disabled = true;
-
-    const socket = new WebSocket(
-        protocolo +
-        window.location.host +
-        "/ws/chat/" +
-        conversacionId +
-        "/"
-    );
-
-    window.impetusChatSocket = socket;
-
-
-    socket.onopen = function () {
-
-        console.log("Chat conectado");
-
-        actualizarEstadoConexion(
-            "connected",
-            "Chat conectado · puedes enviar mensajes aunque el destinatario esté desconectado."
-        );
-
-        boton.disabled = false;
-
-        socket.send(JSON.stringify({
-            type: "mark_read"
-        }));
-
-        while (colaMensajes.length) {
-            const pendiente =
-                colaMensajes.shift();
-
-            socket.send(
-                JSON.stringify(pendiente)
-            );
-        }
-
-    };
-
-
-    socket.onmessage = function (event) {
-
-        const data = JSON.parse(event.data);
-
-        if (data.type === "chat_message") {
-
-            const propio =
-                Number(data.autor_id) ===
-                usuarioActualId;
-
-            let confirmado = false;
-
-            if (
-                propio &&
-                data.client_message_id
-            ) {
-                const pendiente =
-                    contenedor.querySelector(
-                        '[data-client-message-id="' +
-                        data.client_message_id +
-                        '"]'
-                    );
-
-                if (pendiente) {
-                    pendiente.classList.remove(
-                        "pending"
-                    );
-
-                    pendiente.dataset.messageId =
-                        data.mensaje_id;
-
-                    const estadoPendiente =
-                        pendiente.querySelector(
-                            ".pending-status"
-                        );
-
-                    if (estadoPendiente) {
-                        estadoPendiente.className =
-                            "read-status";
-                        estadoPendiente.textContent =
-                            "✓";
-                    }
-
-                    confirmado = true;
-                }
-            }
-
-            if (!confirmado) {
-                agregarMensaje(data);
-            }
-
-            if (!propio) {
-
-                socket.send(JSON.stringify({
-                    type: "mark_read"
-                }));
-
-            }
-        }
-
-        if (data.type === "chat_attachment") {
-
-            agregarAdjunto(data);
-
-            if (Number(data.autor_id) !== usuarioActualId) {
-
-                socket.send(JSON.stringify({
-                    type: "mark_read"
-                }));
-
-            }
-        }
-
+    function programarReconexion() {
         if (
-            data.type === "presence_status" &&
-            !esGrupo
+            chatGeneration !==
+            window.impetusChatGeneration
         ) {
-
-            otroUsuarioOnline =
-                Boolean(data.online);
-
-            actualizarEstadoUsuario();
-
-            if (
-                otroUsuarioId &&
-                window.impetusActualizarPresenciaGlobal
-            ) {
-                window.impetusActualizarPresenciaGlobal(
-                    otroUsuarioId,
-                    otroUsuarioOnline
-                );
-            }
-
+            return;
         }
 
-        if (data.type === "typing_status") {
-
-            if (esGrupo) {
-
-                if (data.is_typing) {
-                    usuariosEscribiendo.set(
-                        Number(data.usuario_id),
-                        data.usuario_nombre
-                    );
-                } else {
-                    usuariosEscribiendo.delete(
-                        Number(data.usuario_id)
-                    );
-                }
-
-                actualizarGrupoEscribiendo();
-
-            } else {
-
-                if (data.is_typing) {
-
-                    estadoUsuario.className =
-                        "chat-presence typing";
-
-                    estadoUsuarioTexto.textContent =
-                        "Escribiendo...";
-
-                } else {
-
-                    actualizarEstadoUsuario();
-
-                }
-            }
+        if (reconnectTimer) {
+            return;
         }
 
-        if (data.type === "messages_read") {
+        const delays =
+            [500, 900, 1500, 2500, 4000, 5000];
 
-            if (Number(data.usuario_id) !== usuarioActualId) {
+        const delay =
+            delays[
+                Math.min(
+                    reconnectAttempt,
+                    delays.length - 1
+                )
+            ];
 
-                (data.estados || []).forEach(function (estado) {
+        reconnectAttempt += 1;
 
-                    const mensaje = document.querySelector(
-                        '[data-message-id="' +
-                        estado.mensaje_id +
-                        '"]'
-                    );
-
-                    if (!mensaje) return;
-
-                    const readStatus =
-                        mensaje.querySelector(".read-status");
-
-                    if (!readStatus) return;
-
-                    if (
-                        estado.tipo_conversacion === "GRUPO"
-                    ) {
-
-                        const leidos =
-                            Number(estado.leidos || 0);
-
-                        const total =
-                            Number(
-                                estado.total_destinatarios ||
-                                totalDestinatarios
-                            );
-
-                        readStatus.dataset.readCount = leidos;
-                        readStatus.dataset.readTotal = total;
-
-                        if (leidos >= total) {
-                            readStatus.textContent = "✓✓";
-                        } else {
-                            readStatus.textContent =
-                                "✓ " + leidos + "/" + total;
-                        }
-
-                    } else {
-
-                        readStatus.textContent = "✓✓";
-
-                    }
-
-                });
-
-            }
-        }
-
-    };
-
-
-    socket.onerror = function () {
         actualizarEstadoConexion(
-            "error",
-            "Problema de conexión. Intentando recuperar el chat..."
+            "reconnecting",
+            "Reconectando chat..."
         );
-    };
 
-    socket.onclose = function (event) {
-        console.log("Chat desconectado");
+        reconnectTimer =
+            setTimeout(
+                function () {
+                    reconnectTimer = null;
+                    conectarSocket();
+                },
+                delay
+            );
+    }
+
+    function conectarSocket() {
+        if (
+            chatGeneration !==
+            window.impetusChatGeneration
+        ) {
+            return;
+        }
 
         if (
-            event.code === 1000 &&
-            event.reason ===
-                "Cambio de conversación"
+            socket &&
+            (
+                socket.readyState ===
+                    WebSocket.OPEN ||
+                socket.readyState ===
+                    WebSocket.CONNECTING
+            )
         ) {
             return;
         }
 
         actualizarEstadoConexion(
-            "reconnecting",
-            "Conexión interrumpida. Cambia de conversación o recarga si no se recupera."
+            reconnectAttempt > 0
+                ? "reconnecting"
+                : "connecting",
+            reconnectAttempt > 0
+                ? "Reconectando chat..."
+                : "Conectando chat..."
         );
-    };
+
+        socket =
+            new WebSocket(
+                socketUrl()
+            );
+
+        window.impetusChatSocket =
+            socket;
+
+        socket.onopen = function () {
+            if (
+                chatGeneration !==
+                window.impetusChatGeneration
+            ) {
+                socket.close(
+                    1000,
+                    "Cambio de conversación"
+                );
+                return;
+            }
+
+            console.log(
+                "Chat conectado"
+            );
+
+            reconnectAttempt = 0;
+
+            if (reconnectTimer) {
+                clearTimeout(
+                    reconnectTimer
+                );
+                reconnectTimer = null;
+            }
+
+            actualizarEstadoConexion(
+                "connected",
+                "Chat conectado"
+            );
+
+            boton.disabled = false;
+
+            socket.send(
+                JSON.stringify({
+                    type: "mark_read"
+                })
+            );
+
+            while (
+                colaMensajes.length &&
+                socket.readyState ===
+                    WebSocket.OPEN
+            ) {
+                socket.send(
+                    JSON.stringify(
+                        colaMensajes.shift()
+                    )
+                );
+            }
+        };
+
+        socket.onmessage =
+            function (event) {
+                let data;
+
+                try {
+                    data =
+                        JSON.parse(
+                            event.data
+                        );
+                } catch (error) {
+                    console.error(
+                        "Mensaje WebSocket inválido:",
+                        error
+                    );
+                    return;
+                }
+
+                if (
+                    data.type ===
+                    "chat_message"
+                ) {
+                    const propio =
+                        Number(
+                            data.autor_id
+                        ) ===
+                        usuarioActualId;
+
+                    let confirmado =
+                        false;
+
+                    if (
+                        propio &&
+                        data.client_message_id
+                    ) {
+                        const pendiente =
+                            contenedor.querySelector(
+                                '[data-client-message-id="' +
+                                data.client_message_id +
+                                '"]'
+                            );
+
+                        if (pendiente) {
+                            pendiente.classList.remove(
+                                "pending"
+                            );
+
+                            pendiente.dataset.messageId =
+                                data.mensaje_id;
+
+                            const estadoPendiente =
+                                pendiente.querySelector(
+                                    ".pending-status"
+                                );
+
+                            if (
+                                estadoPendiente
+                            ) {
+                                estadoPendiente.className =
+                                    "read-status";
+                                estadoPendiente.textContent =
+                                    "✓";
+                            }
+
+                            confirmado =
+                                true;
+                        }
+                    }
+
+                    if (!confirmado) {
+                        agregarMensaje(
+                            data
+                        );
+                    }
+
+                    if (
+                        !propio &&
+                        socket.readyState ===
+                            WebSocket.OPEN
+                    ) {
+                        socket.send(
+                            JSON.stringify({
+                                type: "mark_read"
+                            })
+                        );
+                    }
+                }
+
+                if (
+                    data.type ===
+                    "chat_attachment"
+                ) {
+                    agregarAdjunto(
+                        data
+                    );
+
+                    if (
+                        Number(
+                            data.autor_id
+                        ) !==
+                            usuarioActualId &&
+                        socket.readyState ===
+                            WebSocket.OPEN
+                    ) {
+                        socket.send(
+                            JSON.stringify({
+                                type: "mark_read"
+                            })
+                        );
+                    }
+                }
+
+                if (
+                    data.type ===
+                    "messages_read"
+                ) {
+                    if (
+                        Number(
+                            data.usuario_id
+                        ) !==
+                        usuarioActualId
+                    ) {
+                        (
+                            data.estados || []
+                        ).forEach(
+                            function (estado) {
+                                const mensaje =
+                                    document.querySelector(
+                                        '[data-message-id="' +
+                                        estado.mensaje_id +
+                                        '"]'
+                                    );
+
+                                if (!mensaje) {
+                                    return;
+                                }
+
+                                const readStatus =
+                                    mensaje.querySelector(
+                                        ".read-status"
+                                    );
+
+                                if (
+                                    !readStatus
+                                ) {
+                                    return;
+                                }
+
+                                if (
+                                    estado.tipo_conversacion ===
+                                    "GRUPO"
+                                ) {
+                                    const leidos =
+                                        Number(
+                                            estado.leidos ||
+                                            0
+                                        );
+
+                                    const total =
+                                        Number(
+                                            estado.total_destinatarios ||
+                                            totalDestinatarios
+                                        );
+
+                                    readStatus.dataset.readCount =
+                                        leidos;
+
+                                    readStatus.dataset.readTotal =
+                                        total;
+
+                                    readStatus.textContent =
+                                        leidos >= total
+                                        ? "✓✓"
+                                        : "✓ " +
+                                          leidos +
+                                          "/" +
+                                          total;
+                                } else {
+                                    readStatus.textContent =
+                                        "✓✓";
+                                }
+                            }
+                        );
+                    }
+                }
+            };
+
+        socket.onerror =
+            function () {
+                actualizarEstadoConexion(
+                    "reconnecting",
+                    "Reconectando chat..."
+                );
+            };
+
+        socket.onclose =
+            function (event) {
+                console.log(
+                    "Chat desconectado"
+                );
+
+                if (
+                    event.code === 1000 &&
+                    event.reason ===
+                        "Cambio de conversación"
+                ) {
+                    return;
+                }
+
+                programarReconexion();
+            };
+    }
+
+    // Cerrar únicamente el socket de la conversación anterior.
+    // El WebSocket global de notificaciones permanece intacto.
+    if (
+        window.impetusChatSocket &&
+        (
+            window.impetusChatSocket.readyState ===
+                WebSocket.OPEN ||
+            window.impetusChatSocket.readyState ===
+                WebSocket.CONNECTING
+        )
+    ) {
+        try {
+            window.impetusChatSocket.close(
+                1000,
+                "Cambio de conversación"
+            );
+        } catch (error) {
+            console.debug(
+                "No fue posible cerrar el socket anterior.",
+                error
+            );
+        }
+    }
+
+    boton.disabled = false;
+
+    conectarSocket();
 
 
     function actualizarEstadoUsuario() {
@@ -727,6 +837,26 @@
                 "Desconectado";
 
         }
+    }
+
+
+    if (
+        !esGrupo &&
+        otroUsuarioId &&
+        window.impetusPresenceState &&
+        Object.prototype.hasOwnProperty.call(
+            window.impetusPresenceState,
+            String(otroUsuarioId)
+        )
+    ) {
+        otroUsuarioOnline =
+            Boolean(
+                window.impetusPresenceState[
+                    String(otroUsuarioId)
+                ]
+            );
+
+        actualizarEstadoUsuario();
     }
 
 
@@ -1207,54 +1337,37 @@
          * pendiente para cuando vuelva a conectarse.
          */
         if (
+            socket &&
             socket.readyState ===
-            WebSocket.OPEN
+                WebSocket.OPEN
         ) {
-
             socket.send(
-                JSON.stringify(payload)
+                JSON.stringify(
+                    payload
+                )
             );
-
             return;
         }
 
-        if (
-            socket.readyState ===
-            WebSocket.CONNECTING
-        ) {
-
-            colaMensajes.push(payload);
-
-            actualizarEstadoConexion(
-                "reconnecting",
-                "Conectando... tu mensaje se enviará automáticamente."
-            );
-
-            return;
-        }
-
-        const pendiente =
-            contenedor.querySelector(
-                '[data-client-message-id="' +
-                clientMessageId +
-                '"]'
-            );
-
-        if (pendiente) {
-            const estado =
-                pendiente.querySelector(
-                    ".pending-status"
-                );
-
-            if (estado) {
-                estado.textContent = "⚠";
-            }
-        }
+        // Si nuestra conexión está abriendo o se cayó,
+        // el mensaje queda en cola y la reconexión se
+        // inicia automáticamente.
+        colaMensajes.push(
+            payload
+        );
 
         actualizarEstadoConexion(
-            "error",
-            "No hay conexión con el servidor. El destinatario puede estar desconectado; eso no impide enviar cuando tu conexión se recupere."
+            "reconnecting",
+            "Reconectando... tu mensaje se enviará automáticamente."
         );
+
+        if (
+            !socket ||
+            socket.readyState ===
+                WebSocket.CLOSED
+        ) {
+            conectarSocket();
+        }
 
     }
 
@@ -1486,10 +1599,6 @@
             if (event.key === "Enter") {
 
                 event.preventDefault();
-
-                enviarEstadoEscritura(
-                    false
-                );
 
                 enviarMensaje();
 

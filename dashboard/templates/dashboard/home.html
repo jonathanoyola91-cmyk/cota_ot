@@ -678,6 +678,9 @@ document.addEventListener("click",function(e){
 {% if request.user.is_authenticated %}
 <script>
 (function(){
+    window.impetusPresenceState =
+        window.impetusPresenceState || {};
+
     const badge = document.getElementById("chat-unread-badge");
     const floatingBadge = document.getElementById("chat-floating-badge");
     const floatingButton = document.getElementById("chatFloatingButton");
@@ -688,6 +691,7 @@ document.addEventListener("click",function(e){
 
     let notificationSocket = null;
     let reconnectTimer = null;
+    let notificationReconnectAttempt = 0;
     let audioContext = null;
     let audioEnabled = false;
 
@@ -756,6 +760,10 @@ document.addEventListener("click",function(e){
     }
 
     function actualizarPresenciaGlobal(usuarioId, online){
+        window.impetusPresenceState[
+            String(usuarioId)
+        ] = Boolean(online);
+
         const elementos = document.querySelectorAll(
             '[data-presence-user-id="' + String(usuarioId) + '"]'
         );
@@ -850,6 +858,8 @@ document.addEventListener("click",function(e){
 
         notificationSocket.onopen = function(){
             console.log("🔔 Notificaciones del chat conectadas");
+            notificationReconnectAttempt = 0;
+
             if(reconnectTimer){
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
@@ -893,7 +903,23 @@ document.addEventListener("click",function(e){
 
         notificationSocket.onclose = function(){
             console.log("🔔 Notificaciones del chat desconectadas");
-            reconnectTimer = setTimeout(conectarNotificaciones, 3000);
+
+            const delays = [700, 1200, 2000, 3500, 5000];
+            const delay =
+                delays[
+                    Math.min(
+                        notificationReconnectAttempt,
+                        delays.length - 1
+                    )
+                ];
+
+            notificationReconnectAttempt += 1;
+
+            reconnectTimer =
+                setTimeout(
+                    conectarNotificaciones,
+                    delay
+                );
         };
     }
 
