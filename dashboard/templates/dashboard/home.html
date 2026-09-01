@@ -888,8 +888,24 @@ document.addEventListener("click",function(e){
             }
 
             if(data.type === "new_message"){
-                const yaEstoyEnChat = estaEnConversacion(data.conversation_id);
+                const yaEstoyEnChat =
+                    estaEnConversacion(
+                        data.conversation_id
+                    );
+
+                // El módulo Chat escucha este evento como respaldo
+                // del WebSocket específico de la conversación.
+                window.dispatchEvent(
+                    new CustomEvent(
+                        "impetus:new-message",
+                        {
+                            detail: data
+                        }
+                    )
+                );
+
                 mostrarToastChat(data);
+
                 if(!yaEstoyEnChat){
                     destacarChat();
                     reproducirSonidoChat();

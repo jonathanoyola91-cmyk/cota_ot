@@ -95,14 +95,21 @@
 .message-row{display:flex;margin-bottom:10px;}
 .message-row.mine{justify-content:flex-end}.message-row.other{justify-content:flex-start;}
 .message-bubble{
-    max-width:min(68%,720px);padding:9px 11px;border-radius:13px;background:#fff;border:1px solid #e5ebf3;
-    box-shadow:0 3px 9px rgba(17,42,85,.04);word-break:break-word;
+    width:fit-content;
+    min-width:72px;
+    max-width:min(54%,560px);
+    padding:7px 9px;
+    border-radius:12px;
+    background:#fff;
+    border:1px solid #e5ebf3;
+    box-shadow:0 2px 7px rgba(17,42,85,.04);
+    word-break:break-word;
 }
 .message-row.mine .message-bubble{background:#e8f1ff;border-color:#d4e5ff;border-bottom-right-radius:4px;}
 .message-row.other .message-bubble{border-bottom-left-radius:4px;}
-.message-author{font-size:11px;font-weight:900;color:#1f66e5;margin-bottom:4px;}
-.message-text{font-size:14px;line-height:1.52;color:#25344d;white-space:pre-wrap;}
-.message-meta{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;font-size:9.5px;color:#8794a7;}
+.message-author{font-size:11px;font-weight:900;color:#1f66e5;margin-bottom:2px;}
+.message-text{font-size:14px;line-height:1.28;color:#25344d;white-space:pre-wrap;}
+.message-meta{display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:3px;font-size:9px;color:#8794a7;}
 .read-status{font-weight:950;color:#6682a6}.read-status.read{color:#1f66e5;}
 .chat-compose{
     display:flex;align-items:flex-end;gap:8px;padding:11px 14px;background:#fff;border-top:1px solid #e8edf4;
@@ -134,7 +141,7 @@
 @media(max-width:1050px){.chat-workspace{grid-template-columns:280px minmax(0,1fr)}}
 @media(max-width:820px){
     .chat-workspace{height:calc(100vh - 165px);min-height:600px;grid-template-columns:1fr;}
-    .chat-sidebar{display:none}.message-bubble{max-width:86%}.chat-title{max-width:220px}
+    .chat-sidebar{display:none}.message-bubble{max-width:82%}.chat-title{max-width:220px}
 }
 .chat-main.chat-panel-loading{
     opacity:.45;
@@ -978,10 +985,254 @@
     );
 
 
+    // Respaldo de recepción:
+    // si el mensaje llega primero por /ws/notificaciones/,
+    // lo mostramos en la conversación abierta. Si luego llega
+    // también por /ws/chat/<id>/, el mensaje_id evita duplicados.
+    if (window.impetusChatNewMessageHandler) {
+        window.removeEventListener(
+            "impetus:new-message",
+            window.impetusChatNewMessageHandler
+        );
+    }
+
+    window.impetusChatNewMessageHandler =
+        function(event) {
+
+            if (
+                !event.detail ||
+                Number(
+                    event.detail.conversation_id
+                ) !==
+                Number(conversacionId)
+            ) {
+                return;
+            }
+
+            const data =
+                event.detail;
+
+            if (
+                data.message_id &&
+                contenedor.querySelector(
+                    '[data-message-id="' +
+                    String(data.message_id) +
+                    '"]'
+                )
+            ) {
+                return;
+            }
+
+            agregarMensaje({
+                mensaje_id:
+                    data.message_id,
+                message:
+                    data.message || "",
+                autor:
+                    data.sender ||
+                    "Nuevo mensaje",
+                autor_id:
+                    0,
+                creado_en:
+                    data.creado_en || "",
+                tipo_conversacion:
+                    esGrupo
+                    ? "GRUPO"
+                    : "PRIVADA"
+            });
+
+            if (
+                socket &&
+                socket.readyState ===
+                    WebSocket.OPEN
+            ) {
+                socket.send(
+                    JSON.stringify({
+                        type:
+                            "mark_read"
+                    })
+                );
+            }
+        };
+
+    window.addEventListener(
+        "impetus:new-message",
+        window.impetusChatNewMessageHandler
+    );
+
+
+    function crearBaseMensaje(data) {
+
+        // Dedupe: si ya llegó por el WebSocket de conversación
+        // o por el WebSocket global, no lo volvemos a pintar.
+        if (
+            data.mensaje_id &&
+            contenedor.querySelector(
+                '[data-message-id="' +
+                String(data.mensaje_id) +
+                '"]'
+            )
+        ) {
+            return {
+                duplicado: true
+            };
+        }
+
+        quitarVacio();
+
+        const propio =
+            Number(data.autor_id) ===
+            usuarioActualId;
+
+        const fila =
+            document.createElement("div");
+
+        fila.className =
+            "message-row " +
+            (propio ? "mine" : "other");
+
+        if (data.mensaje_id) {
+            fila.dataset.messageId =
+                data.mensaje_id;
+        }
+
+        const burbuja =
+            document.createElement("div");
+
+        burbuja.className =
+            "message-bubble";
+
+        if (!propio && data.autor) {
+            const autor =
+                document.createElement("div");
+
+            autor.className =
+                "message-author";
+
+            autor.textContent =
+                data.autor;
+
+            burbuja.appendChild(
+                autor
+            );
+        }
+
+        fila.appendChild(
+            burbuja
+        );
+
+        contenedor.appendChild(
+            fila
+        );
+
+        return {
+            duplicado: false,
+            propio: propio,
+            fila: fila,
+            burbuja: burbuja
+        };
+    }
+
+
+    function agregarMeta(base, data) {
+
+        if (
+            !base ||
+            base.duplicado
+        ) {
+            return;
+        }
+
+        const meta =
+            document.createElement("div");
+
+        meta.className =
+            "message-meta";
+
+        const hora =
+            document.createElement("span");
+
+        hora.textContent =
+            data.creado_en ||
+            new Date().toLocaleTimeString(
+                [],
+                {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false
+                }
+            );
+
+        meta.appendChild(
+            hora
+        );
+
+        if (base.propio) {
+
+            const estado =
+                document.createElement("span");
+
+            estado.className =
+                "read-status";
+
+            if (
+                esGrupo &&
+                data.total_destinatarios
+            ) {
+                const leidos =
+                    Number(
+                        data.leidos || 0
+                    );
+
+                const total =
+                    Number(
+                        data.total_destinatarios ||
+                        totalDestinatarios
+                    );
+
+                estado.dataset.readCount =
+                    leidos;
+
+                estado.dataset.readTotal =
+                    total;
+
+                estado.textContent =
+                    leidos >= total
+                    ? "✓✓"
+                    : "✓ " +
+                      leidos +
+                      "/" +
+                      total;
+            } else {
+                estado.textContent =
+                    "✓";
+            }
+
+            meta.appendChild(
+                estado
+            );
+        }
+
+        base.burbuja.appendChild(
+            meta
+        );
+
+        contenedor.scrollTop =
+            contenedor.scrollHeight;
+    }
+
+
     function agregarMensaje(data) {
 
         const base =
             crearBaseMensaje(data);
+
+        if (
+            !base ||
+            base.duplicado
+        ) {
+            return;
+        }
 
         const texto =
             document.createElement("div");
@@ -1030,6 +1281,13 @@
 
         const base =
             crearBaseMensaje(data);
+
+        if (
+            !base ||
+            base.duplicado
+        ) {
+            return;
+        }
 
         const contAdjunto =
             document.createElement("div");
