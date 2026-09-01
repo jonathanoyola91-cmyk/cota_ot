@@ -2,6 +2,48 @@
 
 {% block page_title %}
     {% if modo == "editar" %}Editar Cotización{% else %}Nueva Cotización{% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("quotationForm");
+    const valorInput = document.getElementById("id_valor");
+
+    if (!form || !valorInput) return;
+
+    // Permite mostrar puntos de miles en un campo originalmente numérico.
+    valorInput.setAttribute("type", "text");
+    valorInput.setAttribute("inputmode", "numeric");
+    valorInput.setAttribute("autocomplete", "off");
+
+    function soloDigitos(valor) {
+        return String(valor || "").replace(/\D/g, "");
+    }
+
+    function formatearMiles(valor) {
+        const limpio = soloDigitos(valor);
+        if (!limpio) return "";
+        return limpio.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+
+    // Formatea también el valor existente al editar una cotización.
+    valorInput.value = formatearMiles(valorInput.value);
+
+    valorInput.addEventListener("input", function () {
+        const posicionFinal = this.selectionStart === this.value.length;
+        this.value = formatearMiles(this.value);
+
+        if (posicionFinal) {
+            this.setSelectionRange(this.value.length, this.value.length);
+        }
+    });
+
+    // Django debe recibir el número limpio: 25000000, no 25.000.000.
+    form.addEventListener("submit", function () {
+        valorInput.value = soloDigitos(valorInput.value);
+    });
+});
+</script>
+
 {% endblock %}
 
 {% block content %}
@@ -144,7 +186,7 @@
             <a href="/quotes/" class="btn btn-secondary">Volver</a>
         </div>
 
-        <form method="post">
+        <form method="post" id="quotationForm">
             {% if form.errors %}
                 <div style="background:#fee2e2;color:#991b1b;padding:14px;border-radius:12px;margin-bottom:16px;">
                      <strong>Hay errores en el formulario:</strong>
@@ -201,6 +243,7 @@
                 <div class="quote-field">
                     <label>Valor</label>
                     {{ form.valor }}
+                    <small style="color:#64748b;">Ingrese el valor sin decimales. Se mostrará con separador de miles.</small>
                 </div>
 
                 <div class="quote-field full">

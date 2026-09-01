@@ -1,4 +1,5 @@
 {% extends "dashboard/home.html" %}
+{% load quote_filters %}
 
 {% block title %}Factura PAW {{ factura.numero_paw }}{% endblock %}
 {% block page_title %}Factura · PAW {{ factura.numero_paw }}{% endblock %}
@@ -76,12 +77,12 @@
 
             <div class="card">
                 <small>IVA (19%)</small>
-                <strong>$ {{ factura.iva|floatformat:0 }}</strong>
+                <strong>$ {{ factura.iva|formato_cop }}</strong>
             </div>
 
             <div class="card">
                 <small>Total con IVA</small>
-                <strong>$ {{ factura.total_con_iva|floatformat:0 }}</strong>
+                <strong>$ {{ factura.total_con_iva|formato_cop }}</strong>
             </div>
 
             <div class="card">

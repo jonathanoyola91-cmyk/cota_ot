@@ -1,63 +1,250 @@
 {% extends "dashboard/home.html" %}
 {% block page_title %}Taller · Horas de ensamble{% endblock %}
+
 {% block content %}
+
+<style>
+    .horas-summary{
+        display:grid;
+        grid-template-columns:repeat(4,minmax(170px,1fr));
+        gap:14px;
+        margin-bottom:20px;
+    }
+
+    .horas-summary .card strong{
+        display:block;
+        margin-top:6px;
+        font-size:28px;
+    }
+
+    .horas-summary .card small{
+        font-weight:750;
+    }
+
+    .horas-panel{
+        margin-top:18px;
+    }
+
+    .horas-panel.abiertos{
+        border-top:4px solid #2563eb;
+    }
+
+    .horas-panel.finalizados{
+        border-top:4px solid #16a34a;
+    }
+
+    .horas-panel.pendientes{
+        border-top:4px solid #f59e0b;
+    }
+
+    .panel-head-pro{
+        display:flex;
+        justify-content:space-between;
+        align-items:flex-start;
+        gap:14px;
+        flex-wrap:wrap;
+        margin-bottom:18px;
+    }
+
+    .panel-head-pro h2{
+        margin:0;
+        font-size:21px;
+    }
+
+    .panel-head-pro p{
+        color:#64748b;
+        margin:5px 0 0;
+        font-size:13px;
+    }
+
+    .count-pill{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-width:30px;
+        height:30px;
+        padding:0 10px;
+        border-radius:999px;
+        background:#eef2ff;
+        color:#3730a3;
+        font-size:12px;
+        font-weight:900;
+    }
+
+    .estado-pill{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:6px 10px;
+        border-radius:999px;
+        font-size:11px;
+        font-weight:850;
+        white-space:nowrap;
+    }
+
+    .estado-abierto{
+        background:#dbeafe;
+        color:#1d4ed8;
+    }
+
+    .estado-finalizado{
+        background:#dcfce7;
+        color:#166534;
+    }
+
+    .empty-state-horas{
+        padding:28px 18px;
+        text-align:center;
+        color:#64748b;
+        font-weight:700;
+    }
+
+    @media(max-width:1000px){
+        .horas-summary{
+            grid-template-columns:repeat(2,1fr);
+        }
+    }
+
+    @media(max-width:650px){
+        .horas-summary{
+            grid-template-columns:1fr;
+        }
+    }
+</style>
+
+
 <div class="panel">
-    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;">
+    <div class="panel-head-pro" style="margin-bottom:0;">
         <div>
             <h2>Control de horas · Ensamble de cámaras</h2>
-            <p style="color:#64748b;">
-                Los PAW tipo Ensamble aparecen automáticamente. El cierre de horas no modifica el flujo principal del PAW.
+            <p>
+                Los PAW tipo Ensamble aparecen automáticamente.
+                El cierre de horas no modifica el flujo principal del PAW.
             </p>
         </div>
+
         {% if puede_reporte %}
-            <a class="btn btn-secondary" href="{% url 'taller:horas_reporte' %}">Reporte Contabilidad</a>
+            <a class="btn btn-secondary" href="{% url 'taller:horas_reporte' %}">
+                Reporte Contabilidad
+            </a>
         {% endif %}
     </div>
 </div>
 
-<div class="panel" style="margin-top:18px;">
-    <h2>Controles de horas iniciados</h2><br>
+
+<div class="horas-summary">
+    <div class="card">
+        <small>Controles totales</small>
+        <strong>{{ total_controles }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Controles abiertos</small>
+        <strong>{{ total_abiertos }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Controles finalizados</small>
+        <strong>{{ total_finalizados }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Pendientes por iniciar</small>
+        <strong>{{ total_pendientes_iniciar }}</strong>
+    </div>
+</div>
+
+
+<div class="panel horas-panel abiertos">
+    <div class="panel-head-pro">
+        <div>
+            <h2>Controles de horas activos</h2>
+            <p>Ensamble y reparación con registro de horas todavía abierto.</p>
+        </div>
+        <span class="count-pill">{{ total_abiertos }}</span>
+    </div>
+
     <div style="overflow-x:auto;">
         <table>
-            <thead><tr>
-                <th>PAW</th><th>Trabajo</th><th>Cliente</th><th>Estado interno</th><th>Técnicos</th>
-                <th>H. ordinarias</th><th>HE diurna</th><th>HE nocturna</th><th>Total HH</th><th>Acción</th>
-            </tr></thead>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Trabajo</th>
+                    <th>Cliente</th>
+                    <th>Estado interno</th>
+                    <th>Técnicos</th>
+                    <th>H. ordinarias</th>
+                    <th>HE diurna</th>
+                    <th>HE nocturna</th>
+                    <th>Total HH</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
             <tbody>
-            {% for e in ensambles %}
+                {% for e in ensambles_abiertos %}
                 <tr>
                     <td><strong>{{ e.paw.numero_paw|default:"-" }}</strong></td>
                     <td>{{ e.paw.nombre_paw|default:"-" }}</td>
                     <td>{{ e.paw.cliente|default:"-" }}</td>
-                    <td>{{ e.get_estado_display }}</td>
+                    <td>
+                        <span class="estado-pill estado-abierto">
+                            {{ e.get_estado_display }}
+                        </span>
+                    </td>
                     <td>{{ e.cantidad_tecnicos }}</td>
                     <td>{{ e.total_horas_ordinarias|floatformat:2 }}</td>
                     <td>{{ e.total_extra_diurna|floatformat:2 }}</td>
                     <td>{{ e.total_extra_nocturna|floatformat:2 }}</td>
                     <td><strong>{{ e.total_horas_hombre|floatformat:2 }}</strong></td>
-                    <td><a class="btn" href="{% url 'taller:horas_detalle' e.id %}">Ver</a></td>
+                    <td>
+                        <a class="btn" href="{% url 'taller:horas_detalle' e.id %}">
+                            Ver
+                        </a>
+                    </td>
                 </tr>
-            {% empty %}
-                <tr><td colspan="10">No hay controles de horas iniciados.</td></tr>
-            {% endfor %}
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state-horas">
+                            No hay controles de horas activos.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
+
 {% if puede_operar %}
-<div class="panel" style="margin-top:18px;">
-    <h2>PAW pendientes de iniciar control de horas</h2>
-    <p style="color:#64748b;margin:6px 0 16px;">
-        Se muestran automáticamente los PAW cuyo tipo de operación es Ensamble / Taller.
-    </p>
+<div class="panel horas-panel pendientes">
+    <div class="panel-head-pro">
+        <div>
+            <h2>PAW pendientes de iniciar control de horas</h2>
+            <p>
+                PAW de Taller / Ensamble que todavía no tienen un control de horas iniciado.
+            </p>
+        </div>
+        <span class="count-pill">{{ total_pendientes_iniciar }}</span>
+    </div>
+
     <div style="overflow-x:auto;">
         <table>
-            <thead><tr>
-                <th>PAW</th><th>Trabajo</th><th>Cliente</th><th>Campo</th><th>Estado PAW</th><th>Acción</th>
-            </tr></thead>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Trabajo</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Estado PAW</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
             <tbody>
-            {% for paw in paws_disponibles %}
+                {% for paw in paws_disponibles %}
                 <tr>
                     <td><strong>{{ paw.numero_paw }}</strong></td>
                     <td>{{ paw.nombre_paw|default:"-" }}</td>
@@ -70,12 +257,84 @@
                         </a>
                     </td>
                 </tr>
-            {% empty %}
-                <tr><td colspan="6">No hay PAW de ensamble pendientes de iniciar.</td></tr>
-            {% endfor %}
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state-horas">
+                            No hay PAW de ensamble pendientes de iniciar.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 {% endif %}
+
+
+<div class="panel horas-panel finalizados">
+    <div class="panel-head-pro">
+        <div>
+            <h2>Controles de horas finalizados</h2>
+            <p>
+                Histórico de controles cerrados para consulta y trazabilidad.
+            </p>
+        </div>
+        <span class="count-pill">{{ total_finalizados }}</span>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Trabajo</th>
+                    <th>Cliente</th>
+                    <th>Estado interno</th>
+                    <th>Técnicos</th>
+                    <th>H. ordinarias</th>
+                    <th>HE diurna</th>
+                    <th>HE nocturna</th>
+                    <th>Total HH</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for e in ensambles_finalizados %}
+                <tr>
+                    <td><strong>{{ e.paw.numero_paw|default:"-" }}</strong></td>
+                    <td>{{ e.paw.nombre_paw|default:"-" }}</td>
+                    <td>{{ e.paw.cliente|default:"-" }}</td>
+                    <td>
+                        <span class="estado-pill estado-finalizado">
+                            {{ e.get_estado_display }}
+                        </span>
+                    </td>
+                    <td>{{ e.cantidad_tecnicos }}</td>
+                    <td>{{ e.total_horas_ordinarias|floatformat:2 }}</td>
+                    <td>{{ e.total_extra_diurna|floatformat:2 }}</td>
+                    <td>{{ e.total_extra_nocturna|floatformat:2 }}</td>
+                    <td><strong>{{ e.total_horas_hombre|floatformat:2 }}</strong></td>
+                    <td>
+                        <a class="btn" href="{% url 'taller:horas_detalle' e.id %}">
+                            Ver
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state-horas">
+                            Todavía no hay controles de horas finalizados.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 {% endblock %}

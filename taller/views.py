@@ -431,17 +431,36 @@ def dashboard_horas_taller(request):
         .order_by("-creado_en")
     )
 
-    ensambles = (
+    ensambles_base = (
         EnsambleTaller.objects
         .select_related("paw", "paw__cotizacion", "responsable")
         .prefetch_related("tecnicos", "jornadas")
         .filter(paw__isnull=False)
+    )
+
+    # Controles que todavía pueden recibir jornadas o ajustes.
+    ensambles_abiertos = (
+        ensambles_base
+        .exclude(estado=EnsambleTaller.Estado.FINALIZADO)
         .order_by("-actualizado_en")
+    )
+
+    # Histórico de controles de horas ya cerrados.
+    ensambles_finalizados = (
+        ensambles_base
+        .filter(estado=EnsambleTaller.Estado.FINALIZADO)
+        .order_by("-fecha_fin", "-actualizado_en")
     )
 
     return render(request, "taller_horas/dashboard.html", {
         "paws_disponibles": paws_disponibles,
-        "ensambles": ensambles,
+        "ensambles": ensambles_base,
+        "ensambles_abiertos": ensambles_abiertos,
+        "ensambles_finalizados": ensambles_finalizados,
+        "total_controles": ensambles_base.count(),
+        "total_abiertos": ensambles_abiertos.count(),
+        "total_finalizados": ensambles_finalizados.count(),
+        "total_pendientes_iniciar": paws_disponibles.count(),
         "puede_operar": _puede_taller(request.user),
         "puede_reporte": _puede_ver_reporte_horas(request.user),
     })

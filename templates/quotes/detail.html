@@ -1,4 +1,5 @@
 {% extends "dashboard/home.html" %}
+{% load humanize %}
 
 {% block page_title %}Cotización {{ cotizacion.numero_cotizacion }}{% endblock %}
 
@@ -55,7 +56,7 @@
 
     <div class="card">
         <small>Valor</small>
-        <strong>$ {{ cotizacion.valor }}</strong>
+        <strong>$ {{ cotizacion.valor|floatformat:"0g" }}</strong>
     </div>
 
 </div>

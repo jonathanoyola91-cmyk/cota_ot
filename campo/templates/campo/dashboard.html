@@ -4,16 +4,138 @@
 
 {% block content %}
 
-<div class="cards">
+<style>
+    .campo-summary{
+        display:grid;
+        grid-template-columns:repeat(3,minmax(180px,1fr));
+        gap:14px;
+        margin-bottom:22px;
+    }
+
+    .campo-summary .card{
+        position:relative;
+        overflow:hidden;
+    }
+
+    .campo-summary .card strong{
+        font-size:28px;
+        display:block;
+        margin-top:5px;
+    }
+
+    .campo-summary .card small{
+        font-weight:700;
+    }
+
+    .campo-panel{
+        margin-bottom:22px;
+    }
+
+    .campo-panel-header{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:14px;
+        margin-bottom:18px;
+    }
+
+    .campo-panel-header h2{
+        margin:0;
+        font-size:22px;
+    }
+
+    .campo-panel-header p{
+        margin:5px 0 0;
+        color:#64748b;
+        font-size:13px;
+    }
+
+    .estado-badge{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        padding:6px 10px;
+        border-radius:999px;
+        font-size:11px;
+        font-weight:800;
+        white-space:nowrap;
+    }
+
+    .estado-curso{
+        background:#dbeafe;
+        color:#1d4ed8;
+    }
+
+    .estado-finalizado{
+        background:#dcfce7;
+        color:#166534;
+    }
+
+    .count-badge{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-width:28px;
+        height:28px;
+        padding:0 9px;
+        border-radius:999px;
+        background:#eef2ff;
+        color:#3730a3;
+        font-weight:900;
+        font-size:12px;
+    }
+
+    .finalizados-panel{
+        border-top:4px solid #16a34a;
+    }
+
+    .abiertos-panel{
+        border-top:4px solid #2563eb;
+    }
+
+    .empty-campo{
+        padding:28px 18px;
+        text-align:center;
+        color:#64748b;
+        font-weight:700;
+    }
+
+    @media(max-width:900px){
+        .campo-summary{
+            grid-template-columns:1fr;
+        }
+        .campo-panel-header{
+            flex-direction:column;
+        }
+    }
+</style>
+
+<div class="campo-summary">
     <div class="card">
-        <small>Servicios</small>
-        <strong>{{ servicios|length }}</strong>
+        <small>Servicios totales</small>
+        <strong>{{ total_servicios }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Servicios abiertos</small>
+        <strong>{{ total_abiertos }}</strong>
+    </div>
+
+    <div class="card">
+        <small>Servicios finalizados</small>
+        <strong>{{ total_finalizados }}</strong>
     </div>
 </div>
 
-<div class="panel">
-    <h2>Servicios de campo</h2>
-    <br>
+
+<div class="panel campo-panel abiertos-panel">
+    <div class="campo-panel-header">
+        <div>
+            <h2>Servicios activos / en curso</h2>
+            <p>Servicios que todavía requieren seguimiento, registro diario o cierre técnico.</p>
+        </div>
+        <span class="count-badge">{{ total_abiertos }}</span>
+    </div>
 
     <div style="overflow-x:auto;">
         <table>
@@ -31,14 +153,19 @@
                     <th>Acción</th>
                 </tr>
             </thead>
+
             <tbody>
-                {% for servicio in servicios %}
+                {% for servicio in servicios_abiertos %}
                 <tr>
                     <td><strong>{{ servicio.paw.numero_paw }}</strong></td>
                     <td>{{ servicio.paw.nombre_paw|default:"-" }}</td>
                     <td>{{ servicio.paw.cliente|default:"-" }}</td>
                     <td>{{ servicio.paw.campo|default:"-" }}</td>
-                    <td>{{ servicio.estado }}</td>
+                    <td>
+                        <span class="estado-badge estado-curso">
+                            {{ servicio.get_estado_display }}
+                        </span>
+                    </td>
                     <td>{{ servicio.especialista_lider|default:"-" }}</td>
                     <td>{{ servicio.especialista_apoyo|default:"-" }}</td>
                     <td>{{ servicio.total_dias }}</td>
@@ -51,7 +178,70 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10">No hay servicios de campo registrados.</td>
+                    <td colspan="10">
+                        <div class="empty-campo">No hay servicios de campo abiertos.</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+<div class="panel campo-panel finalizados-panel">
+    <div class="campo-panel-header">
+        <div>
+            <h2>Servicios finalizados</h2>
+            <p>Histórico de servicios cerrados. Se mantienen disponibles para consulta y trazabilidad.</p>
+        </div>
+        <span class="count-badge">{{ total_finalizados }}</span>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>PAW</th>
+                    <th>Nombre PAW</th>
+                    <th>Cliente</th>
+                    <th>Campo</th>
+                    <th>Estado</th>
+                    <th>Líder</th>
+                    <th>Apoyo</th>
+                    <th>Días</th>
+                    <th>Total gastos</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for servicio in servicios_finalizados %}
+                <tr>
+                    <td><strong>{{ servicio.paw.numero_paw }}</strong></td>
+                    <td>{{ servicio.paw.nombre_paw|default:"-" }}</td>
+                    <td>{{ servicio.paw.cliente|default:"-" }}</td>
+                    <td>{{ servicio.paw.campo|default:"-" }}</td>
+                    <td>
+                        <span class="estado-badge estado-finalizado">
+                            {{ servicio.get_estado_display }}
+                        </span>
+                    </td>
+                    <td>{{ servicio.especialista_lider|default:"-" }}</td>
+                    <td>{{ servicio.especialista_apoyo|default:"-" }}</td>
+                    <td>{{ servicio.total_dias }}</td>
+                    <td><strong>$ {{ servicio.total_gastos|floatformat:0 }}</strong></td>
+                    <td>
+                        <a class="btn" href="{% url 'campo:detalle_servicio' servicio.id %}">
+                            Ver detalle
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-campo">Todavía no hay servicios finalizados.</div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

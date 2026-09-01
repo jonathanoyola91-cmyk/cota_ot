@@ -462,15 +462,33 @@ def dashboard_campo(request):
         messages.error(request, "No tienes acceso al módulo Campo.")
         return redirect("/")
 
-    servicios = (
+    servicios_base = (
         FieldService.objects
         .select_related("paw", "responsable")
         .prefetch_related("gastos")
+    )
+
+    # Servicios que todavía requieren gestión del equipo de campo.
+    servicios_abiertos = (
+        servicios_base
+        .exclude(estado=FieldService.Estado.FINALIZADO)
         .order_by("-actualizado_en")
     )
 
+    # Histórico de servicios ya cerrados.
+    servicios_finalizados = (
+        servicios_base
+        .filter(estado=FieldService.Estado.FINALIZADO)
+        .order_by("-fecha_fin", "-actualizado_en")
+    )
+
     return render(request, "campo/dashboard.html", {
-        "servicios": servicios,
+        "servicios": servicios_base,
+        "servicios_abiertos": servicios_abiertos,
+        "servicios_finalizados": servicios_finalizados,
+        "total_servicios": servicios_base.count(),
+        "total_abiertos": servicios_abiertos.count(),
+        "total_finalizados": servicios_finalizados.count(),
     })
 
 

@@ -1,4 +1,6 @@
 {% extends "dashboard/home.html" %}
+{% load quote_filters %}
+
 {% block page_title %}Cotizaciones{% endblock %}
 
 {% block content %}
@@ -125,7 +127,7 @@
 
     <div class="card kpi-card">
         <small>Valor adjudicado</small>
-        <strong>$ {{ valor_adjudicado }}</strong>
+        <strong>$ {{ valor_adjudicado|formato_cop }}</strong>
     </div>
 
 </div>
@@ -133,14 +135,17 @@
 <div class="panel">
 
     <div class="quote-panel-header">
+
         <form method="get" style="display:flex; gap:10px; margin-top:10px;">
-    <input type="text" name="q"
-           placeholder="Buscar cotización, cliente..."
-           value="{{ query }}"
-           style="padding:8px; width:280px;">
-    
-    <button class="btn">Buscar</button>
-</form>
+            <input type="text"
+                   name="q"
+                   placeholder="Buscar cotización, cliente..."
+                   value="{{ query }}"
+                   style="padding:8px; width:280px;">
+
+            <button class="btn">Buscar</button>
+        </form>
+
         <div>
             <h3>Listado de Cotizaciones</h3>
             <p>Control comercial, estado de adjudicación y generación de PAW.</p>
@@ -149,10 +154,13 @@
         <a href="/quotes/crear/" class="btn">
             Nueva Cotización
         </a>
+
     </div>
 
     <div class="quote-table-wrap">
+
         <table class="quote-table">
+
             <thead>
                 <tr>
                     <th>No</th>
@@ -166,10 +174,15 @@
             </thead>
 
             <tbody>
+
                 {% for c in cotizaciones %}
+
                 <tr>
+
                     <td>
-                        <span class="quote-number">{{ c.numero_cotizacion }}</span>
+                        <span class="quote-number">
+                            {{ c.numero_cotizacion }}
+                        </span>
                     </td>
 
                     <td class="quote-name">
@@ -181,7 +194,7 @@
                     </td>
 
                     <td class="quote-value">
-                        $ {{ c.valor }}
+                        $ {{ c.valor|formato_cop }}
                     </td>
 
                     <td>
@@ -204,44 +217,62 @@
 
                     <td>
                         <div class="quote-actions">
-                            <a class="btn btn-small" href="/quotes/{{ c.id }}/">
+
+                            <a class="btn btn-small"
+                               href="/quotes/{{ c.id }}/">
                                 Ver
                             </a>
 
-                            <a class="btn btn-secondary btn-small" href="/quotes/{{ c.id }}/editar/">
+                            <a class="btn btn-secondary btn-small"
+                               href="/quotes/{{ c.id }}/editar/">
                                 Editar
                             </a>
 
                             {% if c.estado == "ADJUDICADA" %}
 
                                 {% if c.paws.count %}
-                                    <a class="btn btn-small" href="/paw/{{ c.paws.first.id }}/">
+
+                                    <a class="btn btn-small"
+                                       href="/paw/{{ c.paws.first.id }}/">
                                         Ver PAW
                                     </a>
-                               {% else %}
-                                    <a class="btn btn-small" href="/paw/crear/{{ c.id }}/">
+
+                                {% else %}
+
+                                    <a class="btn btn-small"
+                                       href="/paw/crear/{{ c.id }}/">
                                         Generar PAW
                                     </a>
+
                                 {% endif %}
 
                             {% else %}
-                                <span class="badge-soft">No adjudicada</span>
+
+                                <span class="badge-soft">
+                                    No adjudicada
+                                </span>
+
                             {% endif %}
 
-                            
                         </div>
                     </td>
+
                 </tr>
 
                 {% empty %}
+
                 <tr>
                     <td colspan="7" class="empty-row">
                         No hay cotizaciones registradas.
                     </td>
                 </tr>
+
                 {% endfor %}
+
             </tbody>
+
         </table>
+
     </div>
 
 </div>
