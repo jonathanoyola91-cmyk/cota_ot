@@ -1134,6 +1134,17 @@
     }
 
 
+    function quitarVacio() {
+        const vacio = contenedor.querySelector(
+            ".empty-chat"
+        );
+
+        if (vacio) {
+            vacio.remove();
+        }
+    }
+
+
     function agregarMensajePendiente(
         textoMensaje,
         clientMessageId
@@ -1527,60 +1538,8 @@
     );
 
 
-    input.addEventListener(
-        "input",
-        function () {
-
-            const escribiendo =
-                input.value.trim().length > 0;
-
-            if (
-                escribiendo &&
-                !typingEnviado
-            ) {
-                enviarEstadoEscritura(true);
-            }
-
-            if (
-                !escribiendo &&
-                typingEnviado
-            ) {
-                enviarEstadoEscritura(false);
-            }
-
-            clearTimeout(
-                typingTimer
-            );
-
-            if (escribiendo) {
-
-                typingTimer =
-                    setTimeout(
-                        function () {
-                            enviarEstadoEscritura(false);
-                        },
-                        1400
-                    );
-
-            }
-        }
-    );
-
-
-    input.addEventListener(
-        "blur",
-        function () {
-
-            clearTimeout(
-                typingTimer
-            );
-
-            if (typingEnviado) {
-                enviarEstadoEscritura(false);
-            }
-
-        }
-    );
+    // Indicador "escribiendo..." desactivado temporalmente.
+    // Se prioriza estabilidad y velocidad del envío por WebSocket.
 
 
     contenedor.scrollTop =
