@@ -213,6 +213,6 @@ IMPETUS_CONTROL_URL = os.environ.get(
 # AUTH (login)
 # =========================
 
-LOGIN_URL = "/admin/login/"
+LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/dashboard/"
-LOGOUT_REDIRECT_URL = "/admin/login/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"

@@ -43,8 +43,9 @@
         .brand-panel {
             padding: 54px;
             background:
-                linear-gradient(rgba(0, 0, 0, .42), rgba(0, 0, 0, .72)),
-                url("https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=1600&auto=format&fit=crop");
+                radial-gradient(circle at 20% 20%, rgba(31,102,229,.28), transparent 35%),
+                radial-gradient(circle at 80% 75%, rgba(247,185,40,.18), transparent 32%),
+                linear-gradient(145deg, #06172f 0%, #071b3a 55%, #0b2a57 100%);
             background-size: cover;
             background-position: center;
             display: flex;
@@ -242,15 +243,20 @@
     <main class="login-shell">
 
         <section class="brand-panel">
-            <div class="brand-badge">
-                ⚙️ ERP INDUSTRIAL
+            <div>
+                <img src="{% static 'img/logo_impetus_control_blanco.png' %}"
+                     alt="IMPETUS CONTROL"
+                     style="width:190px;max-height:82px;object-fit:contain;object-position:left center;display:block;">
+                <div class="brand-badge" style="margin-top:20px;">
+                    CENTRO DE CONTROL OPERACIONAL
+                </div>
             </div>
 
             <div class="brand-title">
-                <h1>IMPETUS <span>CONTROL</span></h1>
+                <h1>Control total de su <span>operación</span></h1>
                 <p>
-                    Plataforma interna para control de cotizaciones, PAW, compras,
-                    inventario, taller, finanzas y facturación.
+                    Integra cotizaciones, PAW, compras, inventario, taller,
+                    campo, finanzas y facturación en una sola plataforma.
                 </p>
             </div>
 
@@ -282,7 +288,13 @@
                 <input type="text" name="username" id="id_username" required autofocus autocomplete="username">
 
                 <label for="id_password">Contraseña</label>
-                <input type="password" name="password" id="id_password" required autocomplete="current-password">
+                <div style="position:relative;">
+                    <input type="password" name="password" id="id_password" required autocomplete="current-password" style="padding-right:52px;">
+                    <button type="button" id="togglePassword" aria-label="Mostrar contraseña"
+                            style="position:absolute;right:8px;top:7px;width:36px;height:34px;border:0;border-radius:9px;background:rgba(255,255,255,.08);color:#dce5ec;cursor:pointer;">
+                        👁
+                    </button>
+                </div>
 
                 <button type="submit" class="btn-login">
                     Ingresar al sistema
@@ -300,5 +312,16 @@
 
     </main>
 
+<script>
+        const togglePassword = document.getElementById("togglePassword");
+        const passwordInput = document.getElementById("id_password");
+        if (togglePassword && passwordInput) {
+            togglePassword.addEventListener("click", function () {
+                const visible = passwordInput.type === "text";
+                passwordInput.type = visible ? "password" : "text";
+                this.setAttribute("aria-label", visible ? "Mostrar contraseña" : "Ocultar contraseña");
+            });
+        }
+    </script>
 </body>
 </html>

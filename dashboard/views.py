@@ -2,11 +2,13 @@ from datetime import date
 
 from django.shortcuts import render
 from django.db.models import Sum, Q
+from django.contrib.auth.decorators import login_required
 
 from quotes.models import Quotation
 from paw_app.models import Paw
 
 
+@login_required
 def dashboard_home(request):
     """Dashboard ejecutivo de IMPETUS CONTROL.
 
