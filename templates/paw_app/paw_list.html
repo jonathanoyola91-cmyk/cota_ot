@@ -90,6 +90,27 @@
         color: #0f172a;
     }
 
+    .paw-number-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 58px;
+        padding: 7px 10px;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-weight: 900;
+        text-decoration: none;
+        transition: .15s ease;
+    }
+
+    .paw-number-link:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
     .paw-name {
         min-width: 180px;
         font-weight: 600;
@@ -298,7 +319,6 @@
                     <th>Estado PAW</th>
                     <th>Avance</th>
                     <th>Creado por</th>
-                    <th>Acción</th>
                 </tr>
             </thead>
 
@@ -306,7 +326,9 @@
                 {% for paw in paws %}
                 <tr>
                     <td>
-                        <span class="paw-main">{{ paw.numero_paw }}</span>
+                        <a class="paw-number-link" href="{% url 'paw_detail' paw.id %}" title="Ver PAW {{ paw.numero_paw }}">
+                            {{ paw.numero_paw }}
+                        </a>
                     </td>
 
                     <td class="paw-name">
@@ -407,15 +429,11 @@
                     </td>
 
                     <td>{{ paw.creado_por.username }}</td>
-
-                    <td class="action-cell">
-                        <a class="btn" href="{% url 'paw_detail' paw.id %}">Ver</a>
-                    </td>
                 </tr>
 
                 {% empty %}
                 <tr>
-                    <td colspan="13" class="empty-state">No hay PAW para mostrar con los filtros aplicados.</td>
+                    <td colspan="12" class="empty-state">No hay PAW para mostrar con los filtros aplicados.</td>
                 </tr>
                 {% endfor %}
             </tbody>
