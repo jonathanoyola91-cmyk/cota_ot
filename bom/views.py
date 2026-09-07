@@ -256,56 +256,74 @@ def eliminar_item_bom(request, item_id):
         "bom": bom,
     })
 
+@login_required
 def enviar_bom_compras(request, bom_id):
-    bom = get_object_or_404(Bom.objects.prefetch_related("items"), id=bom_id)
+    """Envía el BOM primero a revisión de Inventario."""
+    bom = get_object_or_404(
+        Bom.objects.select_related("workorder", "workorder__paw").prefetch_related("items"),
+        id=bom_id,
+    )
 
     if request.method == "POST":
-
         bom.marcar_solicitud()
+        paw = bom.workorder.paw if bom.workorder else None
 
-        compra, created = PurchaseRequest.objects.get_or_create(
+        compra, _ = PurchaseRequest.objects.get_or_create(
             bom=bom,
             defaults={
-                "estado": "BORRADOR",
+                "estado": PurchaseRequest.Estado.BORRADOR,
                 "creado_por": request.user,
-                "paw_numero": bom.workorder.paw.numero_paw if bom.workorder.paw else "",
-                "paw_nombre": bom.workorder.paw.nombre_paw if bom.workorder.paw else "",
-            }
+                "paw_numero": paw.numero_paw if paw else "",
+                "paw_nombre": paw.nombre_paw if paw else "",
+            },
         )
 
-        if bom.workorder.paw:
-            paw = bom.workorder.paw
-            paw.estado_operativo = "EN_COMPRAS"
-            paw.save(update_fields=["estado_operativo"])
+        campos_compra = []
+        if paw:
+            if compra.paw_numero != paw.numero_paw:
+                compra.paw_numero = paw.numero_paw
+                campos_compra.append("paw_numero")
+            if compra.paw_nombre != paw.nombre_paw:
+                compra.paw_nombre = paw.nombre_paw
+                campos_compra.append("paw_nombre")
+        if campos_compra:
+            campos_compra.append("actualizado_en")
+            compra.save(update_fields=campos_compra)
 
         items_bom = bom.items.all()
         ids_bom_actuales = list(items_bom.values_list("id", flat=True))
 
-        # Eliminar de compras líneas que ya no existen en el BOM actual
-        PurchaseLine.objects.filter(request=compra).exclude(
-            bom_item_id__in=ids_bom_actuales
-        ).delete()
+        if not compra.inventario_revisado_en:
+            PurchaseLine.objects.filter(request=compra).exclude(
+                bom_item_id__in=ids_bom_actuales
+            ).delete()
 
-        for item in items_bom:
-            linea, created = PurchaseLine.objects.get_or_create(
-                request=compra,
-                bom_item=item,
-                defaults={
-                    "codigo": item.codigo,
-                    "descripcion": item.descripcion,
-                    "cantidad_requerida": item.cantidad_solicitada,
-                }
-            )
+            for item in items_bom:
+                linea, _ = PurchaseLine.objects.get_or_create(
+                    request=compra,
+                    bom_item=item,
+                    defaults={
+                        "codigo": item.codigo,
+                        "descripcion": item.descripcion,
+                        "cantidad_requerida": item.cantidad_solicitada,
+                    },
+                )
+                linea.plano = item.plano or ""
+                linea.codigo = item.codigo or ""
+                linea.descripcion = item.descripcion
+                linea.unidad = item.unidad or ""
+                linea.observaciones_bom = item.observaciones or ""
+                linea.cantidad_requerida = item.cantidad_solicitada or 0
+                linea.cantidad_disponible = 0
+                linea.save()
 
-            linea.codigo = item.codigo
-            linea.descripcion = item.descripcion
-            linea.cantidad_requerida = item.cantidad_solicitada
-            linea.save(update_fields=[
-                "codigo",
-                "descripcion",
-                "cantidad_requerida",
-            ])
+            if paw:
+                paw.estado_operativo = "EN_REVISION_INVENTARIO"
+                paw.save(update_fields=["estado_operativo"])
 
-        return redirect("compras_oil:paw_detail", pk=compra.pk)
+        if compra.inventario_revisado_en and compra.lineas.filter(cantidad_a_comprar__gt=0).exists():
+            return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+        return redirect("inventario:revision_bom_detail", pk=compra.pk)
 
     return render(request, "bom/enviar_bom_compras.html", {"bom": bom})

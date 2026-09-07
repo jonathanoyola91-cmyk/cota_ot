@@ -272,10 +272,14 @@ def dashboard(request):
         messages.error(request, "No tienes acceso a Compras.")
         return redirect("/")
 
-    compras_all = PurchaseRequest.objects.all().order_by("-actualizado_en")
+    compras_all = PurchaseRequest.objects.filter(
+        inventario_revisado_en__isnull=False,
+        lineas__cantidad_a_comprar__gt=0,
+    ).distinct().order_by("-actualizado_en")
 
     compras = (
         PurchaseRequest.objects
+        .filter(inventario_revisado_en__isnull=False, lineas__cantidad_a_comprar__gt=0)
         .exclude(estado="CERRADA")
         .select_related("bom", "bom__workorder", "creado_por")
         .annotate(
@@ -661,6 +665,15 @@ def paw_detail(request, pk):
 
     from .forms import PurchaseLineFormSet
 
+    # El BOM primero debe ser validado por Inventario.
+    # ADMIN conserva acceso de soporte para no bloquear PAW históricos.
+    if not compra.inventario_revisado_en and not tiene_rol(request.user, ["ADMIN"]):
+        messages.warning(
+            request,
+            "Esta solicitud todavía está pendiente de revisión por Inventario."
+        )
+        return redirect("compras_oil:dashboard")
+
     queryset = compra.lineas.filter(cantidad_requerida__gt=0).order_by("id")
 
     if request.method == "POST":
@@ -736,7 +749,8 @@ def paw_detail(request, pk):
         and not flujo_recepcion_ok
         and compra.estado != "CERRADA"
     )
-    puede_generar_entrega = flujo_recepcion_ok and not flujo_entrega_creada and compra.estado != "CERRADA"
+    # La entrega física ya no pertenece a Compras; la genera Inventario.
+    puede_generar_entrega = False
     puede_cerrar_compra = flujo_recepcion_ok and flujo_entrega_ok and compra.estado != "CERRADA"
 
     if compra.estado == "CERRADA":
@@ -752,12 +766,10 @@ def paw_detail(request, pk):
         siguiente_paso = "Enviar a inventario"
     elif not flujo_recepcion_ok:
         siguiente_paso = "Registrar recepción de material"
-    elif not flujo_entrega_creada:
-        siguiente_paso = "Definir destino y generar entrega"
-    elif not flujo_entrega_ok:
-        siguiente_paso = "Completar cantidades entregadas"
+    elif not flujo_recepcion_ok:
+        siguiente_paso = "Inventario debe completar la recepción"
     else:
-        siguiente_paso = "Cerrar compra"
+        siguiente_paso = "Compra completada; Inventario define y registra la entrega física"
 
     return render(request, "compras_oil/paw_detail.html", {
         "compra": compra,

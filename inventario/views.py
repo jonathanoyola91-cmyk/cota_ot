@@ -9,7 +9,9 @@ from django.core.mail import EmailMultiAlternatives
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
-from django.db.models import F, Q
+from django.db.models import F, Q, Count
+from django.db import transaction
+from django.views.decorators.http import require_POST
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -127,7 +129,53 @@ def inventario_dashboard(request):
         else:
             historial_entregas.append(entrega)
 
+    # ======================================================
+    # BOM / SOLICITUDES PENDIENTES DE REVISIÓN DE INVENTARIO
+    # La solicitud puede existir técnicamente, pero Compras no la ve hasta
+    # que Inventario confirme cantidades disponibles.
+    # ======================================================
+    from compras_oil.models import PurchaseRequest
+
+    revisiones_pendientes = (
+        PurchaseRequest.objects
+        .filter(inventario_revisado_en__isnull=True)
+        .exclude(estado="CERRADA")
+        .select_related("bom", "bom__workorder", "creado_por")
+        .annotate(
+            total_lineas_bom=Count(
+                "lineas",
+                filter=Q(lineas__cantidad_requerida__gt=0),
+                distinct=True,
+            )
+        )
+        .order_by("creado_en")
+    )
+
+    # PAW revisados que ya tienen todo el material necesario disponible
+    # (por stock o por recepción de compra) y aún no tienen entrega generada.
+    candidatos_entrega = (
+        PurchaseRequest.objects
+        .filter(inventario_revisado_en__isnull=False)
+        .exclude(estado="CERRADA")
+        .select_related("bom", "bom__workorder")
+        .prefetch_related("lineas", "recepcion_inventario__lineas")
+        .order_by("actualizado_en")
+    )
+    listos_para_entrega = []
+    for compra in candidatos_entrega:
+        try:
+            compra.entrega_taller
+            continue
+        except Exception:
+            pass
+        if _material_comprado_completamente_recibido(compra):
+            listos_para_entrega.append(compra)
+
     return render(request, "inventario/dashboard.html", {
+        "revisiones_pendientes": revisiones_pendientes,
+        "total_revisiones_pendientes": revisiones_pendientes.count(),
+        "listos_para_entrega": listos_para_entrega,
+        "total_listos_para_entrega": len(listos_para_entrega),
         "recepciones": recepciones_pendientes,
         "recepciones_completas": recepciones_completas,
         "entregas": entregas_taller_pendientes,
@@ -148,6 +196,190 @@ def inventario_dashboard(request):
             estado="LISTO"
         ).count(),
     })
+
+@login_required
+def revision_bom_detail(request, pk):
+    """
+    Inventario valida disponibilidad por línea antes de que Compras gestione el BOM.
+    No mueve stock contable: registra la cantidad físicamente verificada/reservable
+    en el campo histórico cantidad_disponible de PurchaseLine.
+    """
+    from compras_oil.models import PurchaseRequest
+
+    compra = get_object_or_404(
+        PurchaseRequest.objects
+        .select_related("bom", "bom__workorder", "creado_por")
+        .prefetch_related("lineas__bom_item"),
+        pk=pk,
+    )
+
+    lineas = compra.lineas.filter(cantidad_requerida__gt=0).order_by("id")
+
+    if request.method == "POST":
+        if compra.inventario_revisado_en:
+            messages.info(request, "Este BOM ya fue revisado por Inventario.")
+            return redirect("inventario:revision_bom_detail", pk=compra.pk)
+
+        errores = []
+        cantidades = {}
+        for linea in lineas:
+            raw = (request.POST.get(f"cantidad_disponible_{linea.id}") or "0").strip()
+            try:
+                cantidad = Decimal(raw.replace(",", "."))
+            except Exception:
+                errores.append(f"Cantidad inválida para {linea.codigo or linea.descripcion}.")
+                continue
+
+            requerida = Decimal(linea.cantidad_requerida or 0)
+            if cantidad < 0:
+                errores.append(f"La disponibilidad de {linea.codigo or linea.descripcion} no puede ser negativa.")
+            if cantidad > requerida:
+                # Para este flujo interesa cuánto se reserva para el PAW, no todo el stock físico.
+                cantidad = requerida
+            cantidades[linea.id] = cantidad
+
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
+            with transaction.atomic():
+                for linea in lineas:
+                    linea.cantidad_disponible = cantidades.get(linea.id, Decimal("0"))
+                    linea.save(update_fields=["cantidad_disponible", "cantidad_a_comprar"])
+
+                compra.inventario_revisado_en = timezone.now()
+                compra.inventario_revisado_por = request.user
+                compra.save(update_fields=[
+                    "inventario_revisado_en",
+                    "inventario_revisado_por",
+                    "actualizado_en",
+                ])
+
+                faltantes = compra.lineas.filter(cantidad_a_comprar__gt=0).exists()
+                try:
+                    paw = compra.bom.workorder.paw
+                    paw.estado_operativo = "EN_COMPRAS" if faltantes else "MATERIAL_RECIBIDO"
+                    paw.save(update_fields=["estado_operativo"])
+                except Exception:
+                    pass
+
+            if faltantes:
+                messages.success(
+                    request,
+                    "Revisión confirmada. Solo los faltantes quedaron habilitados para Compras."
+                )
+                return redirect("inventario:dashboard")
+
+            messages.success(
+                request,
+                "Revisión confirmada. Todo el material está disponible; no se requiere compra. Ya puedes generar la entrega."
+            )
+            return redirect("inventario:revision_bom_detail", pk=compra.pk)
+
+    total_requerido = sum((Decimal(x.cantidad_requerida or 0) for x in lineas), Decimal("0"))
+    total_disponible = sum((Decimal(x.cantidad_disponible or 0) for x in lineas), Decimal("0"))
+    total_comprar = sum((Decimal(x.cantidad_a_comprar or 0) for x in lineas), Decimal("0"))
+
+    return render(request, "inventario/revision_bom_detail.html", {
+        "compra": compra,
+        "lineas": lineas,
+        "total_requerido": total_requerido,
+        "total_disponible": total_disponible,
+        "total_comprar": total_comprar,
+    })
+
+
+def _material_comprado_completamente_recibido(compra):
+    """True si cada faltante que debía comprarse ya fue recibido por Inventario."""
+    lineas_compra = list(compra.lineas.filter(cantidad_a_comprar__gt=0))
+    if not lineas_compra:
+        return True
+    try:
+        recepcion = compra.recepcion_inventario
+    except Exception:
+        return False
+    recibidas = {x.purchase_line_id: x for x in recepcion.lineas.all()}
+    for linea in lineas_compra:
+        r = recibidas.get(linea.id)
+        if not r:
+            return False
+        if Decimal(r.cantidad_recibida or 0) < Decimal(linea.cantidad_a_comprar or 0):
+            return False
+    return True
+
+
+@require_POST
+@login_required
+def generar_entrega(request, pk):
+    """Inventario define el destino y genera la salida física del material del PAW."""
+    from compras_oil.models import PurchaseRequest
+    from .models import WorkshopDeliveryLine
+
+    compra = get_object_or_404(
+        PurchaseRequest.objects.prefetch_related("lineas", "recepcion_inventario__lineas"),
+        pk=pk,
+    )
+
+    if not compra.inventario_revisado_en:
+        messages.error(request, "Primero debes revisar el BOM en Inventario.")
+        return redirect("inventario:revision_bom_detail", pk=compra.pk)
+
+    if not _material_comprado_completamente_recibido(compra):
+        messages.error(request, "Aún existen materiales comprados pendientes de recepción.")
+        return redirect("inventario:dashboard")
+
+    destino = (request.POST.get("destino") or "").upper().strip()
+    destinos_validos = {"TALLER", "CAMPO", "INVENTARIO"}
+    if destino not in destinos_validos:
+        messages.error(request, "Selecciona Taller, Campo o Despacho.")
+        return redirect("inventario:dashboard")
+
+    try:
+        paw = compra.bom.workorder.paw
+    except Exception:
+        paw = None
+
+    if destino == "TALLER" and paw and not getattr(paw, "aplica_taller", False):
+        messages.error(request, "Este PAW no tiene habilitado Taller.")
+        return redirect("inventario:dashboard")
+    if destino == "CAMPO" and paw and not getattr(paw, "aplica_campo", False):
+        messages.error(request, "Este PAW no tiene habilitado Campo.")
+        return redirect("inventario:dashboard")
+
+    with transaction.atomic():
+        entrega, created = WorkshopDelivery.objects.get_or_create(
+            purchase_request=compra,
+            defaults={"creado_por": request.user, "destino": destino},
+        )
+        if not created and entrega.destino != destino:
+            if entrega.lineas.filter(cantidad_entregada__gt=0).exists():
+                messages.error(request, "No puedes cambiar el destino porque la entrega ya inició.")
+                return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+            entrega.destino = destino
+            entrega.save(update_fields=["destino", "actualizado_en"])
+
+        creadas = 0
+        for linea in compra.lineas.filter(cantidad_requerida__gt=0):
+            _, nueva = WorkshopDeliveryLine.objects.get_or_create(
+                delivery=entrega,
+                purchase_line=linea,
+                defaults={
+                    "codigo": linea.codigo or "",
+                    "descripcion": linea.descripcion or "",
+                    "unidad": linea.unidad or "",
+                    # Inventario entrega el total requerido por el BOM:
+                    # stock disponible + material comprado.
+                    "cantidad_requerida": Decimal(linea.cantidad_requerida or 0),
+                },
+            )
+            creadas += int(nueva)
+
+    messages.success(
+        request,
+        f"Entrega a {entrega.get_destino_display()} generada por Inventario. Líneas nuevas: {creadas}."
+    )
+    return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+
 
 def _enviar_alerta_recepcion(recepcion, porcentaje, pendientes, umbral):
     """

@@ -4,12 +4,67 @@
 {% block content %}
 
 <div class="cards">
+    <div class="card"><small>BOM por revisar</small><strong>{{ total_revisiones_pendientes }}</strong></div>
+    <div class="card"><small>Listos para entregar</small><strong>{{ total_listos_para_entrega }}</strong></div>
     <div class="card"><small>Recepciones pendientes</small><strong>{{ total_recepciones }}</strong></div>
     <div class="card"><small>Entregas pendientes</small><strong>{{ total_entregas }}</strong></div>
     <div class="card"><small>Historial entregas</small><strong>{{ total_historial_entregas }}</strong></div>
     <div class="card"><small>Líneas pendientes</small><strong>{{ lineas_pendientes }}</strong></div>
     <div class="card"><small>Líneas listas</small><strong>{{ lineas_listas }}</strong></div>
 </div>
+
+<div class="panel">
+    <h3>BOM pendientes de revisión</h3>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">
+        Antes de Compras, Inventario verifica qué cantidades están disponibles y deja únicamente los faltantes para adquisición.
+    </div>
+    <table>
+        <thead><tr><th>PAW</th><th>Nombre</th><th>Líneas BOM</th><th>Creado</th><th>Acción</th></tr></thead>
+        <tbody>
+        {% for c in revisiones_pendientes %}
+            <tr>
+                <td><strong>{{ c.paw_numero }}</strong></td><td>{{ c.paw_nombre }}</td>
+                <td>{{ c.total_lineas_bom }}</td><td>{{ c.creado_en|date:"d/m/Y H:i" }}</td>
+                <td><a class="btn" href="{% url 'inventario:revision_bom_detail' c.pk %}">Revisar BOM</a></td>
+            </tr>
+        {% empty %}<tr><td colspan="5">No hay BOM pendientes de revisión.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<br>
+
+<div class="panel">
+    <h3>Material listo para entrega</h3>
+    <div style="font-size:12px;color:#64748b;margin-bottom:12px;">
+        Inventario define aquí el destino físico: Taller, Campo o Despacho. Compras ya no define el destino.
+    </div>
+    <table>
+        <thead><tr><th>PAW</th><th>Nombre</th><th>Destino</th><th>Acción</th></tr></thead>
+        <tbody>
+        {% for c in listos_para_entrega %}
+            <tr>
+                <td><strong>{{ c.paw_numero }}</strong></td><td>{{ c.paw_nombre }}</td>
+                <td>
+                    <form method="post" action="{% url 'inventario:generar_entrega' c.pk %}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        {% csrf_token %}
+                        <select name="destino" required style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
+                            <option value="">Seleccionar...</option>
+                            {% if c.bom.workorder.paw.aplica_taller %}<option value="TALLER">Taller</option>{% endif %}
+                            {% if c.bom.workorder.paw.aplica_campo %}<option value="CAMPO">Campo</option>{% endif %}
+                            <option value="INVENTARIO">Despacho / cliente</option>
+                        </select>
+                        <button class="btn" type="submit">Generar entrega</button>
+                    </form>
+                </td>
+                <td><a class="btn btn-secondary" href="{% url 'inventario:revision_bom_detail' c.pk %}">Ver revisión</a></td>
+            </tr>
+        {% empty %}<tr><td colspan="4">No hay PAW listos para entrega.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<br>
 
 <div class="panel">
     <h3>Recepciones de inventario</h3>
@@ -66,9 +121,9 @@
 <div class="panel">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
         <div>
-            <h3 style="margin-bottom:4px;">Entregas a taller</h3>
+            <h3 style="margin-bottom:4px;">Entregas pendientes</h3>
             <div style="font-size:12px;color:#64748b;">
-                Aquí permanecen únicamente las entregas pendientes o parciales.
+                Aquí permanecen las entregas físicas pendientes o parciales generadas por Inventario.
             </div>
         </div>
         <span class="badge">{{ total_entregas }} pendiente{{ total_entregas|pluralize:"s" }}</span>

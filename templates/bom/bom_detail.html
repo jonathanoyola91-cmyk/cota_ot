@@ -19,14 +19,14 @@
     {% csrf_token %}
     
     {% if bom.estado == "BORRADOR" %}
-        <button class="btn">Enviar a compras</button>
+        <button class="btn">Enviar a Inventario para revisión</button>
     {% else %}
-        <button class="btn btn-warning">Reenviar actualización a compras</button>
+        <button class="btn btn-warning">Actualizar revisión de Inventario</button>
     {% endif %}
 </form>
 
 {% if bom.estado != "BORRADOR" %}
-    <span class="badge">Enviado a compras ✅</span>
+    <span class="badge">Enviado a Inventario ✅</span>
 {% endif %}
 <form method="post">
     {% csrf_token %}

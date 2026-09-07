@@ -19,6 +19,7 @@ class EstadoOperativo(models.TextChoices):
     PAW_CREADO = "PAW_CREADO", "PAW creado"
     OT_CREADA = "OT_CREADA", "OT creada"
     BOM_CREADO = "BOM_CREADO", "BOM creado"
+    EN_REVISION_INVENTARIO = "EN_REVISION_INVENTARIO", "En revisión de inventario"
     EN_COMPRAS = "EN_COMPRAS", "En compras"
     EN_FINANZAS = "EN_FINANZAS", "En finanzas"
     EN_APROBACION = "EN_APROBACION", "En aprobación"

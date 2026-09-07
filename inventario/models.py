@@ -102,7 +102,7 @@ class WorkshopDelivery(models.Model):
     class Destino(models.TextChoices):
         TALLER = "TALLER", "Taller"
         CAMPO = "CAMPO", "Campo"
-        INVENTARIO = "INVENTARIO", "Inventario / despacho al cliente"
+        INVENTARIO = "INVENTARIO", "Despacho / cliente"
     purchase_request = models.OneToOneField(
         "compras_oil.PurchaseRequest",
         on_delete=models.PROTECT,

@@ -244,7 +244,7 @@
 
         <div class="flow-actions">
             <div class="flow-muted-note" style="margin:0 8px 0 0;">
-                📦 Solo Compras libera material a Inventario desde el botón de cada línea aprobada. Finanzas/Gerencia únicamente aprueban.
+                📦 Compras gestiona proveedor, precio y aprobación. Inventario recibe el material y define la entrega física a Taller, Campo o Despacho.
             </div>
 
             {% if recepcion %}
@@ -263,24 +263,12 @@
                 <a class="flow-btn {% if flujo_entrega_ok %}step-done{% else %}step-active{% endif %}"
                    href="{% url 'inventario:entrega_taller_detail' entrega.pk %}">
                     {% if flujo_entrega_ok %}✅{% else %}🔵{% endif %}
-                    4. Entrega: {{ entrega.get_destino_display }}
+                    Entrega Inventario: {{ entrega.get_destino_display }}
                 </a>
             {% else %}
-                <form method="post" action="{% url 'compras_oil:generar_entrega' compra.pk %}"
-                      style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                    {% csrf_token %}
-                    <select name="destino" {% if not puede_generar_entrega %}disabled{% endif %}
-                            style="padding:10px 12px;border-radius:10px;border:1px solid #cbd5e1;font-weight:800;">
-                        <option value="">Destino de entrega...</option>
-                        {% if paw and paw.aplica_taller %}<option value="TALLER">Taller</option>{% endif %}
-                        {% if paw and paw.aplica_campo %}<option value="CAMPO">Campo</option>{% endif %}
-                        <option value="INVENTARIO">Inventario / despacho cliente</option>
-                    </select>
-                    <button class="flow-btn {% if puede_generar_entrega %}step-active{% else %}step-pending{% endif %}"
-                            type="submit" {% if not puede_generar_entrega %}disabled{% endif %}>
-                        {% if puede_generar_entrega %}🔵{% else %}⚪{% endif %} 4. Generar entrega
-                    </button>
-                </form>
+                <button class="flow-btn step-pending" type="button" disabled>
+                    ⚪ Entrega pendiente de Inventario
+                </button>
             {% endif %}
 
             <form method="post" action="{% url 'compras_oil:cerrar_solicitud' compra.pk %}"
@@ -355,11 +343,8 @@
                         <td>{{ form.instance.cantidad_requerida }}</td>
 
                         <td style="min-width:100px;">
-                            {% if puede_compras %}
-                                {{ form.cantidad_disponible }}
-                            {% else %}
-                                {{ form.instance.cantidad_disponible }}
-                            {% endif %}
+                            <strong>{{ form.instance.cantidad_disponible }}</strong>
+                            <div style="font-size:11px;color:#64748b;">Validado por Inventario</div>
                         </td>
 
                         <td>

@@ -1,0 +1,30 @@
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ("compras_oil", "0007_alter_purchaseline_porcentaje_pago_and_more"),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name="purchaserequest",
+            name="inventario_revisado_en",
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="purchaserequest",
+            name="inventario_revisado_por",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="solicitudes_compra_revisadas_inventario",
+                to=settings.AUTH_USER_MODEL,
+            ),
+        ),
+    ]

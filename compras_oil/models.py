@@ -72,6 +72,17 @@ class PurchaseRequest(models.Model):
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
+    # Revisión previa obligatoria de Inventario.
+    # Mientras esté vacío, la solicitud todavía no debe ser gestionada por Compras.
+    inventario_revisado_en = models.DateTimeField(null=True, blank=True)
+    inventario_revisado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="solicitudes_compra_revisadas_inventario",
+    )
+
     def __str__(self):
         """
         IMPORTANTE:

@@ -1,0 +1,93 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Revisión de BOM - Inventario{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+            <h2 style="margin:0 0 6px;">Revisión de existencias · PAW #{{ compra.paw_numero }}</h2>
+            <div style="color:#64748b;">{{ compra.paw_nombre }}</div>
+        </div>
+        {% if compra.inventario_revisado_en %}
+            <span class="badge">✓ Revisado {{ compra.inventario_revisado_en|date:"d/m/Y H:i" }}</span>
+        {% else %}
+            <span class="badge">Pendiente Inventario</span>
+        {% endif %}
+    </div>
+
+    <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border-radius:10px;color:#1e3a8a;font-size:13px;">
+        Registra cuánto material del BOM está disponible para este PAW. El sistema calculará automáticamente el faltante que Compras debe adquirir.
+    </div>
+
+    <form method="post" style="margin-top:18px;">
+        {% csrf_token %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th><th>Descripción</th><th>Unidad</th><th>Requerido BOM</th>
+                        <th>Disponible / reservar</th><th>Faltante a comprar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for linea in lineas %}
+                    <tr>
+                        <td><strong>{{ linea.codigo|default:"-" }}</strong></td>
+                        <td>{{ linea.descripcion }}</td>
+                        <td>{{ linea.unidad }}</td>
+                        <td><strong>{{ linea.cantidad_requerida }}</strong></td>
+                        <td>
+                            {% if compra.inventario_revisado_en %}
+                                <strong>{{ linea.cantidad_disponible }}</strong>
+                            {% else %}
+                                <input type="number" min="0" max="{{ linea.cantidad_requerida }}" step="0.001"
+                                       name="cantidad_disponible_{{ linea.id }}"
+                                       value="{{ linea.cantidad_disponible }}"
+                                       style="width:120px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ linea.cantidad_a_comprar }}</strong></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6">Este BOM no tiene líneas con cantidad requerida.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if not compra.inventario_revisado_en %}
+            <div style="margin-top:18px;">
+                <button class="btn" type="submit" onclick="return confirm('¿Confirmas las cantidades disponibles? Los faltantes quedarán habilitados para Compras.');">
+                    Confirmar revisión de Inventario
+                </button>
+            </div>
+        {% endif %}
+    </form>
+
+    {% if compra.inventario_revisado_en %}
+        <div class="cards" style="margin-top:20px;">
+            <div class="card"><small>Total requerido</small><strong>{{ total_requerido }}</strong></div>
+            <div class="card"><small>Disponible validado</small><strong>{{ total_disponible }}</strong></div>
+            <div class="card"><small>Total a comprar</small><strong>{{ total_comprar }}</strong></div>
+        </div>
+
+        {% if total_comprar == 0 %}
+            <div style="margin-top:20px;padding:14px;background:#ecfdf5;border-radius:10px;">
+                <strong>Todo el material está disponible.</strong> No es necesario que este PAW pase por Compras.
+                <form method="post" action="{% url 'inventario:generar_entrega' compra.pk %}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+                    {% csrf_token %}
+                    <select name="destino" required style="padding:9px;border-radius:8px;border:1px solid #cbd5e1;">
+                        <option value="">Destino...</option>
+                        {% if compra.bom.workorder.paw.aplica_taller %}<option value="TALLER">Taller</option>{% endif %}
+                        {% if compra.bom.workorder.paw.aplica_campo %}<option value="CAMPO">Campo</option>{% endif %}
+                        <option value="INVENTARIO">Despacho / cliente</option>
+                    </select>
+                    <button class="btn" type="submit">Generar entrega</button>
+                </form>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <div style="margin-top:18px;"><a class="btn btn-secondary" href="{% url 'inventario:dashboard' %}">Volver a Inventario</a></div>
+</div>
+{% endblock %}

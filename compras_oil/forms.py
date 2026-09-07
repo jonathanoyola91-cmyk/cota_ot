@@ -48,7 +48,6 @@ class PurchaseLineForm(forms.ModelForm):
     class Meta:
         model = PurchaseLine
         fields = [
-            "cantidad_disponible",
             "proveedor",
             "precio_unitario",
             "tipo_pago",
@@ -57,7 +56,6 @@ class PurchaseLineForm(forms.ModelForm):
         ]
 
         widgets = {
-            "cantidad_disponible": forms.NumberInput(attrs={"class": "form-control"}),
             "proveedor": forms.Select(attrs={"class": "form-control"}),
             "precio_unitario": forms.NumberInput(attrs={"class": "form-control"}),
             "tipo_pago": forms.Select(attrs={"class": "form-control"}),
