@@ -91,7 +91,7 @@
 
     .progress-grid {
         display:grid;
-        grid-template-columns:repeat(10,1fr);
+        grid-template-columns:repeat(11,1fr);
         gap:8px;
     }
 
@@ -645,32 +645,36 @@
                 </div>
             {% endwith %}
 
-            <div class="step-pill {% if not paw.aplica_compras or paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                4 Compras{% if not paw.aplica_compras %} N/A{% endif %}
+            <div class="step-pill {% if not paw.aplica_compras or paw.estado_operativo == 'EN_REVISION_INVENTARIO' or paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                4 Inventario{% if not paw.aplica_compras %} N/A{% endif %}
             </div>
 
-            <div class="step-pill {% if not paw.aplica_compras or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                5 Finanzas{% if not paw.aplica_compras %} N/A{% endif %}
+            <div class="step-pill {% if not paw.aplica_compras or paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                5 Compras{% if not paw.aplica_compras %} N/A{% endif %}
+            </div>
+
+            <div class="step-pill {% if not paw.aplica_compras or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
+                6 Finanzas{% if not paw.aplica_compras %} N/A{% endif %}
             </div>
 
             <div class="step-pill {% if not paw.aplica_compras or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                6 Inventario{% if not paw.aplica_compras %} N/A{% endif %}
+                7 Material{% if not paw.aplica_compras %} N/A{% endif %}
             </div>
 
             <div class="step-pill {% if not paw.aplica_taller or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                7 Taller{% if not paw.aplica_taller %} N/A{% endif %}
+                8 Taller{% if not paw.aplica_taller %} N/A{% endif %}
             </div>
 
             <div class="step-pill {% if not paw.aplica_campo or paw.campo_finalizado or paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                8 Campo{% if not paw.aplica_campo %} N/A{% endif %}
+                9 Campo{% if not paw.aplica_campo %} N/A{% endif %}
             </div>
 
             <div class="step-pill {% if paw.listo_para_facturar or paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                9 Final
+                10 Final
             </div>
 
             <div class="step-pill {% if paw.factura %}step-ok{% else %}step-pending{% endif %}">
-                10 Factura
+                11 Factura
             </div>
         </div>
     </div>
@@ -895,9 +899,36 @@
                 </div>
             </div>
 
+            <div class="workflow-card {% if not paw.aplica_compras or paw.estado_operativo == 'EN_REVISION_INVENTARIO' or paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
+                <div>
+                    <small>Etapa 4 · Inventario</small>
+                    {% if not paw.aplica_compras %}
+                        <strong>No aplica</strong>
+                    {% elif paw.estado_operativo == "EN_REVISION_INVENTARIO" %}
+                        <strong>En revisión de Inventario 📦</strong>
+                    {% elif paw.estado_operativo == "EN_COMPRAS" or paw.estado_operativo == "EN_FINANZAS" or paw.estado_operativo == "EN_APROBACION" or paw.estado_operativo == "PAGO_OK" or paw.estado_operativo == "MATERIAL_RECIBIDO" or paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
+                        <strong>Inventario revisado ✅</strong>
+                    {% else %}
+                        <strong>Pendiente revisión de Inventario</strong>
+                    {% endif %}
+                </div>
+
+                <div class="workflow-actions">
+                    {% if not paw.aplica_compras %}
+                        <span class="badge-soft">N/A</span>
+                    {% elif paw.estado_operativo == "EN_REVISION_INVENTARIO" %}
+                        <span class="badge-soft">Inventario debe validar stock y faltantes</span>
+                    {% elif paw.estado_operativo == "EN_COMPRAS" or paw.estado_operativo == "EN_FINANZAS" or paw.estado_operativo == "EN_APROBACION" or paw.estado_operativo == "PAGO_OK" or paw.estado_operativo == "MATERIAL_RECIBIDO" or paw.estado_operativo == "ENTREGADO_TALLER" or paw.estado_operativo == "PRODUCTO_OK" %}
+                        <span class="badge-soft">Revisión completada</span>
+                    {% else %}
+                        <span class="badge-soft">Pendiente etapa previa</span>
+                    {% endif %}
+                </div>
+            </div>
+
             <div class="workflow-card {% if not paw.aplica_compras or paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
                 <div>
-                    <small>Etapa 4 · Compras</small>
+                    <small>Etapa 5 · Compras</small>
                     {% if not paw.aplica_compras %}
                         <strong>No aplica</strong>
                     {% else %}
@@ -930,7 +961,7 @@
 
             <div class="workflow-card {% if not paw.aplica_compras or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
                 <div>
-                    <small>Etapa 5 · Finanzas</small>
+                    <small>Etapa 6 · Finanzas</small>
                     {% if not paw.aplica_compras %}
                         <strong>No aplica</strong>
                     {% elif paw.estado_operativo == "EN_FINANZAS" %}
@@ -963,7 +994,7 @@
 
             <div class="workflow-card {% if not paw.aplica_taller or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' %}done{% else %}pending{% endif %}">
                 <div>
-                    <small>Etapa 6 · Taller</small>
+                    <small>Etapa 7 · Taller</small>
                     {% if not paw.aplica_taller %}
                         <strong>No aplica</strong>
                     {% elif paw.estado_operativo == "PRODUCTO_OK" %}
@@ -992,7 +1023,7 @@
 
             <div class="workflow-card {% if not paw.aplica_campo or paw.campo_finalizado %}done{% else %}pending{% endif %}">
                 <div>
-                    <small>Etapa 7 · Campo</small>
+                    <small>Etapa 8 · Campo</small>
                     {% if not paw.aplica_campo %}
                         <strong>No aplica</strong>
                     {% elif paw.campo_finalizado %}
@@ -1019,7 +1050,7 @@
 
             <div class="workflow-card {% if paw.listo_para_facturar %}done{% else %}pending{% endif %}">
                 <div>
-                    <small>Etapa Final</small>
+                    <small>Etapa 9 · Final</small>
 
                     {% if paw.listo_para_facturar %}
                         <strong>Alcance operativo completo ✅</strong>
@@ -1032,8 +1063,10 @@
                     {% if paw.listo_para_facturar %}
                         <span class="badge-soft">Listo para facturación</span>
                     {% else %}
-                        {% if paw.aplica_compras and not paw.compras_finalizadas %}
-                            <span class="badge-soft">Pendiente Compras</span>
+                        {% if paw.aplica_compras and paw.estado_operativo == "EN_REVISION_INVENTARIO" %}
+                            <span class="badge-soft">Pendiente Inventario</span>
+                        {% elif paw.aplica_compras and not paw.compras_finalizadas %}
+                            <span class="badge-soft">Pendiente Compras / abastecimiento</span>
                         {% endif %}
                         {% if paw.aplica_taller and not paw.taller_finalizado %}
                             <span class="badge-soft">Pendiente Taller</span>

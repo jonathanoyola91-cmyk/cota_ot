@@ -22,6 +22,7 @@
     .status-paw { background: #f1f5f9; color: #475569; }
     .status-ot { background: #e0f2fe; color: #0369a1; }
     .status-bom { background: #dbeafe; color: #1d4ed8; }
+    .status-inventario { background: #fef3c7; color: #92400e; }
     .status-compras { background: #ede9fe; color: #5b21b6; }
     .status-finanzas { background: #fef3c7; color: #92400e; }
     .status-taller { background: #e0e7ff; color: #3730a3; }
@@ -254,6 +255,7 @@
                 <option value="PAW_CREADO" {% if estado == "PAW_CREADO" %}selected{% endif %}>PAW creado</option>
                 <option value="OT_CREADA" {% if estado == "OT_CREADA" %}selected{% endif %}>OT creada</option>
                 <option value="BOM_CREADO" {% if estado == "BOM_CREADO" %}selected{% endif %}>BOM creado</option>
+                <option value="EN_REVISION_INVENTARIO" {% if estado == "EN_REVISION_INVENTARIO" %}selected{% endif %}>En inventario</option>
                 <option value="EN_COMPRAS" {% if estado == "EN_COMPRAS" %}selected{% endif %}>En compras</option>
                 <option value="EN_FINANZAS" {% if estado == "EN_FINANZAS" %}selected{% endif %}>En finanzas</option>
                 <option value="EN_APROBACION" {% if estado == "EN_APROBACION" %}selected{% endif %}>En aprobación</option>
@@ -395,11 +397,19 @@
                             {% elif paw.estado_operativo == "PAGO_OK" %}
                                 <span class="paw-status status-finanzas">Pago aprobado</span>
 
-                            {% elif paw.estado_operativo == "EN_FINANZAS" %}
-                                <span class="paw-status status-finanzas">En finanzas</span>
+                            {% elif paw.estado_operativo == "EN_FINANZAS" or paw.estado_operativo == "EN_APROBACION" %}
+                                <span class="paw-status status-finanzas">
+                                    {% if paw.estado_operativo == "EN_APROBACION" %}En aprobación{% else %}En finanzas{% endif %}
+                                </span>
+
+                            {% elif paw.estado_operativo == "MATERIAL_RECIBIDO" %}
+                                <span class="paw-status status-inventario">Material disponible</span>
 
                             {% elif paw.estado_operativo == "EN_COMPRAS" %}
                                 <span class="paw-status status-compras">En compras</span>
+
+                            {% elif paw.estado_operativo == "EN_REVISION_INVENTARIO" %}
+                                <span class="paw-status status-inventario">En inventario</span>
 
                             {% elif ot and ot.bom %}
                                 <span class="paw-status status-bom">BOM creada</span>
@@ -415,12 +425,13 @@
 
                     <td>
                         {% with ot=paw.ots.first %}
-                            <div class="mini-progress" title="PAW · OT · BOM · Compras · Finanzas · Taller · Producto · Factura">
+                            <div class="mini-progress" title="PAW · OT · BOM · Inventario · Compras · Finanzas · Taller · Producto · Factura">
                                 <span class="mini-step done"></span>
                                 <span class="mini-step {% if paw.ots.count %}done{% endif %}"></span>
                                 <span class="mini-step {% if ot and ot.bom %}done{% endif %}"></span>
-                                <span class="mini-step {% if paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
-                                <span class="mini-step {% if paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+                                <span class="mini-step {% if paw.estado_operativo == 'EN_REVISION_INVENTARIO' or paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+                                <span class="mini-step {% if paw.estado_operativo == 'EN_COMPRAS' or paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
+                                <span class="mini-step {% if paw.estado_operativo == 'EN_FINANZAS' or paw.estado_operativo == 'EN_APROBACION' or paw.estado_operativo == 'PAGO_OK' or paw.estado_operativo == 'MATERIAL_RECIBIDO' or paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
                                 <span class="mini-step {% if paw.estado_operativo == 'ENTREGADO_TALLER' or paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
                                 <span class="mini-step {% if paw.estado_operativo == 'PRODUCTO_OK' or paw.factura %}done{% endif %}"></span>
                                 <span class="mini-step {% if paw.factura %}done{% endif %}"></span>
