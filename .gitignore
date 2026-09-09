@@ -47,3 +47,6 @@ __pycache__/
 *.pkl
 .env
 venv/-e "\n__pycache__/\n*.pyc" 
+__pycache__/
+*.py[cod]
+venv/

@@ -546,6 +546,12 @@ tbody tr:hover{background:#f8fafc;}
         <a href="{% url 'item_oil_gas:item_list' %}" class="{% if '/item-oil-gas/' in request.path and '/impetus/' not in request.path %}active{% endif %}"><span class="menu-icon">◇</span> Items Oil & Gas</a>
         <a href="{% url 'item_oil_gas:item_impetus_list' %}" class="{% if '/item-oil-gas/impetus/' in request.path %}active{% endif %}"><span class="menu-icon">◆</span> Items IMPETUS</a>
         {% endif %}
+        {% if sidebar_roles.es_ingenieria or sidebar_roles.es_gerente or request.user.is_superuser %}
+        <a href="{% url 'auditoria:tablero' %}" class="{% if '/auditoria/' in request.path %}active{% endif %}">
+            <span class="menu-icon">◫</span> Auditoría
+        </a>
+        {% endif %}
+
         {% if request.user.is_superuser %}
         <a href="/admin/" class="{% if '/admin/' in request.path %}active{% endif %}"><span class="menu-icon">⚙</span> Admin Django</a>
         {% endif %}

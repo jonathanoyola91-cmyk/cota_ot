@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.db.models import Q
 
 from item_oil_gas.models import ItemImpetus
+from auditoria.utils import registrar_movimiento
 
 
 
@@ -320,6 +321,20 @@ def enviar_bom_compras(request, bom_id):
             if paw:
                 paw.estado_operativo = "EN_REVISION_INVENTARIO"
                 paw.save(update_fields=["estado_operativo"])
+
+            registrar_movimiento(
+                request=request,
+                paw_numero=paw.numero_paw if paw else "",
+                modulo="TALLER",
+                accion="BOM enviado a Inventario",
+                descripcion="Taller envió el BOM para revisión de disponibilidad.",
+                objeto=bom,
+                datos_nuevos={
+                    "estado_bom": bom.estado,
+                    "solicitado_en": str(bom.solicitado_en),
+                    "purchase_request_id": compra.pk,
+                },
+            )
 
         if compra.inventario_revisado_en and compra.lineas.filter(cantidad_a_comprar__gt=0).exists():
             return redirect("compras_oil:paw_detail", pk=compra.pk)

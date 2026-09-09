@@ -20,6 +20,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 from .models import InventoryReception, InventoryReceptionLine, WorkshopDelivery
+from auditoria.utils import registrar_movimiento
 
 
 def inventario_required(view_func):
@@ -281,6 +282,19 @@ def revision_bom_detail(request, pk):
                     "actualizado_en",
                 ])
 
+                registrar_movimiento(
+                    request=request,
+                    paw_numero=compra.paw_numero,
+                    modulo="INVENTARIO",
+                    accion="BOM revisado por Inventario",
+                    descripcion="Inventario confirmó las cantidades disponibles del BOM.",
+                    objeto=compra,
+                    datos_nuevos={
+                        "inventario_revisado_en": str(compra.inventario_revisado_en),
+                        "inventario_revisado_por": request.user.username,
+                    },
+                )
+
                 faltantes = compra.lineas.filter(cantidad_a_comprar__gt=0).exists()
                 try:
                     paw = compra.bom.workorder.paw
@@ -288,6 +302,31 @@ def revision_bom_detail(request, pk):
                     paw.save(update_fields=["estado_operativo"])
                 except Exception:
                     pass
+
+                if faltantes:
+                    registrar_movimiento(
+                        request=request,
+                        paw_numero=compra.paw_numero,
+                        modulo="COMPRAS",
+                        accion="Faltantes habilitados para Compras",
+                        descripcion=(
+                            "Inventario confirmó la revisión y existen materiales "
+                            "faltantes que requieren compra."
+                        ),
+                        objeto=compra,
+                    )
+                else:
+                    registrar_movimiento(
+                        request=request,
+                        paw_numero=compra.paw_numero,
+                        modulo="INVENTARIO",
+                        accion="BOM completo con inventario",
+                        descripcion=(
+                            "Inventario confirmó disponibilidad total. "
+                            "No se requiere compra."
+                        ),
+                        objeto=compra,
+                    )
 
             if faltantes:
                 messages.success(

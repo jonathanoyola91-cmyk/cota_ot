@@ -1,0 +1,123 @@
+{% load tz %}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Auditoría · IMPETUS CONTROL</title>
+    <style>
+        body{margin:0;background:#f3f6fa;font-family:Arial,Helvetica,sans-serif;color:#0f172a}
+        .wrap{max-width:1500px;margin:0 auto;padding:24px}
+        .top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
+        h1{margin:0;font-size:28px}
+        .sub{color:#64748b;margin-top:5px}
+        .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 4px 14px rgba(15,23,42,.05)}
+        .filters{padding:16px;margin-bottom:18px}
+        .grid{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:10px}
+        label{font-size:12px;font-weight:800;color:#475569;display:block;margin-bottom:5px}
+        input,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+        .actions{margin-top:12px;display:flex;gap:8px}
+        .btn{display:inline-block;border:0;border-radius:8px;padding:10px 15px;font-weight:800;text-decoration:none;cursor:pointer}
+        .primary{background:#0f172a;color:#fff}.secondary{background:#e2e8f0;color:#0f172a}
+        .table-wrap{overflow:auto}
+        table{width:100%;border-collapse:collapse;font-size:13px}
+        th{position:sticky;top:0;background:#f8fafc;text-align:left;padding:12px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+        td{padding:12px;border-bottom:1px solid #edf2f7;vertical-align:top}
+        .paw{font-weight:900}.module{font-weight:800}.muted{color:#64748b;font-size:12px}
+        .pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2ff;font-size:11px;font-weight:800}
+        .pagination{display:flex;justify-content:space-between;align-items:center;padding:14px}
+        @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.wrap{padding:12px}}
+        @media(max-width:520px){.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="top">
+        <div>
+            <h1>Tablero de movimientos</h1>
+            <div class="sub">Trazabilidad histórica de PAW, módulos y usuarios.</div>
+        </div>
+        <a class="btn secondary" href="/">Volver al panel</a>
+    </div>
+
+    <form method="get" class="card filters">
+        <div class="grid">
+            <div><label>PAW</label><input name="paw" value="{{ filtros.paw }}" placeholder="Ej. 1180"></div>
+            <div>
+                <label>Módulo</label>
+                <select name="modulo">
+                    <option value="">Todos</option>
+                    {% for m in modulos %}
+                        <option value="{{ m }}" {% if filtros.modulo == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div><label>Usuario</label><input name="usuario" value="{{ filtros.usuario }}" placeholder="Taller, admin..."></div>
+            <div><label>Buscar</label><input name="q" value="{{ filtros.q }}" placeholder="Acción o descripción"></div>
+            <div><label>Desde</label><input type="date" name="desde" value="{{ filtros.desde }}"></div>
+            <div><label>Hasta</label><input type="date" name="hasta" value="{{ filtros.hasta }}"></div>
+        </div>
+        <div class="actions">
+            <button class="btn primary" type="submit">Filtrar</button>
+            <a class="btn secondary" href="{% url 'auditoria:tablero' %}">Limpiar</a>
+        </div>
+    </form>
+
+    <div class="card table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>Fecha / hora</th>
+                <th>PAW</th>
+                <th>Módulo</th>
+                <th>Acción</th>
+                <th>Usuario</th>
+                <th>Descripción</th>
+                <th>Objeto</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for mov in page_obj %}
+                <tr>
+                    <td>
+                        <strong>{{ mov.fecha|localtime|date:"d/m/Y H:i:s" }}</strong>
+                        <div class="muted">ID {{ mov.id }}</div>
+                    </td>
+                    <td class="paw">{{ mov.paw_numero|default:"-" }}</td>
+                    <td><span class="pill">{{ mov.modulo|default:"-" }}</span></td>
+                    <td><strong>{{ mov.accion }}</strong></td>
+                    <td>
+                        {% if mov.usuario %}
+                            {{ mov.usuario.get_full_name|default:mov.usuario.username }}
+                            <div class="muted">{{ mov.usuario.username }}</div>
+                        {% else %}
+                            Sistema
+                        {% endif %}
+                    </td>
+                    <td>{{ mov.descripcion|default:"-" }}</td>
+                    <td>
+                        {{ mov.objeto_tipo|default:"-" }}
+                        {% if mov.objeto_id %}<div class="muted">ID {{ mov.objeto_id }}</div>{% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7" style="text-align:center;padding:34px;color:#64748b">No hay movimientos con estos filtros.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="pagination">
+            <div>Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</div>
+            <div>
+                {% if page_obj.has_previous %}
+                    <a class="btn secondary" href="?page={{ page_obj.previous_page_number }}&paw={{ filtros.paw }}&modulo={{ filtros.modulo }}&usuario={{ filtros.usuario }}&q={{ filtros.q }}&desde={{ filtros.desde }}&hasta={{ filtros.hasta }}">Anterior</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                    <a class="btn secondary" href="?page={{ page_obj.next_page_number }}&paw={{ filtros.paw }}&modulo={{ filtros.modulo }}&usuario={{ filtros.usuario }}&q={{ filtros.q }}&desde={{ filtros.desde }}&hasta={{ filtros.hasta }}">Siguiente</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
