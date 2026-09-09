@@ -1,5 +1,6 @@
 from decimal import Decimal
 from io import BytesIO
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -21,7 +22,31 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from .models import InventoryReception, InventoryReceptionLine, WorkshopDelivery
 
 
+def inventario_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        permitido = (
+            request.user.is_authenticated
+            and (
+                request.user.is_superuser
+                or request.user.groups.filter(name__iexact="INVENTARIO").exists()
+            )
+        )
+
+        if not permitido:
+            messages.error(
+                request,
+                "No tienes permiso para acceder al módulo de Inventario."
+            )
+            return redirect("/")
+
+        return view_func(request, *args, **kwargs)
+
+    return wrapper
+
+
 @login_required
+@inventario_required
 def inventario_dashboard(request):
     # ======================================================
     # RECEPCIONES: solo pendientes o parciales
@@ -198,6 +223,7 @@ def inventario_dashboard(request):
     })
 
 @login_required
+@inventario_required
 def revision_bom_detail(request, pk):
     """
     Inventario valida disponibilidad por línea antes de que Compras gestione el BOM.
@@ -310,6 +336,7 @@ def _material_comprado_completamente_recibido(compra):
 
 @require_POST
 @login_required
+@inventario_required
 def generar_entrega(request, pk):
     """Inventario define el destino y genera la salida física del material del PAW."""
     from compras_oil.models import PurchaseRequest
@@ -598,6 +625,7 @@ def _enviar_alerta_recepcion(recepcion, porcentaje, pendientes, umbral):
 
 
 @login_required
+@inventario_required
 def recepcion_detail(request, pk):
     recepcion = get_object_or_404(
         InventoryReception.objects
@@ -750,6 +778,7 @@ def recepcion_detail(request, pk):
 
 
 @login_required
+@inventario_required
 def entrega_taller_detail(request, pk):
     entrega = get_object_or_404(
         WorkshopDelivery.objects
@@ -802,6 +831,7 @@ def entrega_taller_detail(request, pk):
 
 
 @login_required
+@inventario_required
 def entrega_taller_pdf(request, pk):
     entrega = get_object_or_404(
         WorkshopDelivery.objects
