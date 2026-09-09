@@ -194,13 +194,14 @@ class PurchaseLine(models.Model):
             if (self.cantidad_requerida is None) or (Decimal(self.cantidad_requerida) <= Decimal("0")):
                 self.cantidad_requerida = bi.cantidad_solicitada or Decimal("0")
 
-        req = self.cantidad_requerida or Decimal("0")
-        disp = self.cantidad_disponible or Decimal("0")
+        # Normalizar cantidades: los formularios/BOM pueden entregar strings.
+        req = Decimal(str(self.cantidad_requerida or "0"))
+        disp = Decimal(str(self.cantidad_disponible or "0"))
         x = req - disp
-        self.cantidad_a_comprar = x if x > 0 else Decimal("0")
+        self.cantidad_a_comprar = x if x > Decimal("0") else Decimal("0")
 
         # Normalización de pago
-        porcentaje = Decimal(self.porcentaje_pago or 0)
+        porcentaje = Decimal(str(self.porcentaje_pago or "0"))
 
         if self.tipo_pago == PurchaseRequest.TipoPago.NA:
             self.porcentaje_pago = Decimal("0.00")

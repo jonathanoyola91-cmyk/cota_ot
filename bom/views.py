@@ -259,7 +259,15 @@ def eliminar_item_bom(request, item_id):
 
 @login_required
 def enviar_bom_compras(request, bom_id):
-    """Envía el BOM primero a revisión de Inventario."""
+    """
+    Envía o reenvía el BOM a Inventario.
+
+    Si la PAW ya había sido revisada:
+    - sincroniza nuevas líneas del BOM con PurchaseLine;
+    - conserva proveedor, precio, tipo de pago y aprobaciones de líneas existentes;
+    - vuelve a abrir la revisión de Inventario;
+    - no elimina el histórico/comercial ya trabajado por Compras.
+    """
     bom = get_object_or_404(
         Bom.objects.select_related("workorder", "workorder__paw").prefetch_related("items"),
         id=bom_id,
@@ -269,7 +277,7 @@ def enviar_bom_compras(request, bom_id):
         bom.marcar_solicitud()
         paw = bom.workorder.paw if bom.workorder else None
 
-        compra, _ = PurchaseRequest.objects.get_or_create(
+        compra, creada = PurchaseRequest.objects.get_or_create(
             bom=bom,
             defaults={
                 "estado": PurchaseRequest.Estado.BORRADOR,
@@ -279,6 +287,9 @@ def enviar_bom_compras(request, bom_id):
             },
         )
 
+        # Guardamos si ya había sido revisada para identificar un REENVÍO.
+        ya_estaba_revisada = bool(compra.inventario_revisado_en)
+
         campos_compra = []
         if paw:
             if compra.paw_numero != paw.numero_paw:
@@ -287,58 +298,101 @@ def enviar_bom_compras(request, bom_id):
             if compra.paw_nombre != paw.nombre_paw:
                 compra.paw_nombre = paw.nombre_paw
                 campos_compra.append("paw_nombre")
-        if campos_compra:
-            campos_compra.append("actualizado_en")
-            compra.save(update_fields=campos_compra)
 
-        items_bom = bom.items.all()
-        ids_bom_actuales = list(items_bom.values_list("id", flat=True))
+        items_bom = list(bom.items.all())
+        ids_bom_actuales = [item.id for item in items_bom]
 
-        if not compra.inventario_revisado_en:
+        # Si nunca había sido revisada, podemos limpiar líneas que ya no estén en el BOM.
+        # Si ya pasó por Inventario/Compras, NO borramos líneas históricas para no perder
+        # proveedor, precio, aprobaciones u otra gestión comercial.
+        if not ya_estaba_revisada:
             PurchaseLine.objects.filter(request=compra).exclude(
                 bom_item_id__in=ids_bom_actuales
             ).delete()
 
-            for item in items_bom:
-                linea, _ = PurchaseLine.objects.get_or_create(
-                    request=compra,
-                    bom_item=item,
-                    defaults={
-                        "codigo": item.codigo,
-                        "descripcion": item.descripcion,
-                        "cantidad_requerida": item.cantidad_solicitada,
-                    },
-                )
-                linea.plano = item.plano or ""
-                linea.codigo = item.codigo or ""
-                linea.descripcion = item.descripcion
-                linea.unidad = item.unidad or ""
-                linea.observaciones_bom = item.observaciones or ""
-                linea.cantidad_requerida = item.cantidad_solicitada or 0
-                linea.cantidad_disponible = 0
-                linea.save()
+        lineas_nuevas = 0
+        lineas_actualizadas = 0
 
-            if paw:
-                paw.estado_operativo = "EN_REVISION_INVENTARIO"
-                paw.save(update_fields=["estado_operativo"])
-
-            registrar_movimiento(
-                request=request,
-                paw_numero=paw.numero_paw if paw else "",
-                modulo="TALLER",
-                accion="BOM enviado a Inventario",
-                descripcion="Taller envió el BOM para revisión de disponibilidad.",
-                objeto=bom,
-                datos_nuevos={
-                    "estado_bom": bom.estado,
-                    "solicitado_en": str(bom.solicitado_en),
-                    "purchase_request_id": compra.pk,
+        # Siempre sincronizar el BOM, incluso si ya fue revisado anteriormente.
+        for item in items_bom:
+            linea, linea_creada = PurchaseLine.objects.get_or_create(
+                request=compra,
+                bom_item=item,
+                defaults={
+                    "codigo": item.codigo,
+                    "descripcion": item.descripcion,
+                    "cantidad_requerida": item.cantidad_solicitada,
+                    "cantidad_disponible": 0,
                 },
             )
 
-        if compra.inventario_revisado_en and compra.lineas.filter(cantidad_a_comprar__gt=0).exists():
-            return redirect("compras_oil:paw_detail", pk=compra.pk)
+            if linea_creada:
+                lineas_nuevas += 1
+            else:
+                lineas_actualizadas += 1
 
+            # Datos técnicos siempre se refrescan desde el BOM.
+            # NO tocar proveedor, precio, tipo_pago, porcentaje ni observaciones de Compras.
+            linea.plano = item.plano or ""
+            linea.codigo = item.codigo or ""
+            linea.descripcion = item.descripcion
+            linea.unidad = item.unidad or ""
+            linea.observaciones_bom = item.observaciones or ""
+            linea.cantidad_requerida = item.cantidad_solicitada or 0
+
+            # Las líneas nuevas empiezan con disponibilidad 0 hasta revisión de Inventario.
+            if linea_creada:
+                linea.cantidad_disponible = 0
+
+            linea.save()
+
+        # Cada reenvío debe volver a habilitar la PAW en el tablero de Inventario.
+        if ya_estaba_revisada:
+            compra.inventario_revisado_en = None
+            compra.inventario_revisado_por = None
+            campos_compra.extend([
+                "inventario_revisado_en",
+                "inventario_revisado_por",
+            ])
+
+        if campos_compra:
+            # Evitar nombres repetidos en update_fields.
+            campos_compra = list(dict.fromkeys(campos_compra))
+            campos_compra.append("actualizado_en")
+            compra.save(update_fields=campos_compra)
+
+        if paw:
+            paw.estado_operativo = "EN_REVISION_INVENTARIO"
+            paw.save(update_fields=["estado_operativo"])
+
+        registrar_movimiento(
+            request=request,
+            paw_numero=paw.numero_paw if paw else "",
+            modulo="TALLER",
+            accion=(
+                "BOM actualizado y reenviado a Inventario"
+                if ya_estaba_revisada
+                else "BOM enviado a Inventario"
+            ),
+            descripcion=(
+                "Taller actualizó el BOM. Se sincronizaron las líneas y se reabrió "
+                "la revisión de Inventario."
+                if ya_estaba_revisada
+                else "Taller envió el BOM para revisión de disponibilidad."
+            ),
+            objeto=bom,
+            datos_nuevos={
+                "estado_bom": bom.estado,
+                "solicitado_en": str(bom.solicitado_en),
+                "purchase_request_id": compra.pk,
+                "lineas_nuevas": lineas_nuevas,
+                "lineas_actualizadas": lineas_actualizadas,
+                "reenvio": ya_estaba_revisada,
+            },
+        )
+
+        # Siempre vuelve a Inventario. Compras solo verá nuevamente la PAW
+        # después de que Inventario confirme la revisión.
         return redirect("inventario:revision_bom_detail", pk=compra.pk)
 
     return render(request, "bom/enviar_bom_compras.html", {"bom": bom})
