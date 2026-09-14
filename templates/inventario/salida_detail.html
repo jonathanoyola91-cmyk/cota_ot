@@ -1,0 +1,7 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}{{ salida.codigo }}{% endblock %}
+{% block content %}
+<div class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">{{ salida.codigo }}</h3><small>{{ salida.creado_en|date:"d/m/Y H:i" }}</small></div><div><a class="btn btn-secondary" href="{% url 'inventario:salidas_lista' %}">Volver</a> <a class="btn" target="_blank" href="{% url 'inventario:salida_pdf' salida.pk %}">Imprimir PDF</a></div></div><br>
+<p><strong>Destino:</strong> {{ salida.destino }} &nbsp; <strong>Solicitado por:</strong> {{ salida.solicitado_por|default:"-" }} &nbsp; <strong>Recibido por:</strong> {{ salida.recibido_por|default:"-" }}</p><p><strong>Motivo:</strong> {{ salida.motivo|default:"-" }}</p>
+<table><thead><tr><th>P/N o código</th><th>Descripción</th><th>Cant.</th><th>U/M</th><th>Serial</th></tr></thead><tbody>{% for l in salida.lineas.all %}<tr><td>{{ l.codigo }}</td><td>{{ l.descripcion }}</td><td>{{ l.cantidad }}</td><td>{{ l.unidad }}</td><td>{{ l.numero_serial }}</td></tr>{% endfor %}</tbody></table>
+</div>{% endblock %}

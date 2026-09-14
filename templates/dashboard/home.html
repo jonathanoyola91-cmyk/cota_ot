@@ -457,7 +457,7 @@ tbody tr:hover{background:#f8fafc;}
 
 <div id="page-loader">
     <div class="loader-box">
-        <img src="{% static 'img/logo_empresa.png' %}" class="loader-logo-img" alt="IMPETUS">
+        <img src="{% static 'img/logo_empresa.png' %}" class="loader-logo-img" alt="IMPETUS" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><div style="display:none;font-weight:900;font-size:22px;letter-spacing:1px;color:#f7b928;margin-bottom:14px;">IMPETUS</div>
         <div class="loader-spinner"></div>
         <p>Cargando centro de control...</p>
     </div>
@@ -466,7 +466,7 @@ tbody tr:hover{background:#f8fafc;}
 <div class="layout">
 <aside class="sidebar">
     <div class="brand-wrap brand-wrap-logo">
-        <img src="{% static 'img/logo_impetus_control_blanco.png' %}" class="sidebar-brand-logo" alt="IMPETUS CONTROL">
+        <img src="{% static 'img/logo_impetus_control_blanco.png' %}" class="sidebar-brand-logo" alt="IMPETUS CONTROL" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><div style="display:none;font-size:20px;font-weight:900;color:#fff;letter-spacing:.4px;">IMPETUS CONTROL</div>
         <div class="brand-caption">Centro de Control Operacional</div>
     </div>
 

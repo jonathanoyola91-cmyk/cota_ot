@@ -1,0 +1,81 @@
+<script>
+(function(){
+  const tbody = document.getElementById('items-body');
+  const addBtn = document.getElementById('add-row');
+  const searchUrl = "{% url 'inventario:buscar_items_inventario' %}";
+
+  function rowTemplate(){
+    return `
+      <tr class="item-row">
+        <td style="min-width:180px;position:relative;">
+          <input class="form-control item-search" type="text" placeholder="Buscar P/N o descripción..." autocomplete="off">
+          <div class="search-results"></div>
+          <input type="hidden" name="item_catalogo[]" class="item-catalogo">
+          <input type="hidden" name="item_catalogo_id[]" class="item-catalogo-id">
+        </td>
+        <td><input class="form-control item-codigo" name="item_codigo[]" placeholder="Parte número / código"></td>
+        <td><input class="form-control item-descripcion" name="item_descripcion[]" required placeholder="Descripción"></td>
+        <td style="width:110px"><input class="form-control" name="item_cantidad[]" type="number" min="0" step="0.001" value="1" required></td>
+        <td style="width:100px"><input class="form-control item-unidad" name="item_unidad[]" value="UND"></td>
+        <td><input class="form-control" name="item_serial[]" placeholder="Serial (opcional)"></td>
+        <td style="width:50px"><button type="button" class="btn btn-danger remove-row">×</button></td>
+      </tr>`;
+  }
+
+  function addRow(){ tbody.insertAdjacentHTML('beforeend', rowTemplate()); }
+  if (!tbody.querySelector('.item-row')) addRow();
+  addBtn.addEventListener('click', addRow);
+
+  tbody.addEventListener('click', function(e){
+    if(e.target.classList.contains('remove-row')){
+      const rows = tbody.querySelectorAll('.item-row');
+      if(rows.length > 1) e.target.closest('tr').remove();
+      else rows[0].querySelectorAll('input').forEach(i => { if(i.type !== 'number') i.value=''; });
+    }
+    const result = e.target.closest('.search-result');
+    if(result){
+      const row = result.closest('.item-row');
+      row.querySelector('.item-codigo').value = result.dataset.codigo || '';
+      row.querySelector('.item-descripcion').value = result.dataset.descripcion || '';
+      row.querySelector('.item-unidad').value = result.dataset.unidad || 'UND';
+      row.querySelector('.item-catalogo').value = result.dataset.catalogo || '';
+      row.querySelector('.item-catalogo-id').value = result.dataset.id || '';
+      row.querySelector('.item-search').value = result.dataset.label || '';
+      row.querySelector('.search-results').innerHTML = '';
+    }
+  });
+
+  let timer;
+  tbody.addEventListener('input', function(e){
+    if(!e.target.classList.contains('item-search')) return;
+    const input = e.target;
+    const row = input.closest('.item-row');
+    const box = row.querySelector('.search-results');
+    clearTimeout(timer);
+    if(input.value.trim().length < 2){ box.innerHTML=''; return; }
+    timer = setTimeout(async () => {
+      try{
+        const res = await fetch(searchUrl + '?q=' + encodeURIComponent(input.value.trim()));
+        const data = await res.json();
+        box.innerHTML = (data.results || []).map(x => `
+          <button type="button" class="search-result"
+            data-id="${x.id}" data-catalogo="${x.catalogo}"
+            data-codigo="${String(x.codigo).replace(/"/g,'&quot;')}"
+            data-descripcion="${String(x.descripcion).replace(/"/g,'&quot;')}"
+            data-unidad="${String(x.unidad).replace(/"/g,'&quot;')}"
+            data-label="${String(x.label).replace(/"/g,'&quot;')}">
+            <strong>${x.codigo}</strong> — ${x.descripcion}<small>${x.catalogo}</small>
+          </button>`).join('') || '<div class="search-empty">Sin coincidencias. Puedes diligenciar manualmente.</div>';
+      }catch(err){ box.innerHTML=''; }
+    }, 250);
+  });
+})();
+</script>
+<style>
+.search-results{position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,.12);max-height:260px;overflow:auto}
+.search-result{display:block;width:100%;border:0;border-bottom:1px solid #e5e7eb;background:#fff;padding:9px 10px;text-align:left;cursor:pointer;font-size:12px;color:#1f2937}
+.search-result:hover{background:#eff6ff}.search-result small{display:block;color:#64748b;margin-top:2px}.search-empty{padding:10px;font-size:12px;color:#64748b}
+.btn-danger{background:#b91c1c!important}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.form-grid .full{grid-column:1/-1}.field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px}
+@media(max-width:800px){.form-grid{grid-template-columns:1fr}.table-wrap{overflow-x:auto}}
+</style>

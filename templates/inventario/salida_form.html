@@ -1,0 +1,17 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Nueva salida de Inventario{% endblock %}
+{% block content %}
+<form method="post">{% csrf_token %}
+<div class="panel"><h3>Información de la salida</h3><div class="form-grid">
+<div class="field"><label>Destino *</label><input class="form-control" name="destino" required></div>
+<div class="field"><label>Solicitado por</label><input class="form-control" name="solicitado_por"></div>
+<div class="field"><label>Recibido por</label><input class="form-control" name="recibido_por"></div>
+<div class="field"><label>Motivo</label><input class="form-control" name="motivo"></div>
+<div class="field full"><label>Comentarios</label><textarea class="form-control" name="comentarios" rows="2"></textarea></div>
+</div></div><br>
+<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center"><div><h3 style="margin:0">Componentes</h3><small>Busca en el catálogo o diligencia manualmente.</small></div><button id="add-row" type="button" class="btn">+ Agregar ítem</button></div><br>
+<div class="table-wrap"><table><thead><tr><th>Buscar catálogo</th><th>P/N o código</th><th>Descripción</th><th>Cant.</th><th>U/M</th><th>Serial</th><th></th></tr></thead><tbody id="items-body"></tbody></table></div></div><br>
+<button class="btn" type="submit">Guardar salida</button> <a class="btn btn-secondary" href="{% url 'inventario:salidas_lista' %}">Cancelar</a>
+</form>
+{% include "inventario/_item_rows_js.html" %}
+{% endblock %}

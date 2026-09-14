@@ -1,0 +1,9 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Remisiones de salida{% endblock %}
+{% block content %}
+<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0 0 4px">Remisiones de salida</h3><div style="font-size:12px;color:#64748b">Formato F-IN-04 con consecutivos independientes: IMPETUS REM-### / OIL & GAS OGS-RM-####.</div></div><a class="btn" href="{% url 'inventario:remision_nueva' %}">+ Nueva remisión</a></div><br>
+<table><thead><tr><th>Remisión</th><th>Fecha envío</th><th>Cliente</th><th>Conductor</th><th>Ítems</th><th>Acción</th></tr></thead><tbody>
+{% for r in remisiones %}<tr><td><strong>{{ r.numero }}</strong></td><td>{{ r.fecha_envio|date:"d/m/Y" }}</td><td>{{ r.cliente }}</td><td>{{ r.nombre_conductor|default:"-" }}</td><td>{{ r.lineas.count }}</td><td><a class="btn" href="{% url 'inventario:remision_detail' r.pk %}">Ver</a> <a class="btn btn-secondary" target="_blank" href="{% url 'inventario:remision_pdf' r.pk %}">PDF</a></td></tr>
+{% empty %}<tr><td colspan="6">Aún no hay remisiones creadas.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

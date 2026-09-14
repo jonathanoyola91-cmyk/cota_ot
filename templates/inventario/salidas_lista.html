@@ -1,0 +1,14 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Salidas de Inventario{% endblock %}
+{% block content %}
+<div class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div><h3 style="margin:0 0 4px">Salidas sin PAW</h3><div style="font-size:12px;color:#64748b">Componentes retirados de Inventario sin relación con un PAW.</div></div>
+    <a class="btn" href="{% url 'inventario:salida_nueva' %}">+ Nueva salida</a>
+  </div><br>
+  <table><thead><tr><th>Código</th><th>Fecha</th><th>Destino</th><th>Solicitado por</th><th>Ítems</th><th>Acción</th></tr></thead><tbody>
+  {% for s in salidas %}<tr><td><strong>{{ s.codigo }}</strong></td><td>{{ s.creado_en|date:"d/m/Y H:i" }}</td><td>{{ s.destino }}</td><td>{{ s.solicitado_por|default:"-" }}</td><td>{{ s.lineas.count }}</td><td><a class="btn" href="{% url 'inventario:salida_detail' s.pk %}">Ver</a> <a class="btn btn-secondary" target="_blank" href="{% url 'inventario:salida_pdf' s.pk %}">PDF</a></td></tr>
+  {% empty %}<tr><td colspan="6">Aún no hay salidas registradas.</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Nueva remisión de salida{% endblock %}
+{% block content %}
+<form method="post">{% csrf_token %}
+<div class="panel">
+  <h3>Empresa, cliente e información de envío</h3>
+  <div class="form-grid">
+    <div class="field">
+      <label>Empresa que emite la remisión *</label>
+      <select class="form-control" name="empresa" required>
+        <option value="IMPETUS" {% if request.POST.empresa == 'IMPETUS' or not request.POST.empresa %}selected{% endif %}>IMPETUS HPS · NIT 901.862.818</option>
+        <option value="OIL_GAS" {% if request.POST.empresa == 'OIL_GAS' %}selected{% endif %}>OIL &amp; GAS SUPPORT · NIT 901.288.858</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Fecha envío *</label>
+      <input class="form-control" type="date" name="fecha_envio" value="{{ request.POST.fecha_envio|default:fecha_hoy|date:'Y-m-d' }}" required>
+    </div>
+
+    <div class="field">
+      <label>Cliente *</label>
+      <select class="form-control" id="cliente-registrado" name="cliente_registrado" required>
+        <option value="">Seleccione un cliente...</option>
+        {% for c in clientes %}
+          <option value="{{ c.pk }}" data-nit="{{ c.nit|default:'' }}" {% if request.POST.cliente_registrado == c.pk|stringformat:'s' %}selected{% endif %}>{{ c.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>NIT del cliente</label>
+      <input class="form-control" id="nit-cliente" value="" readonly>
+      <small>Se toma automáticamente de la base de clientes de Cotizaciones.</small>
+    </div>
+
+    <div class="field"><label>Contacto</label><input class="form-control" name="contacto_envio" value="{{ request.POST.contacto_envio|default:'' }}"></div>
+    <div class="field"><label>Teléfono</label><input class="form-control" name="telefono_envio" value="{{ request.POST.telefono_envio|default:'' }}"></div>
+    <div class="field"><label>Dirección / destino</label><input class="form-control" name="direccion_envio" value="{{ request.POST.direccion_envio|default:'' }}"></div>
+    <div class="field"><label>Tipo de vehículo</label><input class="form-control" name="tipo_vehiculo" value="{{ request.POST.tipo_vehiculo|default:'' }}"></div>
+    <div class="field"><label>Placa</label><input class="form-control" name="placa" value="{{ request.POST.placa|default:'' }}"></div>
+    <div class="field"><label>Nombre conductor</label><input class="form-control" name="nombre_conductor" value="{{ request.POST.nombre_conductor|default:'' }}"></div>
+    <div class="field"><label>Celular conductor</label><input class="form-control" name="celular_conductor" value="{{ request.POST.celular_conductor|default:'' }}"></div>
+    <div class="field"><label>Observaciones</label><input class="form-control" name="observaciones" value="{{ request.POST.observaciones|default:'' }}"></div>
+  </div>
+</div><br>
+
+<div class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div><h3 style="margin:0">Ítems de la remisión</h3><small>Puedes seleccionar del catálogo o ingresar manualmente.</small></div>
+    <button id="add-row" type="button" class="btn">+ Agregar ítem</button>
+  </div><br>
+  <div class="table-wrap"><table><thead><tr><th>Buscar inventario</th><th>Parte Número</th><th>Descripción</th><th>Cant.</th><th>U/M</th><th>Número Serial</th><th></th></tr></thead><tbody id="items-body"></tbody></table></div>
+</div><br>
+<button class="btn" type="submit">Crear remisión</button> <a class="btn btn-secondary" href="{% url 'inventario:remisiones_lista' %}">Cancelar</a>
+</form>
+
+<script>
+(function () {
+  const cliente = document.getElementById('cliente-registrado');
+  const nit = document.getElementById('nit-cliente');
+  function cargarNit() {
+    const option = cliente.options[cliente.selectedIndex];
+    nit.value = option ? (option.dataset.nit || '') : '';
+  }
+  cliente.addEventListener('change', cargarNit);
+  cargarNit();
+})();
+</script>
+{% include "inventario/_item_rows_js.html" %}
+{% endblock %}

@@ -169,3 +169,149 @@ class WorkshopDeliveryLine(models.Model):
 
     def __str__(self):
         return f"{self.codigo} - {self.descripcion}"
+# ======================================================
+# SALIDAS DE INVENTARIO SIN PAW
+# ======================================================
+
+class InventoryExit(models.Model):
+    """Salida física de componentes que no está asociada a un PAW."""
+
+    destino = models.CharField(max_length=160)
+    solicitado_por = models.CharField(max_length=160, blank=True)
+    recibido_por = models.CharField(max_length=160, blank=True)
+    motivo = models.TextField(blank=True)
+    comentarios = models.TextField(blank=True)
+
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="salidas_inventario_creadas",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    @property
+    def codigo(self):
+        return f"SAL-{self.pk:06d}" if self.pk else "SAL-PENDIENTE"
+
+    def __str__(self):
+        return f"{self.codigo} - {self.destino}"
+
+
+class InventoryExitLine(models.Model):
+    salida = models.ForeignKey(
+        InventoryExit,
+        on_delete=models.CASCADE,
+        related_name="lineas",
+    )
+    # Referencia informativa al catálogo. No se usa FK porque existen dos catálogos.
+    catalogo = models.CharField(max_length=20, blank=True, default="")
+    catalogo_item_id = models.PositiveIntegerField(null=True, blank=True)
+    codigo = models.CharField(max_length=80, blank=True, default="")
+    descripcion = models.CharField(max_length=300)
+    unidad = models.CharField(max_length=30, blank=True, default="")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=1)
+    numero_serial = models.CharField(max_length=120, blank=True, default="")
+
+    def __str__(self):
+        return f"{self.codigo or '-'} - {self.descripcion[:80]}"
+
+
+# ======================================================
+# REMISIONES DE SALIDA
+# ======================================================
+
+class RemissionSequence(models.Model):
+    """Contador transaccional independiente por empresa emisora."""
+
+    empresa = models.CharField(max_length=12, unique=True)
+    ultimo = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        prefijo = "REM" if self.empresa == "IMPETUS" else "OGS-RM"
+        return f"Última remisión {self.empresa}: {prefijo}-{self.ultimo:03d}"
+
+
+class DispatchRemission(models.Model):
+    class Empresa(models.TextChoices):
+        IMPETUS = "IMPETUS", "IMPETUS HPS"
+        OIL_GAS = "OIL_GAS", "OIL & GAS SUPPORT"
+
+    consecutivo = models.PositiveIntegerField()
+    empresa = models.CharField(max_length=12, choices=Empresa.choices, default=Empresa.IMPETUS)
+    cliente_registrado = models.ForeignKey(
+        "quotes.Cliente", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="remisiones_salida"
+    )
+
+    cliente = models.CharField(max_length=200)
+    nit = models.CharField(max_length=60, blank=True)
+    contacto_cliente = models.CharField(max_length=160, blank=True)
+    telefono_cliente = models.CharField(max_length=80, blank=True)
+    direccion_cliente = models.CharField(max_length=260, blank=True)
+
+    fecha_envio = models.DateField()
+    contacto_envio = models.CharField(max_length=160, blank=True)
+    telefono_envio = models.CharField(max_length=80, blank=True)
+    direccion_envio = models.CharField(max_length=260, blank=True)
+
+    tipo_vehiculo = models.CharField(max_length=100, blank=True)
+    placa = models.CharField(max_length=40, blank=True)
+    nombre_conductor = models.CharField(max_length=160, blank=True)
+    celular_conductor = models.CharField(max_length=80, blank=True)
+    observaciones = models.TextField(blank=True)
+
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="remisiones_salida_creadas",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    @property
+    def numero(self):
+        if self.empresa == self.Empresa.IMPETUS:
+            return f"REM-{self.consecutivo:03d}"
+        return f"OGS-RM-{self.consecutivo}"
+
+    @property
+    def empresa_nombre(self):
+        return "IMPETUS HPS" if self.empresa == self.Empresa.IMPETUS else "OIL & GAS SUPPORT"
+
+    @property
+    def empresa_nit(self):
+        return "901.862.818" if self.empresa == self.Empresa.IMPETUS else "901.288.858"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "consecutivo"],
+                name="uniq_remision_empresa_consecutivo",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.numero} - {self.cliente}"
+
+
+class DispatchRemissionLine(models.Model):
+    remision = models.ForeignKey(
+        DispatchRemission,
+        on_delete=models.CASCADE,
+        related_name="lineas",
+    )
+    catalogo = models.CharField(max_length=20, blank=True, default="")
+    catalogo_item_id = models.PositiveIntegerField(null=True, blank=True)
+    descripcion = models.CharField(max_length=300)
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3, default=1)
+    unidad = models.CharField(max_length=30, blank=True, default="UND")
+    parte_numero = models.CharField(max_length=100, blank=True, default="")
+    numero_serial = models.CharField(max_length=120, blank=True, default="")
+
+    def __str__(self):
+        return f"{self.remision.numero} - {self.descripcion[:80]}"

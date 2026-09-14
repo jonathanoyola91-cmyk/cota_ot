@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
 from django.db.models import F, Q, Count
@@ -17,9 +17,12 @@ from django.views.decorators.http import require_POST
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 
-from .models import InventoryReception, InventoryReceptionLine, WorkshopDelivery
+from .models import (
+    InventoryReception, InventoryReceptionLine, WorkshopDelivery,
+    InventoryExit, InventoryExitLine, DispatchRemission, DispatchRemissionLine, RemissionSequence,
+)
 from auditoria.utils import registrar_movimiento
 
 
@@ -971,3 +974,351 @@ def entrega_taller_pdf(request, pk):
         f'inline; filename="ENTREGA_TALLER_{entrega.purchase_request.paw_numero}.pdf"'
     )
     return response
+# ======================================================
+# SALIDAS DE INVENTARIO SIN PAW
+# ======================================================
+
+def _decimal_post(value, default="0"):
+    try:
+        return Decimal(str(value or default).replace(",", "."))
+    except Exception:
+        return Decimal(default)
+
+
+def _lineas_desde_post(request, prefix):
+    """Lee filas dinámicas enviadas como prefix_descripcion[], etc."""
+    descripciones = request.POST.getlist(f"{prefix}_descripcion[]")
+    codigos = request.POST.getlist(f"{prefix}_codigo[]")
+    cantidades = request.POST.getlist(f"{prefix}_cantidad[]")
+    unidades = request.POST.getlist(f"{prefix}_unidad[]")
+    seriales = request.POST.getlist(f"{prefix}_serial[]")
+    catalogos = request.POST.getlist(f"{prefix}_catalogo[]")
+    catalogo_ids = request.POST.getlist(f"{prefix}_catalogo_id[]")
+
+    total = max(len(descripciones), len(codigos), len(cantidades), 0)
+    filas = []
+    for i in range(total):
+        descripcion = (descripciones[i] if i < len(descripciones) else "").strip()
+        codigo = (codigos[i] if i < len(codigos) else "").strip()
+        if not descripcion and not codigo:
+            continue
+        filas.append({
+            "descripcion": descripcion or codigo,
+            "codigo": codigo,
+            "cantidad": max(_decimal_post(cantidades[i] if i < len(cantidades) else "1", "1"), Decimal("0")),
+            "unidad": (unidades[i] if i < len(unidades) else "").strip(),
+            "serial": (seriales[i] if i < len(seriales) else "").strip(),
+            "catalogo": (catalogos[i] if i < len(catalogos) else "").strip(),
+            "catalogo_id": int(catalogo_ids[i]) if i < len(catalogo_ids) and str(catalogo_ids[i]).isdigit() else None,
+        })
+    return filas
+
+
+@login_required
+@inventario_required
+def salidas_lista(request):
+    salidas = InventoryExit.objects.select_related("creado_por").prefetch_related("lineas").order_by("-creado_en")
+    return render(request, "inventario/salidas_lista.html", {"salidas": salidas})
+
+
+@login_required
+@inventario_required
+def salida_nueva(request):
+    if request.method == "POST":
+        filas = _lineas_desde_post(request, "item")
+        if not filas:
+            messages.error(request, "Agrega al menos un componente a la salida.")
+        else:
+            with transaction.atomic():
+                salida = InventoryExit.objects.create(
+                    destino=(request.POST.get("destino") or "").strip(),
+                    solicitado_por=(request.POST.get("solicitado_por") or "").strip(),
+                    recibido_por=(request.POST.get("recibido_por") or "").strip(),
+                    motivo=(request.POST.get("motivo") or "").strip(),
+                    comentarios=(request.POST.get("comentarios") or "").strip(),
+                    creado_por=request.user,
+                )
+                InventoryExitLine.objects.bulk_create([
+                    InventoryExitLine(
+                        salida=salida,
+                        catalogo=f["catalogo"],
+                        catalogo_item_id=f["catalogo_id"],
+                        codigo=f["codigo"],
+                        descripcion=f["descripcion"],
+                        unidad=f["unidad"],
+                        cantidad=f["cantidad"],
+                        numero_serial=f["serial"],
+                    ) for f in filas
+                ])
+            messages.success(request, f"Salida {salida.codigo} creada correctamente.")
+            return redirect("inventario:salida_detail", pk=salida.pk)
+
+    return render(request, "inventario/salida_form.html")
+
+
+@login_required
+@inventario_required
+def salida_detail(request, pk):
+    salida = get_object_or_404(InventoryExit.objects.select_related("creado_por").prefetch_related("lineas"), pk=pk)
+    return render(request, "inventario/salida_detail.html", {"salida": salida})
+
+
+@login_required
+@inventario_required
+def salida_pdf(request, pk):
+    salida = get_object_or_404(InventoryExit.objects.select_related("creado_por").prefetch_related("lineas"), pk=pk)
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=28, rightMargin=28, topMargin=28, bottomMargin=28)
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("<b>SALIDA DE INVENTARIO</b>", styles["Title"]),
+        Spacer(1, 8),
+        Paragraph(f"<b>Código:</b> {salida.codigo} &nbsp;&nbsp; <b>Fecha:</b> {timezone.localtime(salida.creado_en).strftime('%d/%m/%Y %H:%M')}", styles["Normal"]),
+        Paragraph(f"<b>Destino:</b> {salida.destino or '-'}", styles["Normal"]),
+        Paragraph(f"<b>Solicitado por:</b> {salida.solicitado_por or '-'} &nbsp;&nbsp; <b>Recibido por:</b> {salida.recibido_por or '-'}", styles["Normal"]),
+        Paragraph(f"<b>Motivo:</b> {salida.motivo or '-'}", styles["Normal"]),
+        Spacer(1, 12),
+    ]
+    data = [["CÓDIGO / P.N.", "DESCRIPCIÓN", "UNID", "CANT.", "SERIAL"]]
+    for linea in salida.lineas.all():
+        data.append([
+            linea.codigo or "",
+            Paragraph(linea.descripcion or "", styles["Normal"]),
+            linea.unidad or "",
+            str(linea.cantidad.normalize()),
+            linea.numero_serial or "",
+        ])
+    table = Table(data, colWidths=[90, 255, 50, 55, 85], repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+        ("GRID", (0,0), (-1,-1), 0.6, colors.grey),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE", (0,0), (-1,-1), 8.5),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("ALIGN", (2,1), (-1,-1), "CENTER"),
+        ("LEFTPADDING", (0,0), (-1,-1), 4),
+        ("RIGHTPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story += [table, Spacer(1, 14), Paragraph("<b>Comentarios</b>", styles["Heading3"]), Paragraph(salida.comentarios or " ", styles["Normal"]), Spacer(1, 38)]
+    firmas = Table([
+        ["__________________________", "__________________________"],
+        ["Entrega Inventario", "Recibe"],
+        [salida.creado_por.get_full_name() if salida.creado_por and salida.creado_por.get_full_name() else (salida.creado_por.username if salida.creado_por else ""), salida.recibido_por or ""],
+    ], colWidths=[250,250])
+    firmas.setStyle(TableStyle([("ALIGN", (0,0), (-1,-1), "CENTER"), ("FONTSIZE", (0,0), (-1,-1), 9)]))
+    story.append(firmas)
+    doc.build(story)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="{salida.codigo}.pdf"'
+    return response
+
+
+# ======================================================
+# REMISIONES DE SALIDA - F-IN-04
+# ======================================================
+
+@login_required
+@inventario_required
+def remisiones_lista(request):
+    remisiones = DispatchRemission.objects.select_related("creado_por").prefetch_related("lineas").order_by("-creado_en")
+    return render(request, "inventario/remisiones_lista.html", {"remisiones": remisiones})
+
+
+@login_required
+@inventario_required
+def remision_nueva(request):
+    from quotes.models import Cliente
+    clientes = Cliente.objects.filter(activo=True).order_by("nombre")
+
+    if request.method == "POST":
+        filas = _lineas_desde_post(request, "item")
+        cliente_id = request.POST.get("cliente_registrado")
+        cliente_obj = Cliente.objects.filter(pk=cliente_id, activo=True).first()
+        empresa = request.POST.get("empresa")
+        empresas_validas = {DispatchRemission.Empresa.IMPETUS, DispatchRemission.Empresa.OIL_GAS}
+
+        if not cliente_obj:
+            messages.error(request, "Selecciona un cliente registrado.")
+        elif empresa not in empresas_validas:
+            messages.error(request, "Selecciona la empresa que emite la remisión.")
+        elif not filas:
+            messages.error(request, "Agrega al menos un ítem a la remisión.")
+        else:
+            with transaction.atomic():
+                # Cada empresa conserva su propia serie documental.
+                # OIL & GAS: última histórica OGS-RM-1511 -> inicia OGS-RM-1512.
+                # IMPETUS:   última histórica REM-069     -> inicia REM-070.
+                inicio = 69 if empresa == DispatchRemission.Empresa.IMPETUS else 1511
+                secuencia, _ = RemissionSequence.objects.select_for_update().get_or_create(
+                    empresa=empresa,
+                    defaults={"ultimo": inicio},
+                )
+                secuencia.ultimo += 1
+                secuencia.save(update_fields=["ultimo"])
+                remision = DispatchRemission.objects.create(
+                    consecutivo=secuencia.ultimo,
+                    empresa=empresa,
+                    cliente_registrado=cliente_obj,
+                    # Se guarda una copia del nombre/NIT para conservar el histórico
+                    # aunque posteriormente cambie el maestro de clientes.
+                    cliente=cliente_obj.nombre,
+                    nit=cliente_obj.nit or "",
+                    fecha_envio=request.POST.get("fecha_envio") or timezone.localdate(),
+                    contacto_envio=(request.POST.get("contacto_envio") or "").strip(),
+                    telefono_envio=(request.POST.get("telefono_envio") or "").strip(),
+                    direccion_envio=(request.POST.get("direccion_envio") or "").strip(),
+                    tipo_vehiculo=(request.POST.get("tipo_vehiculo") or "").strip(),
+                    placa=(request.POST.get("placa") or "").strip(),
+                    nombre_conductor=(request.POST.get("nombre_conductor") or "").strip(),
+                    celular_conductor=(request.POST.get("celular_conductor") or "").strip(),
+                    observaciones=(request.POST.get("observaciones") or "").strip(),
+                    creado_por=request.user,
+                )
+                DispatchRemissionLine.objects.bulk_create([
+                    DispatchRemissionLine(
+                        remision=remision, catalogo=f["catalogo"], catalogo_item_id=f["catalogo_id"],
+                        descripcion=f["descripcion"], cantidad=f["cantidad"], unidad=f["unidad"] or "UND",
+                        parte_numero=f["codigo"], numero_serial=f["serial"],
+                    ) for f in filas
+                ])
+            messages.success(request, f"Remisión {remision.numero} creada correctamente.")
+            return redirect("inventario:remision_detail", pk=remision.pk)
+
+    return render(request, "inventario/remision_form.html", {
+        "fecha_hoy": timezone.localdate(),
+        "clientes": clientes,
+    })
+
+
+@login_required
+@inventario_required
+def remision_detail(request, pk):
+    remision = get_object_or_404(DispatchRemission.objects.select_related("creado_por").prefetch_related("lineas"), pk=pk)
+    return render(request, "inventario/remision_detail.html", {"remision": remision})
+
+
+@login_required
+@inventario_required
+def buscar_items_inventario(request):
+    """Autocomplete unificado de Item Oil & Gas e Item IMPETUS."""
+    q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return JsonResponse({"results": []})
+    from item_oil_gas.models import Item, ItemImpetus
+    resultados = []
+    for catalogo, Model in (("OIL_GAS", Item), ("IMPETUS", ItemImpetus)):
+        qs = Model.objects.filter(activo=True).filter(Q(codigo__icontains=q) | Q(descripcion__icontains=q)).order_by("codigo")[:12]
+        for item in qs:
+            resultados.append({
+                "catalogo": catalogo,
+                "id": item.pk,
+                "codigo": item.codigo or "",
+                "descripcion": item.descripcion or "",
+                "unidad": item.unidad_medida or "UND",
+                "label": f"{item.codigo} - {item.descripcion[:100]}",
+            })
+    return JsonResponse({"results": resultados[:20]})
+
+
+def _p(text, styles, bold=False):
+    value = str(text or "")
+    if bold:
+        value = f"<b>{value}</b>"
+    return Paragraph(value, styles["Normal"])
+
+
+@login_required
+@inventario_required
+def remision_pdf(request, pk):
+    remision = get_object_or_404(
+        DispatchRemission.objects.select_related("creado_por", "cliente_registrado").prefetch_related("lineas"), pk=pk
+    )
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=24, rightMargin=24, topMargin=22, bottomMargin=22)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Logo dinámico según la empresa emisora.
+    logo_name = "logo_empresa.png" if remision.empresa == DispatchRemission.Empresa.IMPETUS else "logo_oil_gas.png"
+    logo_path = settings.BASE_DIR / "static" / "img" / logo_name
+    logo = ""
+    if logo_path.exists():
+        logo = Image(str(logo_path), width=92, height=48, kind="proportional")
+
+    titulo = f"REMISIÓN {remision.empresa_nombre}"
+    encabezado = Table([
+        [logo, _p(titulo, styles, True), _p("Versión: 4", styles)],
+        ["", _p("Copia controlada (X)    Copia no controlada ( )", styles), _p("Fecha: 01/06/2022", styles)],
+        ["", _p(f"NIT {remision.empresa_nit}", styles, True), _p("Código: F-IN-04", styles)],
+    ], colWidths=[105, 300, 120], rowHeights=[28, 25, 25])
+    encabezado.setStyle(TableStyle([
+        ("GRID", (0,0), (-1,-1), 0.65, colors.black),
+        ("SPAN", (0,0), (0,2)),
+        ("ALIGN", (0,0), (0,2), "CENTER"),
+        ("ALIGN", (1,0), (1,2), "CENTER"),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("FONTSIZE", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+    ]))
+    story.append(encabezado)
+
+    info = Table([
+        [_p("Datos del Cliente", styles, True), "", _p("Información de Envío", styles, True), ""],
+        [_p("Cliente", styles, True), _p(remision.cliente, styles), _p("REMISIÓN N°", styles, True), _p(remision.numero, styles, True)],
+        [_p("NIT", styles, True), _p(remision.nit, styles), _p("Fecha Envío", styles, True), _p(remision.fecha_envio.strftime("%d/%m/%Y"), styles)],
+        [_p("Contacto", styles, True), _p(remision.contacto_envio, styles), _p("Teléfono", styles, True), _p(remision.telefono_envio, styles)],
+        [_p("Dirección", styles, True), _p(remision.direccion_envio, styles), _p("Nombre Conductor", styles, True), _p(remision.nombre_conductor, styles)],
+        [_p("Tipo de Vehículo", styles, True), _p(remision.tipo_vehiculo, styles), _p("Celular", styles, True), _p(remision.celular_conductor, styles)],
+        [_p("Placa", styles, True), _p(remision.placa, styles), "", ""],
+    ], colWidths=[82, 180, 92, 171])
+    info.setStyle(TableStyle([
+        ("GRID", (0,0), (-1,-1), 0.65, colors.black),
+        ("SPAN", (0,0), (1,0)), ("SPAN", (2,0), (3,0)),
+        ("BACKGROUND", (0,0), (1,0), colors.HexColor("#e8eef5")),
+        ("BACKGROUND", (2,0), (3,0), colors.HexColor("#e8eef5")),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("FONTSIZE", (0,0), (-1,-1), 7.5),
+        ("LEFTPADDING", (0,0), (-1,-1), 4), ("RIGHTPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(info)
+
+    data = [["Ítem", "Descripción", "Cant.", "U/M", "Parte Número", "Número Serial"]]
+    for idx, linea in enumerate(remision.lineas.all(), start=1):
+        data.append([str(idx), _p(linea.descripcion, styles), str(linea.cantidad.normalize()), linea.unidad or "", linea.parte_numero or "", linea.numero_serial or ""])
+    while len(data) < 14:
+        idx = len(data)
+        data.append([str(idx), "", "", "", "", ""])
+
+    items = Table(data, colWidths=[32, 250, 45, 43, 78, 77], repeatRows=1, rowHeights=[24] + [26]*(len(data)-1))
+    items.setStyle(TableStyle([
+        ("GRID", (0,0), (-1,-1), 0.65, colors.black), ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e8eef5")),
+        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("ALIGN", (0,0), (0,-1), "CENTER"),
+        ("ALIGN", (2,0), (-1,-1), "CENTER"), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("FONTSIZE", (0,0), (-1,-1), 7.3), ("LEFTPADDING", (0,0), (-1,-1), 3), ("RIGHTPADDING", (0,0), (-1,-1), 3),
+    ]))
+    story.append(items)
+    if remision.observaciones:
+        story += [Spacer(1, 7), Paragraph(f"<b>Observaciones:</b> {remision.observaciones}", styles["Normal"])]
+
+    story += [Spacer(1, 34)]
+    usuario = remision.creado_por.get_full_name() if remision.creado_por and remision.creado_por.get_full_name() else (remision.creado_por.username if remision.creado_por else "")
+    firmas = Table([
+        ["______________________", "______________________", "______________________"],
+        ["Despachado por", "Transportado por", "Recibido por"],
+        ["Inventario", "Conductor", "Cliente"],
+        [usuario, remision.nombre_conductor or "", ""],
+    ], colWidths=[175,175,175])
+    firmas.setStyle(TableStyle([
+        ("ALIGN", (0,0), (-1,-1), "CENTER"), ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("FONTNAME", (0,1), (-1,2), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 7.5),
+    ]))
+    story.append(firmas)
+
+    doc.build(story)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="{remision.numero}.pdf"'
+    return response
+
