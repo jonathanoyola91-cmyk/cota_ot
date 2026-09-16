@@ -4,111 +4,120 @@
 {% block page_title %}Gerencia · Aprobación de Pagos{% endblock %}
 
 {% block content %}
+<style>
+    .paw-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;padding:18px 20px;list-style:none}
+    .paw-summary::-webkit-details-marker{display:none}
+    .paw-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .paw-number{font-size:18px;font-weight:900;color:#0f172a}
+    .paw-name{color:#64748b;font-weight:600}
+    .paw-badges{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .paw-badge{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:800;background:#e2e8f0;color:#334155}
+    .paw-badge.pending{background:#fef3c7;color:#92400e}
+    .paw-badge.ok{background:#dcfce7;color:#166534}
+    .paw-card{border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px;background:#fff;overflow:hidden}
+    .paw-card[open] .paw-summary{border-bottom:1px solid #e2e8f0;background:#f8fafc}
+    .paw-arrow{font-size:18px;color:#64748b;transition:transform .15s ease}
+    .paw-card[open] .paw-arrow{transform:rotate(180deg)}
+    .paw-table-wrap{overflow-x:auto;padding:0 14px 14px}
+    .paw-table{width:100%;border-collapse:collapse;margin-top:12px}
+    .paw-table th{white-space:nowrap;background:#f8fafc}
+    .paw-table td{vertical-align:top}
+    .top-stats{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 20px}
+    .top-stat{background:#f1f5f9;border-radius:10px;padding:8px 12px;color:#475569;font-size:13px;font-weight:700}
+    @media(max-width:700px){.paw-summary{align-items:flex-start}.paw-badges{justify-content:flex-end}.paw-name{width:100%}}
+</style>
 
 <div class="panel">
-
-    <h2 style="margin-top:0;">Aprobación de pagos</h2>
+    <h2 style="margin-top:0;">Aprobación de pagos de contado</h2>
     <p style="color:#64748b;margin-top:4px;">
-        El gerente aprueba, programa, deja en espera o rechaza pagos antes de que finanzas pueda marcarlos como pagados.
+        Los pagos están organizados por PAW. Abra un PAW para revisar y decidir cada ítem de contado.
     </p>
 
-    <br>
-
-    <div style="overflow-x:auto;">
-        <table>
-            <thead>
-                <tr>
-                    <th>PAW</th>
-                    <th>Código</th>
-                    <th>Descripción</th>
-                    <th>Proveedor</th>
-                    <th>Valor</th>
-                    <th>Condición</th>
-                    <th>Decisión</th>
-                    <th>Fecha programada</th>
-                    <th>Nota gerente</th>
-                    <th>Acción</th>
-                </tr>
-            </thead>
-
-            <tbody>
-                {% for linea in lineas %}
-                <tr>
-                    <form method="post" action="{% url 'finanzas:aprobar_linea_pago' linea.id %}">
-                        {% csrf_token %}
-
-                        <td>
-                            <strong>{{ linea.approval.purchase_request.paw_numero }}</strong>
-                        </td>
-
-                        <td>
-                            <strong>{{ linea.purchase_line.codigo }}</strong>
-                        </td>
-
-                        <td style="min-width:260px;">
-                            {{ linea.purchase_line.descripcion }}
-                        </td>
-
-                        <td style="min-width:180px;">
-                            {% if linea.purchase_line.proveedor %}
-                                <a href="{% url 'compras_oil:supplier_detail' linea.purchase_line.proveedor.id %}"
-                                   style="font-weight:800;color:#2563eb;text-decoration:none;">
-                                    {{ linea.purchase_line.proveedor }}
-                                </a>
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-
-                        <td>
-                            $ {{ linea.purchase_line.precio_unitario|default:"0" }}
-                        </td>
-
-                        <td style="min-width:220px;">
-                            {{ linea.purchase_line.observaciones_compras|default:"-" }}
-                        </td>
-
-                        <td>
-                            <select name="decision" style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
-                                <option value="PENDIENTE" {% if linea.decision == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
-                                <option value="APROBADO" {% if linea.decision == "APROBADO" %}selected{% endif %}>Aprobado para pagar</option>
-                                <option value="PROGRAMADO" {% if linea.decision == "PROGRAMADO" %}selected{% endif %}>Programado</option>
-                                <option value="EN_ESPERA" {% if linea.decision == "EN_ESPERA" %}selected{% endif %}>En espera</option>
-                                <option value="RECHAZADO" {% if linea.decision == "RECHAZADO" %}selected{% endif %}>Rechazado</option>
-                            </select>
-                        </td>
-
-                        <td>
-                            <input type="date"
-                                   name="scheduled_date"
-                                   value="{{ linea.scheduled_date|date:'Y-m-d' }}"
-                                   style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
-                        </td>
-
-                        <td>
-                            <textarea name="nota_admin"
-                                      rows="2"
-                                      style="min-width:220px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">{{ linea.nota_admin }}</textarea>
-                        </td>
-
-                        <td>
-                            <button class="btn" type="submit">
-                                Guardar
-                            </button>
-                        </td>
-                    </form>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="10">
-                        No hay pagos pendientes de aprobación.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="top-stats">
+        <span class="top-stat">{{ total_paws }} PAW{% if total_paws != 1 %}s{% endif %}</span>
+        <span class="top-stat">{{ total_lineas }} ítem{% if total_lineas != 1 %}s{% endif %} sin pagar</span>
     </div>
 
-</div>
+    {% for grupo in grupos %}
+        <details class="paw-card" {% if forloop.first %}open{% endif %}>
+            <summary class="paw-summary">
+                <div class="paw-title">
+                    <span class="paw-number">PAW {{ grupo.paw_numero }}</span>
+                    {% if grupo.paw_nombre %}<span class="paw-name">{{ grupo.paw_nombre }}</span>{% endif %}
+                </div>
+                <div class="paw-badges">
+                    <span class="paw-badge">{{ grupo.total_items }} ítem{% if grupo.total_items != 1 %}s{% endif %}</span>
+                    {% if grupo.pendientes %}
+                        <span class="paw-badge pending">{{ grupo.pendientes }} pendiente{% if grupo.pendientes != 1 %}s{% endif %}</span>
+                    {% else %}
+                        <span class="paw-badge ok">Decisiones gestionadas</span>
+                    {% endif %}
+                    <span class="paw-arrow">⌄</span>
+                </div>
+            </summary>
 
+            <div class="paw-table-wrap">
+                <table class="paw-table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Descripción</th>
+                            <th>Proveedor</th>
+                            <th>Valor</th>
+                            <th>Condición</th>
+                            <th>Decisión</th>
+                            <th>Fecha programada</th>
+                            <th>Nota gerente</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linea in grupo.lineas %}
+                        <tr>
+                            <td><strong>{{ linea.purchase_line.codigo }}</strong></td>
+                            <td style="min-width:240px;">{{ linea.purchase_line.descripcion }}</td>
+                            <td style="min-width:170px;">
+                                {% if linea.purchase_line.proveedor %}
+                                    <a href="{% url 'compras_oil:supplier_detail' linea.purchase_line.proveedor.id %}"
+                                       style="font-weight:800;color:#2563eb;text-decoration:none;">
+                                        {{ linea.purchase_line.proveedor }}
+                                    </a>
+                                {% else %}-{% endif %}
+                            </td>
+                            <td style="white-space:nowrap;">$ {{ linea.purchase_line.precio_unitario|default:"0" }}</td>
+                            <td style="min-width:200px;">{{ linea.purchase_line.observaciones_compras|default:"-" }}</td>
+                            <td>
+                                <form id="pago-linea-{{ linea.id }}" method="post" action="{% url 'finanzas:aprobar_linea_pago' linea.id %}">
+                                    {% csrf_token %}
+                                </form>
+                                <select name="decision" form="pago-linea-{{ linea.id }}" style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;min-width:165px;">
+                                    <option value="PENDIENTE" {% if linea.decision == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
+                                    <option value="APROBADO" {% if linea.decision == "APROBADO" %}selected{% endif %}>Aprobado para pagar</option>
+                                    <option value="PROGRAMADO" {% if linea.decision == "PROGRAMADO" %}selected{% endif %}>Programado</option>
+                                    <option value="EN_ESPERA" {% if linea.decision == "EN_ESPERA" %}selected{% endif %}>En espera</option>
+                                    <option value="RECHAZADO" {% if linea.decision == "RECHAZADO" %}selected{% endif %}>Rechazado</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="date" name="scheduled_date" form="pago-linea-{{ linea.id }}"
+                                       value="{{ linea.scheduled_date|date:'Y-m-d' }}"
+                                       style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
+                            </td>
+                            <td>
+                                <textarea name="nota_admin" form="pago-linea-{{ linea.id }}" rows="2"
+                                          style="min-width:200px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">{{ linea.nota_admin }}</textarea>
+                            </td>
+                            <td><button class="btn" type="submit" form="pago-linea-{{ linea.id }}">Guardar</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    {% empty %}
+        <div style="padding:22px;border:1px dashed #cbd5e1;border-radius:12px;color:#64748b;">
+            No hay pagos pendientes de aprobación.
+        </div>
+    {% endfor %}
+</div>
 {% endblock %}

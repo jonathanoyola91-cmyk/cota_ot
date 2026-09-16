@@ -2,6 +2,7 @@
 (function(){
   const tbody = document.getElementById('items-body');
   const addBtn = document.getElementById('add-row');
+  const empresaSelect = document.querySelector('select[name="empresa"]');
   const searchUrl = "{% url 'inventario:buscar_items_inventario' %}";
 
   function rowTemplate(){
@@ -22,16 +23,45 @@
       </tr>`;
   }
 
+  function limpiarSeleccionCatalogo(row){
+    row.querySelector('.item-catalogo').value = '';
+    row.querySelector('.item-catalogo-id').value = '';
+    row.querySelector('.search-results').innerHTML = '';
+  }
+
+  function limpiarItemsAlCambiarEmpresa(){
+    tbody.querySelectorAll('.item-row').forEach(row => {
+      row.querySelectorAll('input').forEach(input => {
+        if(input.type === 'number') input.value = '1';
+        else if(input.classList.contains('item-unidad')) input.value = 'UND';
+        else input.value = '';
+      });
+      row.querySelector('.search-results').innerHTML = '';
+    });
+  }
+
   function addRow(){ tbody.insertAdjacentHTML('beforeend', rowTemplate()); }
   if (!tbody.querySelector('.item-row')) addRow();
   addBtn.addEventListener('click', addRow);
+
+  if(empresaSelect){
+    empresaSelect.addEventListener('change', limpiarItemsAlCambiarEmpresa);
+  }
 
   tbody.addEventListener('click', function(e){
     if(e.target.classList.contains('remove-row')){
       const rows = tbody.querySelectorAll('.item-row');
       if(rows.length > 1) e.target.closest('tr').remove();
-      else rows[0].querySelectorAll('input').forEach(i => { if(i.type !== 'number') i.value=''; });
+      else {
+        rows[0].querySelectorAll('input').forEach(i => {
+          if(i.type === 'number') i.value='1';
+          else if(i.classList.contains('item-unidad')) i.value='UND';
+          else i.value='';
+        });
+        rows[0].querySelector('.search-results').innerHTML = '';
+      }
     }
+
     const result = e.target.closest('.search-result');
     if(result){
       const row = result.closest('.item-row');
@@ -48,14 +78,30 @@
   let timer;
   tbody.addEventListener('input', function(e){
     if(!e.target.classList.contains('item-search')) return;
+
     const input = e.target;
     const row = input.closest('.item-row');
     const box = row.querySelector('.search-results');
+    limpiarSeleccionCatalogo(row);
     clearTimeout(timer);
-    if(input.value.trim().length < 2){ box.innerHTML=''; return; }
+
+    if(input.value.trim().length < 2){
+      box.innerHTML='';
+      return;
+    }
+
+    const empresa = empresaSelect ? empresaSelect.value : '';
+    if(!empresa){
+      box.innerHTML='<div class="search-empty">Selecciona primero la empresa emisora.</div>';
+      return;
+    }
+
     timer = setTimeout(async () => {
       try{
-        const res = await fetch(searchUrl + '?q=' + encodeURIComponent(input.value.trim()));
+        const url = searchUrl
+          + '?empresa=' + encodeURIComponent(empresa)
+          + '&q=' + encodeURIComponent(input.value.trim());
+        const res = await fetch(url);
         const data = await res.json();
         box.innerHTML = (data.results || []).map(x => `
           <button type="button" class="search-result"
@@ -66,7 +112,9 @@
             data-label="${String(x.label).replace(/"/g,'&quot;')}">
             <strong>${x.codigo}</strong> — ${x.descripcion}<small>${x.catalogo}</small>
           </button>`).join('') || '<div class="search-empty">Sin coincidencias. Puedes diligenciar manualmente.</div>';
-      }catch(err){ box.innerHTML=''; }
+      }catch(err){
+        box.innerHTML='';
+      }
     }, 250);
   });
 })();

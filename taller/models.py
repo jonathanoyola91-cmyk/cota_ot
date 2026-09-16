@@ -36,6 +36,7 @@ class CamaraTaller(models.Model):
         )
         APROBADA = "APROBADA", "Aprobada / Pendiente PAW"
         PAW_GENERADO = "PAW_GENERADO", "PAW generado"
+        ENTREGADA = "ENTREGADA", "Entregada / Salió de Taller"
 
     cliente = models.CharField(max_length=200)
     marca = models.CharField(max_length=150, blank=True)

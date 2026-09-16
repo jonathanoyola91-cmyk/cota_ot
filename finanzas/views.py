@@ -364,17 +364,64 @@ def aprobacion_pagos(request):
         messages.error(request, "Solo gerencia puede aprobar pagos.")
         return redirect("/")
 
-    lineas = FinanceApprovalLine.objects.select_related(
-        "approval",
-        "approval__purchase_request",
-        "purchase_line",
-        "purchase_line__proveedor",
-    ).filter(
-        pagado=False
-    ).order_by("decision", "scheduled_date", "-creado_en")
+    lineas = list(
+        FinanceApprovalLine.objects.select_related(
+            "approval",
+            "approval__purchase_request",
+            "purchase_line",
+            "purchase_line__proveedor",
+        ).filter(
+            pagado=False
+        ).order_by(
+            "approval__purchase_request__paw_numero",
+            "purchase_line__id",
+        )
+    )
+
+    # La aprobación se presenta por PAW y no como una lista plana de ítems.
+    # La decisión sigue siendo individual por línea; solo cambia la organización
+    # visual para que Gerencia pueda trabajar PAW por PAW.
+    grupos_por_id = {}
+    for linea in lineas:
+        approval = linea.approval
+        pr = approval.purchase_request
+        key = approval.pk
+
+        if key not in grupos_por_id:
+            grupos_por_id[key] = {
+                "approval": approval,
+                "purchase_request": pr,
+                "paw_numero": pr.paw_numero or pr.pk,
+                "paw_nombre": getattr(pr, "paw_nombre", "") or "",
+                "lineas": [],
+                "total_items": 0,
+                "pendientes": 0,
+                "gestionados": 0,
+            }
+
+        grupo = grupos_por_id[key]
+        grupo["lineas"].append(linea)
+        grupo["total_items"] += 1
+        if linea.decision == "PENDIENTE":
+            grupo["pendientes"] += 1
+        else:
+            grupo["gestionados"] += 1
+
+    grupos = list(grupos_por_id.values())
+
+    # Primero PAW con decisiones pendientes; dentro de cada grupo se conservan
+    # todos los ítems de contado aún no pagados.
+    grupos.sort(
+        key=lambda g: (
+            0 if g["pendientes"] > 0 else 1,
+            str(g["paw_numero"]),
+        )
+    )
 
     return render(request, "finanzas/aprobacion_pagos.html", {
-        "lineas": lineas,
+        "grupos": grupos,
+        "total_paws": len(grupos),
+        "total_lineas": len(lineas),
     })
 
 @require_POST

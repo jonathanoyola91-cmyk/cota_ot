@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.contrib.staticfiles import finders
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
@@ -1145,6 +1146,29 @@ def remision_nueva(request):
         elif not filas:
             messages.error(request, "Agrega al menos un ítem a la remisión.")
         else:
+            # Seguridad: un ítem seleccionado del catálogo debe pertenecer a la
+            # misma empresa que emite la remisión. Los ítems diligenciados
+            # manualmente pueden venir sin catálogo.
+            catalogo_esperado = (
+                "IMPETUS"
+                if empresa == DispatchRemission.Empresa.IMPETUS
+                else "OIL_GAS"
+            )
+            filas_invalidas = [
+                f for f in filas
+                if f["catalogo"] and f["catalogo"] != catalogo_esperado
+            ]
+            if filas_invalidas:
+                messages.error(
+                    request,
+                    "Hay ítems seleccionados de un catálogo que no corresponde "
+                    "a la empresa emisora. Vuelve a seleccionarlos."
+                )
+                return render(request, "inventario/remision_form.html", {
+                    "fecha_hoy": timezone.localdate(),
+                    "clientes": clientes,
+                })
+
             with transaction.atomic():
                 # Cada empresa conserva su propia serie documental.
                 # OIL & GAS: última histórica OGS-RM-1511 -> inicia OGS-RM-1512.
@@ -1201,24 +1225,44 @@ def remision_detail(request, pk):
 @login_required
 @inventario_required
 def buscar_items_inventario(request):
-    """Autocomplete unificado de Item Oil & Gas e Item IMPETUS."""
+    """
+    Autocomplete del inventario según la empresa emisora de la remisión.
+    IMPETUS consulta únicamente ItemImpetus y OIL_GAS únicamente Item.
+    """
     q = (request.GET.get("q") or "").strip()
+    empresa = (request.GET.get("empresa") or "").strip().upper()
+
     if len(q) < 2:
         return JsonResponse({"results": []})
+
     from item_oil_gas.models import Item, ItemImpetus
-    resultados = []
-    for catalogo, Model in (("OIL_GAS", Item), ("IMPETUS", ItemImpetus)):
-        qs = Model.objects.filter(activo=True).filter(Q(codigo__icontains=q) | Q(descripcion__icontains=q)).order_by("codigo")[:12]
-        for item in qs:
-            resultados.append({
-                "catalogo": catalogo,
-                "id": item.pk,
-                "codigo": item.codigo or "",
-                "descripcion": item.descripcion or "",
-                "unidad": item.unidad_medida or "UND",
-                "label": f"{item.codigo} - {item.descripcion[:100]}",
-            })
-    return JsonResponse({"results": resultados[:20]})
+
+    if empresa == DispatchRemission.Empresa.IMPETUS:
+        catalogo = "IMPETUS"
+        Model = ItemImpetus
+    elif empresa == DispatchRemission.Empresa.OIL_GAS:
+        catalogo = "OIL_GAS"
+        Model = Item
+    else:
+        return JsonResponse({"results": []})
+
+    qs = (
+        Model.objects
+        .filter(activo=True)
+        .filter(Q(codigo__icontains=q) | Q(descripcion__icontains=q))
+        .order_by("codigo")[:20]
+    )
+
+    resultados = [{
+        "catalogo": catalogo,
+        "id": item.pk,
+        "codigo": item.codigo or "",
+        "descripcion": item.descripcion or "",
+        "unidad": item.unidad_medida or "UND",
+        "label": f"{item.codigo} - {item.descripcion[:100]}",
+    } for item in qs]
+
+    return JsonResponse({"results": resultados})
 
 
 def _p(text, styles, bold=False):
@@ -1240,10 +1284,16 @@ def remision_pdf(request, pk):
     story = []
 
     # Logo dinámico según la empresa emisora.
-    logo_name = "logo_empresa.png" if remision.empresa == DispatchRemission.Empresa.IMPETUS else "logo_oil_gas.png"
-    logo_path = settings.BASE_DIR / "static" / "img" / logo_name
+    # finders.find funciona tanto en desarrollo como con STATIC_ROOT/collectstatic
+    # en producción (Render/WhiteNoise).
+    logo_name = (
+        "img/logo_empresa.png"
+        if remision.empresa == DispatchRemission.Empresa.IMPETUS
+        else "img/logo_oil_gas.png"
+    )
+    logo_path = finders.find(logo_name)
     logo = ""
-    if logo_path.exists():
+    if logo_path:
         logo = Image(str(logo_path), width=92, height=48, kind="proportional")
 
     titulo = f"REMISIÓN {remision.empresa_nombre}"

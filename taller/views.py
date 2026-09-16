@@ -255,15 +255,19 @@ def confirmar_ensamble_ok(request, ot_id):
 @login_required
 def camaras_taller(request):
 
+    # La ubicación física de la cámara depende del estado ENTREGADA,
+    # no de si ya tiene PAW. Una cámara con PAW puede seguir en Taller.
     activas = (
         CamaraTaller.objects
-        .filter(paw__isnull=True)
+        .exclude(estado=CamaraTaller.Estado.ENTREGADA)
+        .select_related("paw")
         .order_by("fecha_ingreso", "id")
     )
 
+    # Historial: únicamente cámaras que ya salieron físicamente de Taller.
     historial = (
         CamaraTaller.objects
-        .filter(paw__isnull=False)
+        .filter(estado=CamaraTaller.Estado.ENTREGADA)
         .select_related("paw")
         .order_by("-actualizado_en")
     )
@@ -369,10 +373,16 @@ def camara_editar(request, camara_id):
 
         camara.save()
 
-        messages.success(
-            request,
-            f"Cámara serial {camara.serial} actualizada correctamente."
-        )
+        if camara.estado == CamaraTaller.Estado.ENTREGADA:
+            messages.success(
+                request,
+                f"Cámara serial {camara.serial} marcada como entregada y trasladada al historial."
+            )
+        else:
+            messages.success(
+                request,
+                f"Cámara serial {camara.serial} actualizada correctamente."
+            )
 
         return redirect("taller:camaras_taller")
 
