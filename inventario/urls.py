@@ -21,6 +21,7 @@ urlpatterns = [
     path("remisiones/", views.remisiones_lista, name="remisiones_lista"),
     path("remisiones/nueva/", views.remision_nueva, name="remision_nueva"),
     path("remisiones/<int:pk>/", views.remision_detail, name="remision_detail"),
+    path("remisiones/<int:pk>/anular/", views.remision_anular, name="remision_anular"),
     path("remisiones/<int:pk>/pdf/", views.remision_pdf, name="remision_pdf"),
 
     # Autocomplete del catálogo

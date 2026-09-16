@@ -1,5 +1,60 @@
 {% extends "dashboard/home.html" %}
 {% block page_title %}{{ remision.numero }}{% endblock %}
-{% block content %}<div class="panel"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">{{ remision.numero }}</h3><small>{{ remision.empresa_nombre }} · Formato F-IN-04 · Versión 4</small></div><div><a class="btn btn-secondary" href="{% url 'inventario:remisiones_lista' %}">Volver</a> <a class="btn" target="_blank" href="{% url 'inventario:remision_pdf' remision.pk %}">Imprimir PDF</a></div></div><br>
-<div class="form-grid"><div><strong>Empresa:</strong> {{ remision.empresa_nombre }}<br><strong>NIT empresa:</strong> {{ remision.empresa_nit }}<br><strong>Cliente:</strong> {{ remision.cliente }}<br><strong>NIT cliente:</strong> {{ remision.nit|default:"-" }}</div><div><strong>Fecha envío:</strong> {{ remision.fecha_envio|date:"d/m/Y" }}<br><strong>Contacto:</strong> {{ remision.contacto_envio|default:"-" }} · {{ remision.telefono_envio|default:"-" }}<br><strong>Dirección:</strong> {{ remision.direccion_envio|default:"-" }}<br><strong>Vehículo / placa:</strong> {{ remision.tipo_vehiculo|default:"-" }} / {{ remision.placa|default:"-" }}<br><strong>Conductor:</strong> {{ remision.nombre_conductor|default:"-" }} · {{ remision.celular_conductor|default:"-" }}</div></div><br>
-<table><thead><tr><th>Ítem</th><th>Descripción</th><th>Cant.</th><th>U/M</th><th>Parte Número</th><th>Número Serial</th></tr></thead><tbody>{% for l in remision.lineas.all %}<tr><td>{{ forloop.counter }}</td><td>{{ l.descripcion }}</td><td>{{ l.cantidad }}</td><td>{{ l.unidad }}</td><td>{{ l.parte_numero }}</td><td>{{ l.numero_serial }}</td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% block content %}
+<div class="panel">
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <h3 style="margin:0">{{ remision.numero }}</h3>
+      <small>{{ remision.empresa_nombre }} · Formato F-IN-04 · Versión 4</small>
+      <div style="margin-top:8px">
+        {% if remision.estado == "ANULADA" %}
+          <span style="display:inline-block;padding:5px 10px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700">ANULADA</span>
+        {% else %}
+          <span style="display:inline-block;padding:5px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700">ACTIVA</span>
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <a class="btn btn-secondary" href="{% url 'inventario:remisiones_lista' %}">Volver</a>
+      <a class="btn" target="_blank" href="{% url 'inventario:remision_pdf' remision.pk %}">Imprimir PDF</a>
+      {% if remision.estado != "ANULADA" %}
+        <button type="button" class="btn" style="background:#b91c1c;color:white" onclick="document.getElementById('anular-remision').style.display='block'">Anular remisión</button>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if remision.estado == "ANULADA" %}
+    <div style="margin-top:16px;padding:14px;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;color:#7f1d1d">
+      <strong>Esta remisión fue anulada y se conserva únicamente para trazabilidad.</strong><br>
+      <strong>Motivo:</strong> {{ remision.motivo_anulacion }}<br>
+      <strong>Anulada por:</strong> {% if remision.anulada_por %}{{ remision.anulada_por.get_full_name|default:remision.anulada_por.username }}{% else %}-{% endif %}<br>
+      <strong>Fecha:</strong> {{ remision.anulada_en|date:"d/m/Y H:i" }}
+    </div>
+  {% endif %}
+
+  <br>
+  <div class="form-grid">
+    <div><strong>Empresa:</strong> {{ remision.empresa_nombre }}<br><strong>NIT empresa:</strong> {{ remision.empresa_nit }}<br><strong>Cliente:</strong> {{ remision.cliente }}<br><strong>NIT cliente:</strong> {{ remision.nit|default:"-" }}</div>
+    <div><strong>Fecha envío:</strong> {{ remision.fecha_envio|date:"d/m/Y" }}<br><strong>Contacto:</strong> {{ remision.contacto_envio|default:"-" }} · {{ remision.telefono_envio|default:"-" }}<br><strong>Dirección:</strong> {{ remision.direccion_envio|default:"-" }}<br><strong>Vehículo / placa:</strong> {{ remision.tipo_vehiculo|default:"-" }} / {{ remision.placa|default:"-" }}<br><strong>Conductor:</strong> {{ remision.nombre_conductor|default:"-" }} · {{ remision.celular_conductor|default:"-" }}</div>
+  </div><br>
+  <table><thead><tr><th>Ítem</th><th>Descripción</th><th>Cant.</th><th>U/M</th><th>Parte Número</th><th>Número Serial</th></tr></thead><tbody>{% for l in remision.lineas.all %}<tr><td>{{ forloop.counter }}</td><td>{{ l.descripcion }}</td><td>{{ l.cantidad }}</td><td>{{ l.unidad }}</td><td>{{ l.parte_numero }}</td><td>{{ l.numero_serial }}</td></tr>{% endfor %}</tbody></table>
+</div>
+
+{% if remision.estado != "ANULADA" %}
+<div id="anular-remision" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;padding:20px">
+  <div style="max-width:520px;margin:10vh auto;background:white;border-radius:12px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="margin-top:0;color:#991b1b">Anular {{ remision.numero }}</h3>
+    <p>La remisión no se eliminará. Quedará registrada como <strong>ANULADA</strong> y para corregir el despacho deberá crear una nueva.</p>
+    <form method="post" action="{% url 'inventario:remision_anular' remision.pk %}">
+      {% csrf_token %}
+      <label for="motivo_anulacion"><strong>Motivo de anulación *</strong></label>
+      <textarea id="motivo_anulacion" name="motivo_anulacion" rows="4" required style="width:100%;margin-top:6px;box-sizing:border-box" placeholder="Ej.: cantidad incorrecta, material no entregado..."></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('anular-remision').style.display='none'">Cancelar</button>
+        <button type="submit" class="btn" style="background:#b91c1c;color:white" onclick="return confirm('¿Confirma que desea anular esta remisión? Esta acción no se puede revertir.')">Confirmar anulación</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

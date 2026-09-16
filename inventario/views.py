@@ -1218,8 +1218,41 @@ def remision_nueva(request):
 @login_required
 @inventario_required
 def remision_detail(request, pk):
-    remision = get_object_or_404(DispatchRemission.objects.select_related("creado_por").prefetch_related("lineas"), pk=pk)
+    remision = get_object_or_404(
+        DispatchRemission.objects.select_related("creado_por", "anulada_por").prefetch_related("lineas"),
+        pk=pk,
+    )
     return render(request, "inventario/remision_detail.html", {"remision": remision})
+
+
+@login_required
+@inventario_required
+@require_POST
+def remision_anular(request, pk):
+    motivo = (request.POST.get("motivo_anulacion") or "").strip()
+    if not motivo:
+        messages.error(request, "Debes indicar el motivo de la anulación.")
+        return redirect("inventario:remision_detail", pk=pk)
+
+    with transaction.atomic():
+        remision = get_object_or_404(
+            DispatchRemission.objects.select_for_update(),
+            pk=pk,
+        )
+        if remision.estado == DispatchRemission.Estado.ANULADA:
+            messages.warning(request, f"La remisión {remision.numero} ya se encuentra anulada.")
+            return redirect("inventario:remision_detail", pk=pk)
+
+        remision.estado = DispatchRemission.Estado.ANULADA
+        remision.anulada_por = request.user
+        remision.anulada_en = timezone.now()
+        remision.motivo_anulacion = motivo
+        remision.save(update_fields=[
+            "estado", "anulada_por", "anulada_en", "motivo_anulacion", "actualizado_en"
+        ])
+
+    messages.success(request, f"Remisión {remision.numero} anulada. Se conserva en el historial.")
+    return redirect("inventario:remision_detail", pk=pk)
 
 
 @login_required
@@ -1276,7 +1309,7 @@ def _p(text, styles, bold=False):
 @inventario_required
 def remision_pdf(request, pk):
     remision = get_object_or_404(
-        DispatchRemission.objects.select_related("creado_por", "cliente_registrado").prefetch_related("lineas"), pk=pk
+        DispatchRemission.objects.select_related("creado_por", "cliente_registrado", "anulada_por").prefetch_related("lineas"), pk=pk
     )
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=24, rightMargin=24, topMargin=22, bottomMargin=22)
@@ -1313,6 +1346,19 @@ def remision_pdf(request, pk):
         ("BOTTOMPADDING", (0,0), (-1,-1), 3),
     ]))
     story.append(encabezado)
+
+    if remision.estado == DispatchRemission.Estado.ANULADA:
+        aviso = Table([["REMISIÓN ANULADA"]], colWidths=[525], rowHeights=[28])
+        aviso.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fee2e2")),
+            ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#991b1b")),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 13),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#991b1b")),
+        ]))
+        story += [Spacer(1, 5), aviso, Spacer(1, 5)]
 
     info = Table([
         [_p("Datos del Cliente", styles, True), "", _p("Información de Envío", styles, True), ""],
@@ -1351,6 +1397,19 @@ def remision_pdf(request, pk):
     story.append(items)
     if remision.observaciones:
         story += [Spacer(1, 7), Paragraph(f"<b>Observaciones:</b> {remision.observaciones}", styles["Normal"])]
+
+    if remision.estado == DispatchRemission.Estado.ANULADA:
+        anulador = (
+            remision.anulada_por.get_full_name()
+            if remision.anulada_por and remision.anulada_por.get_full_name()
+            else (remision.anulada_por.username if remision.anulada_por else "")
+        )
+        fecha_anulacion = timezone.localtime(remision.anulada_en).strftime("%d/%m/%Y %H:%M") if remision.anulada_en else ""
+        story += [
+            Spacer(1, 8),
+            Paragraph(f"<b>Motivo de anulación:</b> {remision.motivo_anulacion}", styles["Normal"]),
+            Paragraph(f"<b>Anulada por:</b> {anulador} &nbsp;&nbsp; <b>Fecha:</b> {fecha_anulacion}", styles["Normal"]),
+        ]
 
     story += [Spacer(1, 34)]
     usuario = remision.creado_por.get_full_name() if remision.creado_por and remision.creado_por.get_full_name() else (remision.creado_por.username if remision.creado_por else "")

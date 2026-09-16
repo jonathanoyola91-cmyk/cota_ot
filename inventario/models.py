@@ -239,6 +239,10 @@ class DispatchRemission(models.Model):
         IMPETUS = "IMPETUS", "IMPETUS HPS"
         OIL_GAS = "OIL_GAS", "OIL & GAS SUPPORT"
 
+    class Estado(models.TextChoices):
+        ACTIVA = "ACTIVA", "Activa"
+        ANULADA = "ANULADA", "Anulada"
+
     consecutivo = models.PositiveIntegerField()
     empresa = models.CharField(max_length=12, choices=Empresa.choices, default=Empresa.IMPETUS)
     cliente_registrado = models.ForeignKey(
@@ -262,6 +266,19 @@ class DispatchRemission(models.Model):
     nombre_conductor = models.CharField(max_length=160, blank=True)
     celular_conductor = models.CharField(max_length=80, blank=True)
     observaciones = models.TextField(blank=True)
+
+    # Una remisión emitida no se edita ni se elimina: si hay un error se anula
+    # conservando la trazabilidad documental.
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.ACTIVA)
+    anulada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="remisiones_salida_anuladas",
+    )
+    anulada_en = models.DateTimeField(null=True, blank=True)
+    motivo_anulacion = models.TextField(blank=True)
 
     creado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
