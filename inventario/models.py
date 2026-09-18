@@ -332,3 +332,102 @@ class DispatchRemissionLine(models.Model):
 
     def __str__(self):
         return f"{self.remision.numero} - {self.descripcion[:80]}"
+
+# ======================================================
+# EXISTENCIAS / KARDEX (ETAPA 1)
+# ======================================================
+class InventoryStock(models.Model):
+    class Empresa(models.TextChoices):
+        IMPETUS = "IMPETUS", "IMPETUS HPS"
+        OIL_GAS = "OIL_GAS", "OIL & GAS SUPPORT"
+
+    empresa = models.CharField(max_length=12, choices=Empresa.choices)
+    catalogo = models.CharField(max_length=20)
+    catalogo_item_id = models.PositiveIntegerField()
+    codigo = models.CharField(max_length=80, db_index=True)
+    descripcion = models.CharField(max_length=300, blank=True, default="")
+    unidad = models.CharField(max_length=30, blank=True, default="UND")
+    cantidad_fisica = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    cantidad_reservada = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    costo_promedio = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["empresa", "catalogo", "catalogo_item_id"], name="uniq_stock_empresa_catalogo_item")]
+        ordering = ["empresa", "codigo"]
+
+    @property
+    def cantidad_disponible(self):
+        return self.cantidad_fisica - self.cantidad_reservada
+
+    @property
+    def valor_inventario(self):
+        return self.cantidad_fisica * self.costo_promedio
+
+    def __str__(self):
+        return f"{self.get_empresa_display()} - {self.codigo}"
+
+
+class InventoryMovement(models.Model):
+    class Tipo(models.TextChoices):
+        INVENTARIO_INICIAL = "INICIAL", "Inventario inicial"
+        AJUSTE_ENTRADA = "AJUSTE_ENTRADA", "Ajuste positivo"
+        AJUSTE_SALIDA = "AJUSTE_SALIDA", "Ajuste negativo"
+        TRANSFERENCIA_ENTRADA = "TRF_ENTRADA", "Transferencia entrada"
+        TRANSFERENCIA_SALIDA = "TRF_SALIDA", "Transferencia salida"
+        RECEPCION = "RECEPCION", "Recepción de compra"
+        ENTREGA = "ENTREGA", "Entrega / salida"
+
+    stock = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="movimientos")
+    tipo = models.CharField(max_length=24, choices=Tipo.choices)
+    cantidad = models.DecimalField(max_digits=14, decimal_places=3)  # + entrada / - salida
+    costo_unitario = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    saldo_anterior = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    saldo_nuevo = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    costo_promedio_anterior = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    costo_promedio_nuevo = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    referencia = models.CharField(max_length=80, blank=True, default="")
+    motivo = models.TextField(blank=True, default="")
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="movimientos_stock_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en", "-id"]
+
+
+class InventoryReservation(models.Model):
+    class Estado(models.TextChoices):
+        ACTIVA = "ACTIVA", "Activa"
+        CONSUMIDA = "CONSUMIDA", "Consumida/entregada"
+        LIBERADA = "LIBERADA", "Liberada"
+
+    stock = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="reservas")
+    cantidad = models.DecimalField(max_digits=14, decimal_places=3)
+    purchase_request = models.ForeignKey("compras_oil.PurchaseRequest", on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario")
+    estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.ACTIVA)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario_creadas")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    cerrado_en = models.DateTimeField(null=True, blank=True)
+    observacion = models.TextField(blank=True, default="")
+
+
+class InventoryTransfer(models.Model):
+    class Estado(models.TextChoices):
+        COMPLETADA = "COMPLETADA", "Completada"
+        ANULADA = "ANULADA", "Anulada"
+
+    empresa_origen = models.CharField(max_length=12, choices=InventoryStock.Empresa.choices)
+    empresa_destino = models.CharField(max_length=12, choices=InventoryStock.Empresa.choices)
+    stock_origen = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="transferencias_salida")
+    stock_destino = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="transferencias_entrada")
+    cantidad = models.DecimalField(max_digits=14, decimal_places=3)
+    costo_unitario = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    motivo = models.TextField(blank=True, default="")
+    documento = models.CharField(max_length=100, blank=True, default="")
+    estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.COMPLETADA)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="transferencias_inventario_creadas")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def numero(self):
+        return f"TRF-{self.pk:06d}" if self.pk else "TRF-PENDIENTE"

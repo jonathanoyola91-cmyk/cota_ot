@@ -5,6 +5,13 @@ app_name = "inventario"
 
 urlpatterns = [
     path("", views.inventario_dashboard, name="dashboard"),
+    path("existencias/", views.existencias_lista, name="existencias_lista"),
+    path("existencias/inicial/", views.inventario_inicial, name="inventario_inicial"),
+    path("existencias/<int:pk>/ajustar/", views.ajustar_stock, name="ajustar_stock"),
+    path("existencias/<int:pk>/kardex/", views.kardex_stock, name="kardex_stock"),
+    path("transferencias/", views.transferencias_lista, name="transferencias_lista"),
+    path("transferencias/nueva/", views.transferencia_nueva, name="transferencia_nueva"),
+    path("transferencias/items-destino/", views.transferencia_items_destino, name="transferencia_items_destino"),
     path("revision-bom/<int:pk>/", views.revision_bom_detail, name="revision_bom_detail"),
     path("revision-bom/<int:pk>/generar-entrega/", views.generar_entrega, name="generar_entrega"),
     path("recepcion/<int:pk>/", views.recepcion_detail, name="recepcion_detail"),

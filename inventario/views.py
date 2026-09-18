@@ -1447,3 +1447,297 @@ def remision_pdf(request, pk):
     response["Content-Disposition"] = f'inline; filename="{remision.numero}.pdf"'
     return response
 
+
+# ======================================================
+# EXISTENCIAS / KARDEX - ETAPA 1
+# ======================================================
+def _catalog_model_for_empresa(empresa):
+    from item_oil_gas.models import Item, ItemImpetus
+    if empresa == "IMPETUS":
+        return "IMPETUS", ItemImpetus
+    if empresa == "OIL_GAS":
+        return "OIL_GAS", Item
+    return None, None
+
+
+def _get_or_create_stock(empresa, item):
+    from .models import InventoryStock
+    catalogo, _ = _catalog_model_for_empresa(empresa)
+    stock, _ = InventoryStock.objects.get_or_create(
+        empresa=empresa, catalogo=catalogo, catalogo_item_id=item.pk,
+        defaults={"codigo": item.codigo or "", "descripcion": item.descripcion or "", "unidad": item.unidad_medida or "UND"},
+    )
+    # Refresca snapshot del catálogo, nunca cantidades/costos.
+    cambios = []
+    for campo, valor in (("codigo", item.codigo or ""), ("descripcion", item.descripcion or ""), ("unidad", item.unidad_medida or "UND")):
+        if getattr(stock, campo) != valor:
+            setattr(stock, campo, valor); cambios.append(campo)
+    if cambios:
+        stock.save(update_fields=cambios + ["actualizado_en"])
+    return stock
+
+
+@login_required
+@inventario_required
+def existencias_lista(request):
+    from .models import InventoryStock
+    empresa = (request.GET.get("empresa") or "IMPETUS").upper()
+    if empresa not in {"IMPETUS", "OIL_GAS"}: empresa = "IMPETUS"
+    q = (request.GET.get("q") or "").strip()
+    qs = InventoryStock.objects.filter(empresa=empresa)
+    if q: qs = qs.filter(Q(codigo__icontains=q) | Q(descripcion__icontains=q))
+    qs = qs.order_by("codigo")
+    total_valor = sum((s.valor_inventario for s in qs), Decimal("0"))
+    return render(request, "inventario/existencias_lista.html", {"stocks": qs, "empresa": empresa, "q": q, "total_valor": total_valor})
+
+
+@login_required
+@inventario_required
+def inventario_inicial(request):
+    from .models import InventoryMovement
+    empresa = (request.GET.get("empresa") or request.POST.get("empresa") or "IMPETUS").upper()
+    catalogo, Model = _catalog_model_for_empresa(empresa)
+    if not Model:
+        messages.error(request, "Empresa no válida."); return redirect("inventario:existencias_lista")
+    q = (request.GET.get("q") or "").strip()
+    items = list(Model.objects.filter(activo=True).filter(
+        Q(codigo__icontains=q) | Q(descripcion__icontains=q)
+    ).order_by("codigo")[:100]) if q else list(Model.objects.filter(activo=True).order_by("codigo")[:100])
+
+    # Costo histórico sugerido: SOLO coincidencia exacta por P/N (PurchaseLine.codigo).
+    # No cruza descripciones ni catálogos. Como referencia histórica, consulta todas las
+    # compras registradas que tengan ese mismo P/N, independientemente del PAW.
+    from compras_oil.models import PurchaseLine
+    codigos = [str(i.codigo or "").strip() for i in items if str(i.codigo or "").strip()]
+    historico = {}
+    if codigos:
+        lineas_precio = (
+            PurchaseLine.objects
+            .filter(codigo__in=codigos, precio_unitario__isnull=False, precio_unitario__gt=0, cantidad_a_comprar__gt=0)
+            .select_related("request")
+            .order_by("request__creado_en", "pk")
+        )
+        for linea in lineas_precio:
+            codigo = (linea.codigo or "").strip()
+            qty = Decimal(linea.cantidad_a_comprar or 0)
+            precio = Decimal(linea.precio_unitario or 0)
+            if qty <= 0 or precio <= 0:
+                continue
+            h = historico.setdefault(codigo, {"cantidad": Decimal("0"), "valor": Decimal("0"), "compras": 0, "ultimo": Decimal("0")})
+            h["cantidad"] += qty
+            h["valor"] += qty * precio
+            h["compras"] += 1
+            h["ultimo"] = precio
+
+    filas = []
+    for item in items:
+        codigo = (item.codigo or "").strip()
+        h = historico.get(codigo)
+        costo_sugerido = Decimal("0")
+        if h and h["cantidad"] > 0:
+            costo_sugerido = (h["valor"] / h["cantidad"]).quantize(Decimal("0.01"))
+        filas.append({
+            "item": item,
+            "costo_sugerido": costo_sugerido,
+            "ultimo_precio": h["ultimo"] if h else Decimal("0"),
+            "compras_encontradas": h["compras"] if h else 0,
+        })
+
+    if request.method == "POST":
+        item = get_object_or_404(Model, pk=request.POST.get("item_id"), activo=True)
+        try:
+            cantidad = Decimal((request.POST.get("cantidad") or "0").replace(",", "."))
+            costo = Decimal((request.POST.get("costo_unitario") or "0").replace(",", "."))
+        except Exception:
+            messages.error(request, "Cantidad o costo inválido."); return redirect(f"{request.path}?empresa={empresa}")
+        if cantidad < 0 or costo < 0:
+            messages.error(request, "Cantidad y costo no pueden ser negativos."); return redirect(f"{request.path}?empresa={empresa}")
+        with transaction.atomic():
+            stock = _get_or_create_stock(empresa, item)
+            stock = type(stock).objects.select_for_update().get(pk=stock.pk)
+            if stock.movimientos.exists() or stock.cantidad_fisica != 0:
+                messages.error(request, "Este ítem ya tiene movimientos. Use Ajuste de inventario, no Inventario inicial.")
+                return redirect(f"{request.path}?empresa={empresa}")
+            anterior = stock.cantidad_fisica
+            stock.cantidad_fisica = cantidad; stock.costo_promedio = costo
+            stock.save(update_fields=["cantidad_fisica", "costo_promedio", "actualizado_en"])
+            InventoryMovement.objects.create(stock=stock, tipo=InventoryMovement.Tipo.INVENTARIO_INICIAL, cantidad=cantidad, costo_unitario=costo, saldo_anterior=anterior, saldo_nuevo=cantidad, costo_promedio_anterior=0, costo_promedio_nuevo=costo, referencia="INVENTARIO INICIAL", motivo=(request.POST.get("motivo") or "Inventario inicial").strip(), creado_por=request.user)
+        messages.success(request, f"Inventario inicial registrado: {item.codigo} = {cantidad} {item.unidad_medida or 'UND'}.")
+        return redirect(f"{request.path}?empresa={empresa}")
+    return render(request, "inventario/inventario_inicial.html", {"empresa": empresa, "filas": filas, "q": q})
+
+
+@login_required
+@inventario_required
+@require_POST
+def ajustar_stock(request, pk):
+    from .models import InventoryStock, InventoryMovement
+    try: nueva = Decimal((request.POST.get("cantidad_fisica") or "").replace(",", "."))
+    except Exception:
+        messages.error(request, "Cantidad física inválida."); return redirect("inventario:existencias_lista")
+    motivo = (request.POST.get("motivo") or "").strip()
+    if nueva < 0 or not motivo:
+        messages.error(request, "La cantidad no puede ser negativa y el motivo es obligatorio."); return redirect("inventario:existencias_lista")
+    with transaction.atomic():
+        stock = InventoryStock.objects.select_for_update().get(pk=pk)
+        if nueva < stock.cantidad_reservada:
+            messages.error(request, f"No puede bajar de {stock.cantidad_reservada}; esa cantidad está reservada.")
+            return redirect(f"/inventario/existencias/?empresa={stock.empresa}")
+        anterior = stock.cantidad_fisica; delta = nueva - anterior
+        if delta == 0:
+            messages.info(request, "No hubo diferencia de inventario."); return redirect(f"/inventario/existencias/?empresa={stock.empresa}")
+        tipo = InventoryMovement.Tipo.AJUSTE_ENTRADA if delta > 0 else InventoryMovement.Tipo.AJUSTE_SALIDA
+        stock.cantidad_fisica = nueva; stock.save(update_fields=["cantidad_fisica", "actualizado_en"])
+        InventoryMovement.objects.create(stock=stock, tipo=tipo, cantidad=delta, costo_unitario=stock.costo_promedio, saldo_anterior=anterior, saldo_nuevo=nueva, costo_promedio_anterior=stock.costo_promedio, costo_promedio_nuevo=stock.costo_promedio, referencia="AJUSTE", motivo=motivo, creado_por=request.user)
+    messages.success(request, f"Ajuste registrado para {stock.codigo}: {anterior} → {nueva}.")
+    return redirect(f"/inventario/existencias/?empresa={stock.empresa}")
+
+
+@login_required
+@inventario_required
+def kardex_stock(request, pk):
+    from .models import InventoryStock
+    stock = get_object_or_404(InventoryStock, pk=pk)
+    return render(request, "inventario/kardex_stock.html", {"stock": stock, "movimientos": stock.movimientos.select_related("creado_por").all(), "reservas": stock.reservas.select_related("purchase_request", "creado_por").all()})
+
+
+@login_required
+@inventario_required
+def transferencia_items_destino(request):
+    """Busca P/N destino en el catálogo de la otra empresa sin asumir equivalencias."""
+    from django.http import JsonResponse
+    from django.db.models import Q, Case, When, Value, IntegerField
+
+    empresa = (request.GET.get("empresa") or "").upper()
+    q = (request.GET.get("q") or "").strip()
+    origen_id = request.GET.get("origen_id")
+    if empresa not in {"IMPETUS", "OIL_GAS"}:
+        return JsonResponse({"results": []})
+
+    catalogo, Model = _catalog_model_for_empresa(empresa)
+    qs = Model.objects.filter(activo=True)
+
+    # Si no escribieron búsqueda, usa como ayuda la descripción/P/N del origen.
+    origen = None
+    if origen_id:
+        try:
+            from .models import InventoryStock
+            origen = InventoryStock.objects.filter(pk=origen_id).first()
+        except Exception:
+            origen = None
+
+    texto = q
+    if not texto and origen:
+        texto = origen.descripcion or origen.codigo or ""
+
+    if texto:
+        # Búsqueda segura por P/N exacto/parcial y por palabras significativas de descripción.
+        tokens = [t for t in texto.replace("-", " ").replace("/", " ").split() if len(t) >= 3][:6]
+        filtro = Q(codigo__iexact=texto) | Q(codigo__icontains=texto) | Q(descripcion__icontains=texto)
+        for token in tokens:
+            filtro |= Q(codigo__icontains=token) | Q(descripcion__icontains=token)
+        qs = qs.filter(filtro).annotate(
+            _rank=Case(
+                When(codigo__iexact=texto, then=Value(0)),
+                When(codigo__icontains=texto, then=Value(1)),
+                When(descripcion__icontains=texto, then=Value(2)),
+                default=Value(3), output_field=IntegerField(),
+            )
+        ).order_by("_rank", "codigo")
+    else:
+        qs = qs.order_by("codigo")
+
+    results = [{
+        "id": item.pk,
+        "codigo": item.codigo or "",
+        "descripcion": item.descripcion or "",
+        "unidad": item.unidad_medida or "UND",
+    } for item in qs[:30]]
+    return JsonResponse({"results": results})
+
+
+@login_required
+@inventario_required
+def transferencia_nueva(request):
+    from .models import InventoryStock, InventoryMovement, InventoryTransfer
+    if request.method == "POST":
+        origen_id = request.POST.get("stock_origen")
+        destino_empresa = (request.POST.get("empresa_destino") or "").upper()
+        destino_item_id = request.POST.get("item_destino")
+        motivo = (request.POST.get("motivo") or "").strip()
+        documento = (request.POST.get("documento") or "").strip()
+        try:
+            cantidad = Decimal((request.POST.get("cantidad") or "0").replace(",", "."))
+        except Exception:
+            cantidad = Decimal("0")
+        if cantidad <= 0 or not motivo:
+            messages.error(request, "Cantidad mayor a cero y motivo son obligatorios.")
+            return redirect("inventario:transferencia_nueva")
+        if not destino_item_id:
+            messages.error(request, "Debe seleccionar el P/N destino en el catálogo de la empresa receptora.")
+            return redirect("inventario:transferencia_nueva")
+
+        with transaction.atomic():
+            origen = InventoryStock.objects.select_for_update().get(pk=origen_id)
+            if destino_empresa == origen.empresa or destino_empresa not in {"IMPETUS", "OIL_GAS"}:
+                messages.error(request, "Seleccione la otra empresa como destino.")
+                return redirect("inventario:transferencia_nueva")
+            if cantidad > origen.cantidad_disponible:
+                messages.error(request, f"Disponible real: {origen.cantidad_disponible}. No se pueden transferir unidades reservadas.")
+                return redirect("inventario:transferencia_nueva")
+
+            dest_catalogo, DestModel = _catalog_model_for_empresa(destino_empresa)
+            dest_item = DestModel.objects.filter(pk=destino_item_id, activo=True).first()
+            if not dest_item:
+                messages.error(request, "El P/N destino seleccionado no existe o está inactivo en el catálogo destino.")
+                return redirect("inventario:transferencia_nueva")
+
+            destino = _get_or_create_stock(destino_empresa, dest_item)
+            destino = InventoryStock.objects.select_for_update().get(pk=destino.pk)
+            costo = origen.costo_promedio
+
+            oa = origen.cantidad_fisica
+            origen.cantidad_fisica -= cantidad
+            origen.save(update_fields=["cantidad_fisica", "actualizado_en"])
+
+            da = destino.cantidad_fisica
+            ca = destino.costo_promedio
+            nuevo_total = da + cantidad
+            nuevo_costo = ((da * ca) + (cantidad * costo)) / nuevo_total if nuevo_total else Decimal("0")
+            destino.cantidad_fisica = nuevo_total
+            destino.costo_promedio = nuevo_costo
+            destino.save(update_fields=["cantidad_fisica", "costo_promedio", "actualizado_en"])
+
+            trf = InventoryTransfer.objects.create(
+                empresa_origen=origen.empresa, empresa_destino=destino_empresa,
+                stock_origen=origen, stock_destino=destino,
+                cantidad=cantidad, costo_unitario=costo,
+                motivo=motivo, documento=documento, creado_por=request.user,
+            )
+            detalle = f"{motivo} | {origen.codigo} → {destino.codigo}"
+            InventoryMovement.objects.create(
+                stock=origen, tipo=InventoryMovement.Tipo.TRANSFERENCIA_SALIDA,
+                cantidad=-cantidad, costo_unitario=costo, saldo_anterior=oa,
+                saldo_nuevo=origen.cantidad_fisica, costo_promedio_anterior=costo,
+                costo_promedio_nuevo=costo, referencia=trf.numero, motivo=detalle,
+                creado_por=request.user,
+            )
+            InventoryMovement.objects.create(
+                stock=destino, tipo=InventoryMovement.Tipo.TRANSFERENCIA_ENTRADA,
+                cantidad=cantidad, costo_unitario=costo, saldo_anterior=da,
+                saldo_nuevo=destino.cantidad_fisica, costo_promedio_anterior=ca,
+                costo_promedio_nuevo=nuevo_costo, referencia=trf.numero,
+                motivo=detalle, creado_por=request.user,
+            )
+        messages.success(request, f"Transferencia {trf.numero} completada: {origen.codigo} → {destino.codigo}.")
+        return redirect("inventario:transferencias_lista")
+
+    stocks = InventoryStock.objects.filter(cantidad_fisica__gt=F("cantidad_reservada")).order_by("empresa", "codigo")
+    return render(request, "inventario/transferencia_form.html", {"stocks": stocks})
+
+
+@login_required
+@inventario_required
+def transferencias_lista(request):
+    from .models import InventoryTransfer
+    return render(request, "inventario/transferencias_lista.html", {"transferencias": InventoryTransfer.objects.select_related("stock_origen", "stock_destino", "creado_por").all().order_by("-creado_en")})

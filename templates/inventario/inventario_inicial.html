@@ -1,0 +1,52 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Inventario inicial{% endblock %}
+{% block content %}
+<div class="panel">
+  <h3>Inventario inicial — {% if empresa == 'IMPETUS' %}IMPETUS HPS{% else %}OIL & GAS SUPPORT{% endif %}</h3>
+  <p style="color:#64748b">Registre el conteo físico actual. El costo se sugiere únicamente cuando existe historial de compra con el mismo P/N exacto. Si no existe historial, puede ingresarlo manualmente.</p>
+  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap">
+    <select name="empresa" onchange="this.form.submit()">
+      <option value="IMPETUS" {% if empresa == 'IMPETUS' %}selected{% endif %}>IMPETUS HPS</option>
+      <option value="OIL_GAS" {% if empresa == 'OIL_GAS' %}selected{% endif %}>OIL & GAS SUPPORT</option>
+    </select>
+    <input name="q" value="{{ q }}" placeholder="Buscar P/N">
+    <button class="btn">Buscar</button>
+    <a class="btn btn-secondary" href="{% url 'inventario:existencias_lista' %}?empresa={{ empresa }}">Ver existencias</a>
+  </form>
+</div><br>
+
+<div class="panel">
+<table>
+  <thead><tr><th>P/N</th><th>Descripción</th><th>Unidad</th><th>Cantidad física</th><th>Costo unitario inicial</th><th></th></tr></thead>
+  <tbody>
+  {% for fila in filas %}
+    <tr>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="empresa" value="{{ empresa }}">
+        <input type="hidden" name="item_id" value="{{ fila.item.pk }}">
+        <td><strong>{{ fila.item.codigo }}</strong></td>
+        <td>{{ fila.item.descripcion }}</td>
+        <td>{{ fila.item.unidad_medida|default:'UND' }}</td>
+        <td><input name="cantidad" type="number" min="0" step="0.001" required style="width:110px"></td>
+        <td>
+          <input name="costo_unitario" type="number" min="0" step="0.01" value="{{ fila.costo_sugerido|stringformat:'.2f' }}" style="width:150px">
+          {% if fila.compras_encontradas %}
+            <div style="font-size:11px;color:#15803d;margin-top:4px">
+              Sugerido por historial P/N: ${{ fila.costo_sugerido|floatformat:2 }}<br>
+              {{ fila.compras_encontradas }} compra{{ fila.compras_encontradas|pluralize }} con precio · Último: ${{ fila.ultimo_precio|floatformat:2 }}
+            </div>
+          {% else %}
+            <div style="font-size:11px;color:#b45309;margin-top:4px">Sin historial de compra con este P/N. Ingrese costo manual si aplica.</div>
+          {% endif %}
+        </td>
+        <td><input name="motivo" type="hidden" value="Inventario inicial"><button class="btn">Registrar</button></td>
+      </form>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6">No se encontraron ítems.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

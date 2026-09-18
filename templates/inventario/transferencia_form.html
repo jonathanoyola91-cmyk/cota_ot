@@ -1,0 +1,102 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Nueva transferencia{% endblock %}
+{% block content %}
+<div class="panel">
+  <h3>Transferencia entre empresas</h3>
+  <p style="color:#64748b">La operación genera salida en la empresa origen y entrada en la empresa destino. Nunca utiliza unidades reservadas. El P/N destino se selecciona desde el catálogo de la empresa receptora.</p>
+  <form method="post" id="transfer-form">{% csrf_token %}
+    <p><label>Ítem origen</label><br>
+      <select name="stock_origen" id="stock-origen" required style="min-width:500px">
+        <option value="">Seleccionar...</option>
+        {% for s in stocks %}
+          <option value="{{ s.pk }}" data-empresa="{{ s.empresa }}" data-codigo="{{ s.codigo }}" data-descripcion="{{ s.descripcion }}">{{ s.get_empresa_display }} | {{ s.codigo }} | {{ s.descripcion }} | disponible {{ s.cantidad_disponible }}</option>
+        {% endfor %}
+      </select>
+    </p>
+
+    <p><label>Empresa destino</label><br>
+      <select name="empresa_destino" id="empresa-destino" required>
+        <option value="">Seleccionar...</option>
+        <option value="IMPETUS">IMPETUS HPS</option>
+        <option value="OIL_GAS">OIL & GAS SUPPORT</option>
+      </select>
+    </p>
+
+    <div id="destino-box" style="display:none; padding:12px; border:1px solid #dbe3ef; border-radius:8px; margin:12px 0; max-width:900px">
+      <label><strong>Buscar P/N destino</strong></label>
+      <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap">
+        <input type="text" id="buscar-destino" placeholder="P/N o descripción" style="min-width:320px">
+        <button type="button" class="btn" id="btn-buscar-destino">Buscar</button>
+      </div>
+      <small style="color:#64748b">Se consulta únicamente el catálogo de la empresa destino. Puede buscar por P/N o descripción; el sistema no asigna equivalencias automáticamente.</small>
+      <div id="destino-resultados" style="margin-top:10px"></div>
+      <input type="hidden" name="item_destino" id="item-destino" required>
+      <div id="destino-seleccionado" style="display:none; margin-top:10px; padding:10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:7px"></div>
+    </div>
+
+    <p><label>Cantidad</label><br><input name="cantidad" type="number" min="0.001" step="0.001" required></p>
+    <p><label>Documento / factura (opcional)</label><br><input name="documento"></p>
+    <p><label>Motivo</label><br><textarea name="motivo" required style="min-width:500px"></textarea></p>
+    <button class="btn">Realizar transferencia</button>
+    <a class="btn btn-secondary" href="{% url 'inventario:transferencias_lista' %}">Cancelar</a>
+  </form>
+</div>
+<script>
+(function(){
+  const origen = document.getElementById('stock-origen');
+  const empresa = document.getElementById('empresa-destino');
+  const box = document.getElementById('destino-box');
+  const q = document.getElementById('buscar-destino');
+  const resultados = document.getElementById('destino-resultados');
+  const hidden = document.getElementById('item-destino');
+  const seleccionado = document.getElementById('destino-seleccionado');
+  const endpoint = "{% url 'inventario:transferencia_items_destino' %}";
+
+  function resetDestino(){ hidden.value=''; seleccionado.style.display='none'; seleccionado.textContent=''; resultados.innerHTML=''; }
+  function syncEmpresa(){
+    resetDestino();
+    const opt = origen.options[origen.selectedIndex];
+    if (!opt || !opt.value) { box.style.display='none'; return; }
+    const otra = opt.dataset.empresa === 'IMPETUS' ? 'OIL_GAS' : 'IMPETUS';
+    empresa.value = otra;
+    box.style.display='block';
+    q.value = opt.dataset.descripcion || opt.dataset.codigo || '';
+    buscar();
+  }
+  async function buscar(){
+    if(!origen.value || !empresa.value) return;
+    resultados.innerHTML = '<span style="color:#64748b">Buscando...</span>';
+    const url = endpoint + '?empresa=' + encodeURIComponent(empresa.value) + '&origen_id=' + encodeURIComponent(origen.value) + '&q=' + encodeURIComponent(q.value.trim());
+    try {
+      const r = await fetch(url, {headers:{'X-Requested-With':'XMLHttpRequest'}});
+      const data = await r.json();
+      if(!data.results.length){ resultados.innerHTML='<span style="color:#b45309">No se encontraron coincidencias. Pruebe con otra palabra o con el P/N destino.</span>'; return; }
+      resultados.innerHTML = data.results.map(x =>
+        `<label style="display:block;padding:8px;border-bottom:1px solid #eef2f7;cursor:pointer"><input type="radio" name="destino_radio" value="${x.id}" data-codigo="${escapeHtml(x.codigo)}" data-descripcion="${escapeHtml(x.descripcion)}"> <strong>${escapeHtml(x.codigo)}</strong> — ${escapeHtml(x.descripcion)} <small>(${escapeHtml(x.unidad)})</small></label>`
+      ).join('');
+      resultados.querySelectorAll('input[name="destino_radio"]').forEach(radio => radio.addEventListener('change', function(){
+        hidden.value=this.value;
+        seleccionado.innerHTML='<strong>P/N destino seleccionado:</strong> ' + escapeHtml(this.dataset.codigo) + ' — ' + escapeHtml(this.dataset.descripcion);
+        seleccionado.style.display='block';
+      }));
+    } catch(e){ resultados.innerHTML='<span style="color:#b91c1c">No fue posible consultar el catálogo destino.</span>'; }
+  }
+  function escapeHtml(v){ const d=document.createElement('div'); d.textContent=v||''; return d.innerHTML; }
+
+  origen.addEventListener('change', syncEmpresa);
+  empresa.addEventListener('change', function(){
+    const opt=origen.options[origen.selectedIndex];
+    if(opt && opt.value && empresa.value === opt.dataset.empresa){
+      empresa.value = opt.dataset.empresa === 'IMPETUS' ? 'OIL_GAS' : 'IMPETUS';
+      alert('La empresa destino debe ser diferente de la empresa origen.');
+    }
+    resetDestino(); box.style.display = origen.value && empresa.value ? 'block':'none';
+  });
+  document.getElementById('btn-buscar-destino').addEventListener('click', buscar);
+  q.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault(); buscar();} });
+  document.getElementById('transfer-form').addEventListener('submit', function(e){
+    if(!hidden.value){ e.preventDefault(); alert('Seleccione el P/N destino antes de realizar la transferencia.'); }
+  });
+})();
+</script>
+{% endblock %}
