@@ -1,5 +1,112 @@
 {% extends "dashboard/home.html" %}
-{% block page_title %}Revisión de BOM - Inventario{% endblock %}
+{% block page_title %}Revisión de BOM - Inventario
+<style>
+.impetus-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.58);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.impetus-modal-box {
+    width: 100%;
+    max-width: 470px;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 30px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+.impetus-modal-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: #fff3cd;
+    color: #b7791f;
+    font-size: 32px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.impetus-modal-box h2 {
+    margin: 0 0 12px;
+    color: #0f2747;
+    font-size: 22px;
+}
+
+.impetus-modal-box p {
+    margin: 0;
+    color: #475569;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.impetus-modal-box p strong {
+    color: #0f2747;
+}
+
+.impetus-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+}
+
+.btn-modal-cancelar,
+.btn-modal-confirmar {
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn-modal-cancelar {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.btn-modal-confirmar {
+    background: #1769e0;
+    color: #ffffff;
+}
+
+.btn-modal-confirmar:hover {
+    background: #1257bd;
+}
+</style>
+
+<script>
+function abrirConfirmacionInventario() {
+    document.getElementById('modalConfirmacionInventario').style.display = 'flex';
+}
+
+function cerrarConfirmacionInventario() {
+    document.getElementById('modalConfirmacionInventario').style.display = 'none';
+}
+
+function confirmarInventario() {
+    const modal = document.getElementById('modalConfirmacionInventario');
+    const form = modal.closest('form');
+
+    modal.style.display = 'none';
+
+    if (form) {
+        form.submit();
+    }
+}
+</script>
+
+{% endblock %}
 
 {% block content %}
 <div class="panel">
@@ -57,9 +164,36 @@
 
         {% if not compra.inventario_revisado_en %}
             <div style="margin-top:18px;">
-                <button class="btn" type="submit" onclick="return confirm('¿Confirmas las cantidades disponibles? Los faltantes quedarán habilitados para Compras.');">
+                <button class="btn" type="button" onclick="abrirConfirmacionInventario()">
                     Confirmar revisión de Inventario
                 </button>
+
+                <div id="modalConfirmacionInventario" class="impetus-modal">
+                    <div class="impetus-modal-box">
+                        <div class="impetus-modal-icon">!</div>
+
+                        <h2>Verificación de inventario</h2>
+
+                        <p>
+                            Antes de continuar, confirma que revisaste
+                            <strong>físicamente estos ítems</strong> en Inventario
+                            y que <strong>no están reservados para otro PAW.</strong>
+                        </p>
+
+                        <div class="impetus-modal-actions">
+                            <button type="button"
+                                    class="btn-modal-cancelar"
+                                    onclick="cerrarConfirmacionInventario()">
+                                Cancelar
+                            </button>
+                            <button type="button"
+                                    class="btn-modal-confirmar"
+                                    onclick="confirmarInventario()">
+                                Sí, ya verifiqué
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         {% endif %}
     </form>

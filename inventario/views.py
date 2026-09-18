@@ -170,6 +170,7 @@ def inventario_dashboard(request):
         PurchaseRequest.objects
         .filter(inventario_revisado_en__isnull=True)
         .exclude(estado="CERRADA")
+        .exclude(bom__workorder__paw__estado_operativo__in=["FACTURADO", "RADICADO"])
         .select_related("bom", "bom__workorder", "creado_por")
         .annotate(
             total_lineas_bom=Count(
@@ -187,6 +188,7 @@ def inventario_dashboard(request):
         PurchaseRequest.objects
         .filter(inventario_revisado_en__isnull=False)
         .exclude(estado="CERRADA")
+        .exclude(bom__workorder__paw__estado_operativo__in=["FACTURADO", "RADICADO"])
         .select_related("bom", "bom__workorder")
         .prefetch_related("lineas", "recepcion_inventario__lineas")
         .order_by("actualizado_en")
@@ -677,8 +679,15 @@ def recepcion_detail(request, pk):
         pk=pk
     )
 
+    # Solo deben aparecer en Recepción los ítems que realmente quedaron para compra.
+    # Esto también evita que líneas históricas con cantidad 0 afecten estados/progreso.
+    lineas_recepcion = recepcion.lineas.filter(
+        purchase_line__cantidad_a_comprar__gt=0,
+        cantidad_esperada__gt=0,
+    ).select_related("purchase_line")
+
     # Corrige recepciones antiguas que fueron creadas sin código/descripcion/unidad.
-    for linea in recepcion.lineas.all():
+    for linea in lineas_recepcion:
         if linea.purchase_line:
             actualizado = False
 
@@ -698,7 +707,7 @@ def recepcion_detail(request, pk):
                 linea.save(update_fields=["codigo", "descripcion", "unidad"])
 
     if request.method == "POST":
-        for linea in recepcion.lineas.all():
+        for linea in lineas_recepcion:
             raw = request.POST.get(f"cantidad_recibida_{linea.id}") or "0"
 
             try:
@@ -724,9 +733,9 @@ def recepcion_detail(request, pk):
 
             linea.save()
 
-        total = recepcion.lineas.count()
-        listas = recepcion.lineas.filter(estado="LISTO").count()
-        parciales = recepcion.lineas.filter(estado="PARCIAL").count()
+        total = lineas_recepcion.count()
+        listas = lineas_recepcion.filter(estado="LISTO").count()
+        parciales = lineas_recepcion.filter(estado="PARCIAL").count()
 
         try:
             paw = recepcion.purchase_request.bom.workorder.paw
@@ -749,7 +758,7 @@ def recepcion_detail(request, pk):
         cantidad_recibida_total = Decimal("0")
         pendientes = []
 
-        for linea in recepcion.lineas.all():
+        for linea in lineas_recepcion:
             esperada = Decimal(linea.cantidad_esperada or 0)
             recibida = Decimal(linea.cantidad_recibida or 0)
 
@@ -816,7 +825,8 @@ def recepcion_detail(request, pk):
         return redirect("inventario:recepcion_detail", pk=recepcion.pk)
 
     return render(request, "inventario/recepcion_detail.html", {
-        "recepcion": recepcion
+        "recepcion": recepcion,
+        "lineas": lineas_recepcion,
     })
 
 
@@ -835,6 +845,12 @@ def entrega_taller_detail(request, pk):
         entrega.save(update_fields=["comentarios", "actualizado_en"])
 
         for linea in entrega.lineas.all():
+            # Una línea ya entregada queda cerrada: no puede volver a modificarse.
+            requerida = Decimal(linea.cantidad_requerida or 0)
+            acumulada = Decimal(linea.cantidad_entregada or 0)
+            if requerida > 0 and acumulada >= requerida:
+                continue
+
             raw = request.POST.get(f"cantidad_entregada_{linea.id}")
             if raw is None or raw == "":
                 continue

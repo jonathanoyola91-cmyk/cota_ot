@@ -67,7 +67,7 @@
 
             <tbody>
                 {% for linea in entrega.lineas.all %}
-                <tr>
+                <tr {% if linea.cantidad_entregada >= linea.cantidad_requerida and linea.cantidad_requerida > 0 %}style="opacity:.65;background:#f8fafc;"{% endif %}>
                     <td>{{ linea.codigo }}</td>
                     <td>{{ linea.descripcion }}</td>
                     <td>{{ linea.unidad }}</td>
@@ -84,6 +84,7 @@
                             min="0"
                             step="1"
                             class="form-control input-entrega"
+                            {% if linea.cantidad_entregada >= linea.cantidad_requerida and linea.cantidad_requerida > 0 %}disabled title="Este ítem ya fue entregado completamente"{% endif %}
                         >
                     </td>
 
