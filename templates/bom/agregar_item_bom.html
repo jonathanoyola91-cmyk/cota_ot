@@ -1,7 +1,7 @@
 {% extends "dashboard/home.html" %}
 
 {% block page_title %}
-Agregar ítem BOM
+{% if bom.estado == "BORRADOR" %}Agregar ítem BOM{% else %}Requerimiento adicional{% endif %}
 {% endblock %}
 
 
@@ -22,8 +22,13 @@ Agregar ítem BOM
         <div>
 
             <h2>
-                Agregar ítem al BOM
+                {% if bom.estado == "BORRADOR" %}Agregar ítem al BOM{% else %}Agregar requerimiento adicional{% endif %}
             </h2>
+            {% if bom.estado != "BORRADOR" %}
+            <p style="margin-top:10px;padding:10px 12px;background:#eff6ff;border-radius:8px;color:#1e3a8a;">
+                Este material se enviará como <strong>requerimiento incremental</strong>. Las líneas ya procesadas no volverán a reservarse ni a enviarse a Compras.
+            </p>
+            {% endif %}
 
             <p style="color:#64748b;">
                 OT #{{ bom.workorder.numero }}
@@ -338,7 +343,7 @@ Agregar ítem BOM
             class="btn"
             type="submit"
         >
-            Agregar ítem
+            {% if bom.estado == "BORRADOR" %}Agregar ítem{% else %}Agregar y enviar adicional a Inventario{% endif %}
         </button>
 
     </form>
@@ -434,19 +439,12 @@ Agregar ítem BOM
 
                         <td>
 
-                            <a
-                                class="btn"
-                                href="{% url 'editar_item_bom' item.id %}"
-                            >
-                                Editar
-                            </a>
-
-                            <a
-                                class="btn btn-secondary"
-                                href="{% url 'eliminar_item_bom' item.id %}"
-                            >
-                                Eliminar
-                            </a>
+                            {% if bom.estado == "BORRADOR" %}
+                            <a class="btn" href="{% url 'editar_item_bom' item.id %}">Editar</a>
+                            <a class="btn btn-secondary" href="{% url 'eliminar_item_bom' item.id %}">Eliminar</a>
+                            {% else %}
+                            <span class="badge">Procesado / protegido</span>
+                            {% endif %}
 
                         </td>
 

@@ -12,7 +12,12 @@
 
     <br>
 
-<a class="btn" href="{% url 'agregar_item_bom' bom.id %}">Agregar ítem manual</a>
+{% if bom.estado == "BORRADOR" %}
+<a class="btn" href="{% url 'agregar_item_bom' bom.id %}">Agregar ítem</a>
+{% else %}
+<a class="btn" href="{% url 'agregar_item_bom' bom.id %}?adicional=1">+ Agregar requerimiento adicional</a>
+<span class="badge" style="margin-left:8px;">Solo se enviará el nuevo requerimiento</span>
+{% endif %}
 <br><br>
 
 <form method="post" action="{% url 'enviar_bom_compras' bom.id %}" style="display:inline;">
@@ -21,7 +26,7 @@
     {% if bom.estado == "BORRADOR" %}
         <button class="btn">Enviar a Inventario para revisión</button>
     {% else %}
-        <button class="btn btn-warning">Actualizar revisión de Inventario</button>
+        <button class="btn btn-warning">Reenviar pendientes a Inventario</button>
     {% endif %}
 </form>
 

@@ -11,7 +11,7 @@ from django.contrib.staticfiles import finders
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
-from django.db.models import F, Q, Count
+from django.db.models import F, Q, Count, Sum
 from django.db import transaction
 from django.views.decorators.http import require_POST
 
@@ -232,75 +232,106 @@ def inventario_dashboard(request):
 @login_required
 @inventario_required
 def revision_bom_detail(request, pk):
-    """
-    Inventario valida disponibilidad por línea antes de que Compras gestione el BOM.
-    No mueve stock contable: registra la cantidad físicamente verificada/reservable
-    en el campo histórico cantidad_disponible de PurchaseLine.
-    """
+    """Revisa únicamente el delta pendiente del BOM y crea reservas sin mover existencia física."""
     from compras_oil.models import PurchaseRequest
+    from .models import InventoryStock, InventoryReservation
 
     compra = get_object_or_404(
-        PurchaseRequest.objects
-        .select_related("bom", "bom__workorder", "creado_por")
-        .prefetch_related("lineas__bom_item"),
-        pk=pk,
+        PurchaseRequest.objects.select_related("bom", "bom__workorder", "creado_por")
+        .prefetch_related("lineas__bom_item"), pk=pk,
     )
 
-    lineas = compra.lineas.filter(cantidad_requerida__gt=0).order_by("id")
+    # CLAVE DEL FLUJO INCREMENTAL:
+    # una línea aparece solo si el BOM requiere más de lo que Inventario ya revisó.
+    todas_lineas = compra.lineas.filter(cantidad_requerida__gt=0).order_by("id")
+    lineas = []
+    for linea in todas_lineas:
+        requerida_total = Decimal(linea.cantidad_requerida or 0)
+        revisada = Decimal(linea.cantidad_revisada_inventario or 0)
+        pendiente = max(requerida_total - revisada, Decimal("0"))
+        if pendiente > 0:
+            linea.cantidad_pendiente_inventario = pendiente
+            lineas.append(linea)
+
+    empresa_stock = InventoryStock.Empresa.IMPETUS
 
     if request.method == "POST":
         if compra.inventario_revisado_en:
             messages.info(request, "Este BOM ya fue revisado por Inventario.")
             return redirect("inventario:revision_bom_detail", pk=compra.pk)
 
-        errores = []
-        cantidades = {}
-        for linea in lineas:
-            raw = (request.POST.get(f"cantidad_disponible_{linea.id}") or "0").strip()
-            try:
-                cantidad = Decimal(raw.replace(",", "."))
-            except Exception:
-                errores.append(f"Cantidad inválida para {linea.codigo or linea.descripcion}.")
-                continue
+        if not lineas:
+            messages.info(request, "No hay requerimientos nuevos o incrementales pendientes de revisión.")
+            return redirect("inventario:revision_bom_detail", pk=compra.pk)
 
-            requerida = Decimal(linea.cantidad_requerida or 0)
-            if cantidad < 0:
-                errores.append(f"La disponibilidad de {linea.codigo or linea.descripcion} no puede ser negativa.")
-            if cantidad > requerida:
-                # Para este flujo interesa cuánto se reserva para el PAW, no todo el stock físico.
-                cantidad = requerida
-            cantidades[linea.id] = cantidad
+        errores, cantidades = [], {}
+        with transaction.atomic():
+            for linea in lineas:
+                pendiente = Decimal(linea.cantidad_pendiente_inventario or 0)
+                raw = (request.POST.get(f"cantidad_disponible_{linea.id}") or "0").strip()
+                try:
+                    solicitada = Decimal(raw.replace(",", "."))
+                except Exception:
+                    errores.append(f"Cantidad inválida para {linea.codigo or linea.descripcion}.")
+                    continue
+                if solicitada < 0 or solicitada > pendiente:
+                    errores.append(
+                        f"La reserva de {linea.codigo or linea.descripcion} debe estar entre 0 y {pendiente}."
+                    )
+                    continue
 
-        if errores:
-            for error in errores:
-                messages.error(request, error)
-        else:
-            with transaction.atomic():
+                stock = InventoryStock.objects.select_for_update().filter(
+                    empresa=empresa_stock, codigo__iexact=(linea.codigo or "").strip()
+                ).first()
+                disponible_real = Decimal(stock.cantidad_disponible) if stock else Decimal("0")
+                if solicitada > disponible_real:
+                    errores.append(
+                        f"{linea.codigo or linea.descripcion}: intentas reservar {solicitada}, "
+                        f"pero el disponible real es {disponible_real}."
+                    )
+                    continue
+                cantidades[linea.id] = (solicitada, stock)
+
+            if errores:
+                transaction.set_rollback(True)
+            else:
                 for linea in lineas:
-                    linea.cantidad_disponible = cantidades.get(linea.id, Decimal("0"))
-                    linea.save(update_fields=["cantidad_disponible", "cantidad_a_comprar"])
+                    cantidad, stock = cantidades.get(linea.id, (Decimal("0"), None))
+                    pendiente = Decimal(linea.cantidad_pendiente_inventario or 0)
+
+                    # cantidad_disponible es acumulada para esta PurchaseLine.
+                    linea.cantidad_disponible = Decimal(linea.cantidad_disponible or 0) + cantidad
+                    linea.cantidad_revisada_inventario = (
+                        Decimal(linea.cantidad_revisada_inventario or 0) + pendiente
+                    )
+                    linea.save(update_fields=[
+                        "cantidad_disponible",
+                        "cantidad_revisada_inventario",
+                        "cantidad_a_comprar",
+                    ])
+
+                    if cantidad > 0 and stock:
+                        InventoryReservation.objects.create(
+                            stock=stock,
+                            cantidad=cantidad,
+                            purchase_request=compra,
+                            purchase_line=linea,
+                            creado_por=request.user,
+                            observacion=f"Reserva BOM PAW #{compra.paw_numero}",
+                        )
+                        stock.cantidad_reservada = F("cantidad_reservada") + cantidad
+                        stock.save(update_fields=["cantidad_reservada", "actualizado_en"])
 
                 compra.inventario_revisado_en = timezone.now()
                 compra.inventario_revisado_por = request.user
-                compra.save(update_fields=[
-                    "inventario_revisado_en",
-                    "inventario_revisado_por",
-                    "actualizado_en",
-                ])
+                compra.save(update_fields=["inventario_revisado_en", "inventario_revisado_por", "actualizado_en"])
 
                 registrar_movimiento(
-                    request=request,
-                    paw_numero=compra.paw_numero,
-                    modulo="INVENTARIO",
-                    accion="BOM revisado por Inventario",
-                    descripcion="Inventario confirmó las cantidades disponibles del BOM.",
+                    request=request, paw_numero=compra.paw_numero, modulo="INVENTARIO",
+                    accion="BOM revisado y reservado",
+                    descripcion="Inventario confirmó únicamente los requerimientos nuevos/incrementales del PAW.",
                     objeto=compra,
-                    datos_nuevos={
-                        "inventario_revisado_en": str(compra.inventario_revisado_en),
-                        "inventario_revisado_por": request.user.username,
-                    },
                 )
-
                 faltantes = compra.lineas.filter(cantidad_a_comprar__gt=0).exists()
                 try:
                     paw = compra.bom.workorder.paw
@@ -309,47 +340,32 @@ def revision_bom_detail(request, pk):
                 except Exception:
                     pass
 
-                if faltantes:
-                    registrar_movimiento(
-                        request=request,
-                        paw_numero=compra.paw_numero,
-                        modulo="COMPRAS",
-                        accion="Faltantes habilitados para Compras",
-                        descripcion=(
-                            "Inventario confirmó la revisión y existen materiales "
-                            "faltantes que requieren compra."
-                        ),
-                        objeto=compra,
-                    )
-                else:
-                    registrar_movimiento(
-                        request=request,
-                        paw_numero=compra.paw_numero,
-                        modulo="INVENTARIO",
-                        accion="BOM completo con inventario",
-                        descripcion=(
-                            "Inventario confirmó disponibilidad total. "
-                            "No se requiere compra."
-                        ),
-                        objeto=compra,
-                    )
-
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
             if faltantes:
-                messages.success(
-                    request,
-                    "Revisión confirmada. Solo los faltantes quedaron habilitados para Compras."
-                )
+                messages.success(request, "Requerimientos pendientes revisados. Solo los faltantes quedan para Compras.")
                 return redirect("inventario:dashboard")
-
-            messages.success(
-                request,
-                "Revisión confirmada. Todo el material está disponible; no se requiere compra. Ya puedes generar la entrega."
-            )
+            messages.success(request, "Los nuevos requerimientos quedaron reservados. No se requiere compra adicional.")
             return redirect("inventario:revision_bom_detail", pk=compra.pk)
 
-    total_requerido = sum((Decimal(x.cantidad_requerida or 0) for x in lineas), Decimal("0"))
-    total_disponible = sum((Decimal(x.cantidad_disponible or 0) for x in lineas), Decimal("0"))
-    total_comprar = sum((Decimal(x.cantidad_a_comprar or 0) for x in lineas), Decimal("0"))
+    # GET: el stock se consulta después de determinar qué delta está pendiente.
+    for linea in lineas:
+        stock = InventoryStock.objects.filter(
+            empresa=empresa_stock, codigo__iexact=(linea.codigo or "").strip()
+        ).first()
+        linea.stock_fisico = Decimal(stock.cantidad_fisica) if stock else Decimal("0")
+        linea.stock_reservado = Decimal(stock.cantidad_reservada) if stock else Decimal("0")
+        linea.stock_disponible_real = Decimal(stock.cantidad_disponible) if stock else Decimal("0")
+        pendiente = Decimal(linea.cantidad_pendiente_inventario or 0)
+        linea.reserva_sugerida = min(pendiente, linea.stock_disponible_real)
+        linea.reserva_sugerida_input = format(linea.reserva_sugerida, "f")
+        linea.faltante_sugerido = max(pendiente - linea.reserva_sugerida, Decimal("0"))
+
+    total_requerido = sum((Decimal(x.cantidad_pendiente_inventario or 0) for x in lineas), Decimal("0"))
+    total_disponible = sum((x.reserva_sugerida for x in lineas), Decimal("0"))
+    total_comprar = sum((x.faltante_sugerido for x in lineas), Decimal("0"))
 
     return render(request, "inventario/revision_bom_detail.html", {
         "compra": compra,
@@ -357,6 +373,7 @@ def revision_bom_detail(request, pk):
         "total_requerido": total_requerido,
         "total_disponible": total_disponible,
         "total_comprar": total_comprar,
+        "modo_incremental": any(Decimal(x.cantidad_revisada_inventario or 0) > 0 for x in todas_lineas),
     })
 
 
@@ -707,31 +724,133 @@ def recepcion_detail(request, pk):
                 linea.save(update_fields=["codigo", "descripcion", "unidad"])
 
     if request.method == "POST":
+        # La recepción ahora afecta existencias por el INCREMENTO recibido.
+        # Una compra originada por faltante del PAW entra a físico y queda
+        # reservada inmediatamente para ese mismo PAW.
+        from .models import InventoryStock, InventoryMovement, InventoryReservation
+
+        errores_recepcion = []
+        datos_recepcion = []
+
         for linea in lineas_recepcion:
             raw = request.POST.get(f"cantidad_recibida_{linea.id}") or "0"
-
             try:
                 cantidad = Decimal(raw.replace(",", "."))
             except Exception:
-                cantidad = Decimal("0")
+                errores_recepcion.append(f"Cantidad inválida para {linea.codigo or linea.descripcion}.")
+                continue
 
-            fecha = request.POST.get(f"fecha_llegada_{linea.id}") or None
-            observacion = request.POST.get(f"observacion_{linea.id}") or ""
-
-            linea.cantidad_recibida = cantidad
-            linea.fecha_llegada = fecha
-            linea.observacion_inventario = observacion
-
+            anterior = Decimal(linea.cantidad_recibida or 0)
             esperada = Decimal(linea.cantidad_esperada or 0)
 
-            if cantidad <= 0:
-                linea.estado = "PENDIENTE"
-            elif cantidad < esperada:
-                linea.estado = "PARCIAL"
-            else:
-                linea.estado = "LISTO"
+            if cantidad < 0 or cantidad > esperada:
+                errores_recepcion.append(
+                    f"{linea.codigo or linea.descripcion}: la cantidad recibida debe estar entre 0 y {esperada}."
+                )
+                continue
 
-            linea.save()
+            # Una recepción ya contabilizada no se reduce editando la pantalla:
+            # una corrección física debe hacerse mediante Ajuste de inventario.
+            if cantidad < anterior:
+                errores_recepcion.append(
+                    f"{linea.codigo or linea.descripcion}: ya hay {anterior} recibidas. "
+                    "No reduzcas una recepción contabilizada; usa Ajuste de inventario si necesitas corregir el físico."
+                )
+                continue
+
+            datos_recepcion.append((
+                linea, cantidad, anterior,
+                request.POST.get(f"fecha_llegada_{linea.id}") or None,
+                request.POST.get(f"observacion_{linea.id}") or "",
+            ))
+
+        if errores_recepcion:
+            for error in errores_recepcion:
+                messages.error(request, error)
+            return redirect("inventario:recepcion_detail", pk=recepcion.pk)
+
+        with transaction.atomic():
+            for linea, cantidad, anterior, fecha, observacion in datos_recepcion:
+                incremento = cantidad - anterior
+                esperada = Decimal(linea.cantidad_esperada or 0)
+
+                # Solo el incremento nuevo genera entrada física y Kardex.
+                if incremento > 0:
+                    codigo = (linea.codigo or getattr(linea.purchase_line, "codigo", "") or "").strip()
+                    catalogo, CatalogModel = _catalog_model_for_empresa(InventoryStock.Empresa.IMPETUS)
+                    item = CatalogModel.objects.filter(codigo__iexact=codigo).first() if codigo else None
+                    if not item:
+                        transaction.set_rollback(True)
+                        messages.error(
+                            request,
+                            f"No se encontró el P/N {codigo or '-'} en el catálogo IMPETUS. "
+                            "No se contabilizó la recepción."
+                        )
+                        return redirect("inventario:recepcion_detail", pk=recepcion.pk)
+
+                    stock = _get_or_create_stock(InventoryStock.Empresa.IMPETUS, item)
+                    stock = InventoryStock.objects.select_for_update().get(pk=stock.pk)
+
+                    saldo_anterior = Decimal(stock.cantidad_fisica or 0)
+                    costo_anterior = Decimal(stock.costo_promedio or 0)
+                    precio_compra = Decimal(getattr(linea.purchase_line, "precio_unitario", 0) or 0)
+
+                    saldo_nuevo = saldo_anterior + incremento
+                    if precio_compra > 0 and saldo_nuevo > 0:
+                        costo_nuevo = ((saldo_anterior * costo_anterior) + (incremento * precio_compra)) / saldo_nuevo
+                    else:
+                        costo_nuevo = costo_anterior
+
+                    stock.cantidad_fisica = saldo_nuevo
+                    stock.costo_promedio = costo_nuevo
+
+                    # Reserva automática: como esta línea nació del faltante de este PAW,
+                    # lo recibido no queda libre para otro PAW.
+                    requerida = Decimal(getattr(linea.purchase_line, "cantidad_requerida", 0) or 0)
+                    ya_reservado_linea = InventoryReservation.objects.filter(
+                        purchase_line=linea.purchase_line,
+                        estado=InventoryReservation.Estado.ACTIVA,
+                    ).aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
+                    pendiente_reserva = max(requerida - Decimal(ya_reservado_linea), Decimal("0"))
+                    a_reservar = min(incremento, pendiente_reserva)
+
+                    if a_reservar > 0:
+                        InventoryReservation.objects.create(
+                            stock=stock,
+                            cantidad=a_reservar,
+                            purchase_request=recepcion.purchase_request,
+                            purchase_line=linea.purchase_line,
+                            creado_por=request.user,
+                            observacion=f"Reserva automática por recepción PAW #{recepcion.purchase_request.paw_numero}",
+                        )
+                        stock.cantidad_reservada = Decimal(stock.cantidad_reservada or 0) + a_reservar
+
+                    stock.save(update_fields=["cantidad_fisica", "cantidad_reservada", "costo_promedio", "actualizado_en"])
+
+                    InventoryMovement.objects.create(
+                        stock=stock,
+                        tipo=InventoryMovement.Tipo.RECEPCION,
+                        cantidad=incremento,
+                        costo_unitario=precio_compra if precio_compra > 0 else costo_nuevo,
+                        saldo_anterior=saldo_anterior,
+                        saldo_nuevo=saldo_nuevo,
+                        costo_promedio_anterior=costo_anterior,
+                        costo_promedio_nuevo=costo_nuevo,
+                        referencia=f"PAW-{recepcion.purchase_request.paw_numero}",
+                        motivo=f"Recepción de compra. Reserva automática: {a_reservar}",
+                        creado_por=request.user,
+                    )
+
+                linea.cantidad_recibida = cantidad
+                linea.fecha_llegada = fecha
+                linea.observacion_inventario = observacion
+                if cantidad <= 0:
+                    linea.estado = "PENDIENTE"
+                elif cantidad < esperada:
+                    linea.estado = "PARCIAL"
+                else:
+                    linea.estado = "LISTO"
+                linea.save()
 
         total = lineas_recepcion.count()
         listas = lineas_recepcion.filter(estado="LISTO").count()
@@ -1741,3 +1860,331 @@ def transferencia_nueva(request):
 def transferencias_lista(request):
     from .models import InventoryTransfer
     return render(request, "inventario/transferencias_lista.html", {"transferencias": InventoryTransfer.objects.select_related("stock_origen", "stock_destino", "creado_por").all().order_by("-creado_en")})
+
+# ======================================================
+# INVENTARIO INICIAL - CARGA MASIVA EXCEL
+# ======================================================
+def _costos_historicos_por_codigo(codigos):
+    """Costo ponderado histórico por P/N exacto. No cruza descripciones ni catálogos."""
+    from compras_oil.models import PurchaseLine
+    codigos = [str(c or "").strip() for c in codigos if str(c or "").strip()]
+    historico = {}
+    if not codigos:
+        return historico
+    lineas = (
+        PurchaseLine.objects
+        .filter(codigo__in=codigos, precio_unitario__isnull=False,
+                precio_unitario__gt=0, cantidad_a_comprar__gt=0)
+        .select_related("request")
+        .order_by("request__creado_en", "pk")
+    )
+    for linea in lineas:
+        codigo = (linea.codigo or "").strip()
+        qty = Decimal(linea.cantidad_a_comprar or 0)
+        precio = Decimal(linea.precio_unitario or 0)
+        if qty <= 0 or precio <= 0:
+            continue
+        h = historico.setdefault(codigo, {
+            "cantidad": Decimal("0"), "valor": Decimal("0"),
+            "compras": 0, "ultimo": Decimal("0")
+        })
+        h["cantidad"] += qty
+        h["valor"] += qty * precio
+        h["compras"] += 1
+        h["ultimo"] = precio
+    return historico
+
+
+@login_required
+@inventario_required
+def inventario_inicial_plantilla(request):
+    """Descarga XLSX precargado con el catálogo activo de la empresa seleccionada."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        messages.error(request, "Falta instalar openpyxl para generar archivos Excel.")
+        return redirect("inventario:inventario_inicial")
+
+    empresa = (request.GET.get("empresa") or "IMPETUS").upper()
+    catalogo, Model = _catalog_model_for_empresa(empresa)
+    if not Model:
+        messages.error(request, "Empresa no válida.")
+        return redirect("inventario:inventario_inicial")
+
+    items = list(Model.objects.filter(activo=True).order_by("codigo"))
+    historico = _costos_historicos_por_codigo([i.codigo for i in items])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Inventario inicial"
+    headers = ["P/N", "Descripción", "Unidad", "Cantidad física", "Costo unitario sugerido", "Observación"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1F4E78")
+        cell.alignment = Alignment(horizontal="center")
+
+    for item in items:
+        codigo = (item.codigo or "").strip()
+        h = historico.get(codigo)
+        costo = ""
+        if h and h["cantidad"] > 0:
+            costo = float((h["valor"] / h["cantidad"]).quantize(Decimal("0.01")))
+        ws.append([
+            codigo,
+            item.descripcion or "",
+            item.unidad_medida or "UND",
+            "",  # El usuario diligencia únicamente el conteo físico real.
+            costo,
+            "",
+        ])
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    widths = [18, 55, 14, 18, 24, 40]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    for row in ws.iter_rows(min_row=2):
+        row[3].number_format = "0.000"
+        row[4].number_format = '#,##0.00'
+
+    info = wb.create_sheet("INSTRUCCIONES")
+    instrucciones = [
+        "PLANTILLA DE INVENTARIO INICIAL",
+        f"Empresa: {'IMPETUS HPS' if empresa == 'IMPETUS' else 'OIL & GAS SUPPORT'}",
+        "Diligencie únicamente la cantidad que existe físicamente al momento del conteo.",
+        "La cantidad física se registra independientemente de que el material esté reservado para un PAW.",
+        "No cambie el P/N. La descripción y unidad son informativas.",
+        "El costo sugerido proviene del historial de compras por P/N exacto y puede corregirse si corresponde.",
+        "Deje Cantidad física vacía para los artículos que no desea cargar.",
+        "Los artículos que ya tengan movimientos de inventario serán rechazados y deberán corregirse mediante Ajuste.",
+    ]
+    for line in instrucciones:
+        info.append([line])
+    info.column_dimensions["A"].width = 115
+    info["A1"].font = Font(bold=True, size=14)
+
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    nombre = f"inventario_inicial_{empresa.lower()}.xlsx"
+    response = HttpResponse(
+        out.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{nombre}"'
+    return response
+
+
+@login_required
+@inventario_required
+def inventario_inicial_masivo(request):
+    """Valida un XLSX y, tras confirmación, registra el inventario inicial en bloque."""
+    from .models import InventoryStock, InventoryMovement
+    empresa = (request.GET.get("empresa") or request.POST.get("empresa") or "IMPETUS").upper()
+    catalogo, Model = _catalog_model_for_empresa(empresa)
+    if not Model:
+        messages.error(request, "Empresa no válida.")
+        return redirect("inventario:inventario_inicial")
+
+    session_key = f"inventario_inicial_masivo_{empresa}"
+    contexto = {"empresa": empresa, "preview": None}
+
+    if request.method == "POST" and request.POST.get("accion") == "cancelar":
+        request.session.pop(session_key, None)
+        messages.info(request, "Carga masiva cancelada. No se modificó el inventario.")
+        return redirect(f"{request.path}?empresa={empresa}")
+
+    if request.method == "POST" and request.POST.get("accion") == "confirmar":
+        datos = request.session.get(session_key)
+        if not datos:
+            messages.error(request, "La validación expiró. Cargue nuevamente el archivo.")
+            return redirect(f"{request.path}?empresa={empresa}")
+        if datos.get("errores"):
+            messages.error(request, "La carga contiene errores y no puede confirmarse.")
+            return redirect(f"{request.path}?empresa={empresa}")
+
+        filas = datos.get("filas", [])
+        try:
+            with transaction.atomic():
+                # Revalidación dentro de transacción para evitar dobles cargas.
+                for fila in filas:
+                    item = Model.objects.filter(pk=fila["item_id"], activo=True).first()
+                    if not item or (item.codigo or "").strip() != fila["codigo"]:
+                        raise ValueError(f"El P/N {fila['codigo']} cambió o ya no está activo.")
+                    stock = _get_or_create_stock(empresa, item)
+                    stock = InventoryStock.objects.select_for_update().get(pk=stock.pk)
+                    if stock.movimientos.exists() or stock.cantidad_fisica != 0:
+                        raise ValueError(f"El P/N {fila['codigo']} ya tiene movimientos de inventario.")
+                    cantidad = Decimal(fila["cantidad"])
+                    costo = Decimal(fila["costo"])
+                    stock.cantidad_fisica = cantidad
+                    stock.costo_promedio = costo
+                    stock.save(update_fields=["cantidad_fisica", "costo_promedio", "actualizado_en"])
+                    InventoryMovement.objects.create(
+                        stock=stock,
+                        tipo=InventoryMovement.Tipo.INVENTARIO_INICIAL,
+                        cantidad=cantidad,
+                        costo_unitario=costo,
+                        saldo_anterior=Decimal("0"),
+                        saldo_nuevo=cantidad,
+                        costo_promedio_anterior=Decimal("0"),
+                        costo_promedio_nuevo=costo,
+                        referencia="INVENTARIO INICIAL MASIVO",
+                        motivo=fila.get("observacion") or "Carga masiva de inventario inicial",
+                        creado_por=request.user,
+                    )
+        except ValueError as exc:
+            messages.error(request, str(exc) + " No se cargó ningún artículo.")
+            return redirect(f"{request.path}?empresa={empresa}")
+        request.session.pop(session_key, None)
+        messages.success(request, f"Inventario inicial cargado correctamente: {len(filas)} artículos.")
+        return redirect(f"/inventario/existencias/?empresa={empresa}")
+
+    if request.method == "POST":
+        archivo = request.FILES.get("archivo")
+        if not archivo:
+            messages.error(request, "Seleccione un archivo Excel (.xlsx).")
+            return redirect(f"{request.path}?empresa={empresa}")
+        if not archivo.name.lower().endswith(".xlsx"):
+            messages.error(request, "El archivo debe ser formato .xlsx.")
+            return redirect(f"{request.path}?empresa={empresa}")
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(archivo, data_only=True, read_only=True)
+            ws = wb["Inventario inicial"] if "Inventario inicial" in wb.sheetnames else wb.active
+        except Exception as exc:
+            messages.error(request, f"No fue posible leer el Excel: {exc}")
+            return redirect(f"{request.path}?empresa={empresa}")
+
+        items_por_codigo = {
+            (i.codigo or "").strip(): i
+            for i in Model.objects.filter(activo=True)
+            if (i.codigo or "").strip()
+        }
+        filas_validas, errores, advertencias = [], [], []
+        vistos = set()
+        total_valor = Decimal("0")
+
+        for nro, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            codigo = str(row[0] or "").strip()
+            cantidad_raw = row[3] if len(row) > 3 else None
+            costo_raw = row[4] if len(row) > 4 else None
+            observacion = str(row[5] or "").strip() if len(row) > 5 else ""
+            # Filas sin cantidad son deliberadamente ignoradas.
+            if cantidad_raw is None or str(cantidad_raw).strip() == "":
+                continue
+            if not codigo:
+                errores.append(f"Fila {nro}: falta P/N.")
+                continue
+            if codigo in vistos:
+                errores.append(f"Fila {nro}: P/N duplicado en el archivo: {codigo}.")
+                continue
+            vistos.add(codigo)
+            item = items_por_codigo.get(codigo)
+            if not item:
+                errores.append(f"Fila {nro}: P/N {codigo} no existe o está inactivo en el catálogo de destino.")
+                continue
+            try:
+                cantidad = Decimal(str(cantidad_raw).replace(",", "."))
+                costo = Decimal(str(costo_raw or 0).replace(",", "."))
+            except Exception:
+                errores.append(f"Fila {nro}: cantidad o costo inválido para {codigo}.")
+                continue
+            if cantidad < 0 or costo < 0:
+                errores.append(f"Fila {nro}: cantidad y costo no pueden ser negativos ({codigo}).")
+                continue
+            # Cero explícito se ignora: no crea un movimiento inicial innecesario.
+            if cantidad == 0:
+                advertencias.append(f"Fila {nro}: {codigo} tiene cantidad 0 y será omitido.")
+                continue
+            stock = InventoryStock.objects.filter(
+                empresa=empresa, catalogo=catalogo, catalogo_item_id=item.pk
+            ).first()
+            if stock and (stock.movimientos.exists() or stock.cantidad_fisica != 0):
+                errores.append(f"Fila {nro}: {codigo} ya tiene inventario/movimientos. Use Ajuste de inventario.")
+                continue
+            if costo == 0:
+                advertencias.append(f"Fila {nro}: {codigo} se cargará con costo $0.")
+            valor = cantidad * costo
+            total_valor += valor
+            filas_validas.append({
+                "fila": nro,
+                "item_id": item.pk,
+                "codigo": codigo,
+                "descripcion": item.descripcion or "",
+                "unidad": item.unidad_medida or "UND",
+                "cantidad": str(cantidad),
+                "costo": str(costo),
+                "valor": str(valor),
+                "observacion": observacion,
+            })
+
+        datos_session = {
+            "filas": filas_validas,
+            "errores": errores,
+            "advertencias": advertencias,
+            "total_valor": str(total_valor),
+        }
+        request.session[session_key] = datos_session
+        request.session.modified = True
+        contexto["preview"] = {
+            "filas": filas_validas[:100],
+            "total_filas": len(filas_validas),
+            "errores": errores,
+            "advertencias": advertencias,
+            "total_valor": total_valor,
+            "truncado": len(filas_validas) > 100,
+        }
+
+    return render(request, "inventario/inventario_inicial_masivo.html", contexto)
+
+@login_required
+@inventario_required
+def reserva_transicion(request):
+    """Reserva manual de apertura para PAW que ya estaban activos al iniciar Etapa 2."""
+    from compras_oil.models import PurchaseRequest
+    from .models import InventoryStock, InventoryReservation
+
+    stocks = InventoryStock.objects.filter(
+        empresa=InventoryStock.Empresa.IMPETUS,
+        cantidad_fisica__gt=F("cantidad_reservada"),
+    ).order_by("codigo")
+
+    if request.method == "POST":
+        paw_numero = (request.POST.get("paw_numero") or "").strip()
+        stock_id = request.POST.get("stock_id")
+        raw = (request.POST.get("cantidad") or "0").strip()
+        observacion = (request.POST.get("observacion") or "").strip()
+        try:
+            cantidad = Decimal(raw.replace(",", "."))
+        except Exception:
+            cantidad = Decimal("0")
+
+        compra = PurchaseRequest.objects.filter(paw_numero__iexact=paw_numero).order_by("-id").first()
+        if not compra:
+            messages.error(request, f"No se encontró un PAW #{paw_numero} con solicitud/BOM en el sistema.")
+        elif cantidad <= 0:
+            messages.error(request, "La cantidad a reservar debe ser mayor que cero.")
+        else:
+            with transaction.atomic():
+                stock = get_object_or_404(InventoryStock.objects.select_for_update(), pk=stock_id)
+                if stock.empresa != InventoryStock.Empresa.IMPETUS:
+                    messages.error(request, "La reserva de transición debe salir del inventario IMPETUS.")
+                elif cantidad > Decimal(stock.cantidad_disponible):
+                    messages.error(request, f"Disponible real: {stock.cantidad_disponible}.")
+                else:
+                    InventoryReservation.objects.create(
+                        stock=stock, cantidad=cantidad, purchase_request=compra,
+                        es_transicion=True, creado_por=request.user,
+                        observacion=observacion or f"Reserva inicial de transición PAW #{compra.paw_numero}",
+                    )
+                    stock.cantidad_reservada = F("cantidad_reservada") + cantidad
+                    stock.save(update_fields=["cantidad_reservada", "actualizado_en"])
+                    messages.success(request, f"Reservadas {cantidad} unidades de {stock.codigo} para PAW #{compra.paw_numero}. La existencia física no cambió.")
+                    return redirect("inventario:reserva_transicion")
+
+    reservas = InventoryReservation.objects.filter(es_transicion=True).select_related("stock", "purchase_request", "creado_por").order_by("-creado_en")[:100]
+    return render(request, "inventario/reserva_transicion.html", {"stocks": stocks, "reservas": reservas})

@@ -1,0 +1,78 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Carga masiva de inventario inicial{% endblock %}
+{% block content %}
+<div class="panel">
+  <h3>Carga masiva — {% if empresa == 'IMPETUS' %}IMPETUS HPS{% else %}OIL & GAS SUPPORT{% endif %}</h3>
+  <p style="color:#64748b;max-width:950px">
+    Cargue únicamente la <strong>cantidad que existe físicamente</strong> al momento del conteo.
+    Si un material está reservado para un PAW, igualmente debe incluirse en la cantidad física. Las reservas se manejarán por separado.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0">
+    <a class="btn" href="{% url 'inventario:inventario_inicial_plantilla' %}?empresa={{ empresa }}">Descargar plantilla Excel</a>
+    <a class="btn btn-secondary" href="{% url 'inventario:inventario_inicial' %}?empresa={{ empresa }}">Volver a inventario inicial</a>
+  </div>
+  <form method="post" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+    {% csrf_token %}
+    <input type="hidden" name="empresa" value="{{ empresa }}">
+    <input type="hidden" name="accion" value="validar">
+    <div>
+      <label><strong>Archivo Excel (.xlsx)</strong></label><br>
+      <input type="file" name="archivo" accept=".xlsx" required>
+    </div>
+    <button class="btn">Validar archivo</button>
+  </form>
+</div>
+
+{% if preview %}
+<br>
+<div class="panel">
+  <h3>Validación previa</h3>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:15px">
+    <div><strong>{{ preview.total_filas }}</strong><br><span style="color:#64748b">artículos a cargar</span></div>
+    <div><strong>${{ preview.total_valor|floatformat:2 }}</strong><br><span style="color:#64748b">valor inicial estimado</span></div>
+    <div><strong>{{ preview.errores|length }}</strong><br><span style="color:#64748b">errores</span></div>
+    <div><strong>{{ preview.advertencias|length }}</strong><br><span style="color:#64748b">advertencias</span></div>
+  </div>
+
+  {% if preview.errores %}
+    <div style="background:#fef2f2;border:1px solid #fecaca;padding:12px;border-radius:8px;margin-bottom:12px">
+      <strong style="color:#b91c1c">Corrija estos errores antes de confirmar:</strong>
+      <ul>{% for e in preview.errores %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+  {% if preview.advertencias %}
+    <div style="background:#fffbeb;border:1px solid #fde68a;padding:12px;border-radius:8px;margin-bottom:12px">
+      <strong style="color:#92400e">Advertencias:</strong>
+      <ul>{% for e in preview.advertencias %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  {% if preview.filas %}
+  <div style="overflow:auto">
+    <table>
+      <thead><tr><th>Fila</th><th>P/N</th><th>Descripción</th><th>Cantidad física</th><th>Costo</th><th>Valor</th></tr></thead>
+      <tbody>
+      {% for f in preview.filas %}
+        <tr>
+          <td>{{ f.fila }}</td><td><strong>{{ f.codigo }}</strong></td><td>{{ f.descripcion }}</td>
+          <td>{{ f.cantidad }}</td><td>${{ f.costo }}</td><td>${{ f.valor }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if preview.truncado %}<p style="color:#64748b">Vista previa limitada a los primeros 100 artículos. La confirmación procesa todos los artículos validados.</p>{% endif %}
+  {% endif %}
+
+  <div style="display:flex;gap:8px;margin-top:15px;flex-wrap:wrap">
+    {% if not preview.errores and preview.total_filas %}
+    <form method="post" onsubmit="return confirm('¿Confirma que estas cantidades corresponden al conteo físico real? Esta acción creará el inventario inicial y su Kardex.');">
+      {% csrf_token %}<input type="hidden" name="empresa" value="{{ empresa }}"><input type="hidden" name="accion" value="confirmar">
+      <button class="btn">Confirmar inventario inicial</button>
+    </form>
+    {% endif %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="empresa" value="{{ empresa }}"><input type="hidden" name="accion" value="cancelar"><button class="btn btn-secondary">Cancelar carga</button></form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

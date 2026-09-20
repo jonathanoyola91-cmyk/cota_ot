@@ -6,6 +6,7 @@ from compras_oil.models import PurchaseRequest, PurchaseLine
 
 from django.http import JsonResponse
 from django.db.models import Q
+from django.utils import timezone
 
 from item_oil_gas.models import ItemImpetus
 from auditoria.utils import registrar_movimiento
@@ -141,6 +142,7 @@ def agregar_item_bom(request, bom_id):
 
     # El BOM siempre trabaja con el catálogo operativo IMPETUS.
     catalogo_nombre = "IMPETUS"
+    es_adicional = bom.estado != Bom.Estado.BORRADOR or request.GET.get("adicional") == "1"
 
     if request.method == "POST":
 
@@ -197,15 +199,47 @@ def agregar_item_bom(request, bom_id):
         compra = PurchaseRequest.objects.filter(bom=bom).first()
 
         if compra:
-            PurchaseLine.objects.get_or_create(
+            linea_compra, linea_creada = PurchaseLine.objects.get_or_create(
                 request=compra,
                 bom_item=nuevo_item,
                 defaults={
                     "codigo": nuevo_item.codigo,
                     "descripcion": nuevo_item.descripcion,
                     "cantidad_requerida": nuevo_item.cantidad_solicitada,
+                    "cantidad_disponible": 0,
                 }
             )
+
+            # PurchaseLine.save() calcula cantidad_a_comprar = requerida - disponible.
+            # En un requerimiento NUEVO todavía Inventario no ha revisado la línea,
+            # por lo que no debe contarse como faltante ya gestionado. Se deja en 0
+            # directamente en BD; Inventario calculará el faltante real al confirmar.
+            if linea_creada and es_adicional:
+                PurchaseLine.objects.filter(pk=linea_compra.pk).update(cantidad_a_comprar=0)
+                linea_compra.cantidad_a_comprar = 0
+
+            # Si el BOM ya había salido de Taller, este ítem es un requerimiento
+            # incremental. Reabrimos Inventario SIN reprocesar las líneas anteriores.
+            if es_adicional:
+                compra.inventario_revisado_en = None
+                compra.inventario_revisado_por = None
+                compra.save(update_fields=["inventario_revisado_en", "inventario_revisado_por", "actualizado_en"])
+                try:
+                    paw = bom.workorder.paw
+                    paw.estado_operativo = "EN_REVISION_INVENTARIO"
+                    paw.save(update_fields=["estado_operativo"])
+                except Exception:
+                    paw = None
+                registrar_movimiento(
+                    request=request,
+                    paw_numero=getattr(paw, "numero_paw", "") if paw else "",
+                    modulo="TALLER",
+                    accion="Requerimiento adicional enviado a Inventario",
+                    descripcion=(f"Se agregó requerimiento adicional: {nuevo_item.codigo or nuevo_item.descripcion} "
+                                 f"x {nuevo_item.cantidad_solicitada}. Solo este incremento requiere nueva revisión."),
+                    objeto=bom,
+                )
+                return redirect("bom_detail", bom_id=bom.id)
 
         return redirect(
             "agregar_item_bom",
@@ -225,6 +259,11 @@ def agregar_item_bom(request, bom_id):
 def editar_item_bom(request, item_id):
     item = get_object_or_404(BomItem, id=item_id)
     bom = item.bom
+
+    if bom.estado != Bom.Estado.BORRADOR:
+        from django.contrib import messages
+        messages.error(request, "Este requerimiento ya fue enviado. Para aumentar material usa ‘Agregar requerimiento adicional’. No se modifica el histórico procesado.")
+        return redirect("bom_detail", bom_id=bom.id)
 
     if request.method == "POST":
         item.plano = request.POST.get("plano", "")
@@ -247,6 +286,11 @@ def editar_item_bom(request, item_id):
 def eliminar_item_bom(request, item_id):
     item = get_object_or_404(BomItem, id=item_id)
     bom = item.bom
+
+    if bom.estado != Bom.Estado.BORRADOR:
+        from django.contrib import messages
+        messages.error(request, "No se puede eliminar una línea ya enviada a Inventario. Usa un requerimiento adicional para nuevas necesidades.")
+        return redirect("bom_detail", bom_id=bom.id)
 
     if request.method == "POST":
         item.delete()

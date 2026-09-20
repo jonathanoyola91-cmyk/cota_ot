@@ -123,7 +123,7 @@ function confirmarInventario() {
     </div>
 
     <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border-radius:10px;color:#1e3a8a;font-size:13px;">
-        Registra cuánto material del BOM está disponible para este PAW. El sistema calculará automáticamente el faltante que Compras debe adquirir.
+        El sistema consulta la existencia real de IMPETUS por P/N. En reenvíos solo se muestran requerimientos nuevos o incrementales. Lo ya procesado por Inventario no se repite.
     </div>
 
     <form method="post" style="margin-top:18px;">
@@ -132,8 +132,8 @@ function confirmarInventario() {
             <table>
                 <thead>
                     <tr>
-                        <th>Código</th><th>Descripción</th><th>Unidad</th><th>Requerido BOM</th>
-                        <th>Disponible / reservar</th><th>Faltante a comprar</th>
+                        <th>Código</th><th>Descripción</th><th>Unidad</th><th>Requerido pendiente</th>
+                        <th>Físico</th><th>Reservado</th><th>Disponible real</th><th>A reservar</th><th>Faltante a comprar</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -143,20 +143,23 @@ function confirmarInventario() {
                         <td>{{ linea.descripcion }}</td>
                         <td>{{ linea.unidad }}</td>
                         <td><strong>{{ linea.cantidad_requerida }}</strong></td>
+                        <td>{{ linea.stock_fisico }}</td>
+                        <td>{{ linea.stock_reservado }}</td>
+                        <td><strong>{{ linea.stock_disponible_real }}</strong></td>
                         <td>
                             {% if compra.inventario_revisado_en %}
                                 <strong>{{ linea.cantidad_disponible }}</strong>
                             {% else %}
-                                <input type="number" min="0" max="{{ linea.cantidad_requerida }}" step="0.001"
+                                <input type="number" min="0" max="{{ linea.reserva_sugerida_input }}" step="0.001"
                                        name="cantidad_disponible_{{ linea.id }}"
-                                       value="{{ linea.cantidad_disponible }}"
+                                       value="{{ linea.reserva_sugerida_input }}"
                                        style="width:120px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
                             {% endif %}
                         </td>
-                        <td><strong>{{ linea.cantidad_a_comprar }}</strong></td>
+                        <td><strong>{% if compra.inventario_revisado_en %}{{ linea.cantidad_a_comprar }}{% else %}<span class="faltante-sugerido" data-requerido="{{ linea.cantidad_requerida }}">{{ linea.faltante_sugerido }}</span>{% endif %}</strong></td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="6">Este BOM no tiene líneas con cantidad requerida.</td></tr>
+                    <tr><td colspan="9">Este BOM no tiene líneas con cantidad requerida.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

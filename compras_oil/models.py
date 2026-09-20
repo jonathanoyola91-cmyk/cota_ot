@@ -125,6 +125,10 @@ class PurchaseLine(models.Model):
     cantidad_requerida = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     cantidad_disponible = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
+    # Cantidad acumulada de esta línea que ya fue revisada por Inventario.
+    # Permite reenviar un BOM y procesar únicamente líneas/cantidades nuevas.
+    cantidad_revisada_inventario = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+
     # Calculado automáticamente
     cantidad_a_comprar = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 

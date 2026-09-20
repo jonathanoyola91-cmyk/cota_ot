@@ -404,6 +404,8 @@ class InventoryReservation(models.Model):
     stock = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="reservas")
     cantidad = models.DecimalField(max_digits=14, decimal_places=3)
     purchase_request = models.ForeignKey("compras_oil.PurchaseRequest", on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario")
+    purchase_line = models.ForeignKey("compras_oil.PurchaseLine", on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario")
+    es_transicion = models.BooleanField(default=False, help_text="Reserva creada para PAW ya activo al momento de iniciar el control de existencias.")
     estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.ACTIVA)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario_creadas")
     creado_en = models.DateTimeField(auto_now_add=True)

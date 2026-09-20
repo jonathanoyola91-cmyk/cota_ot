@@ -12,6 +12,7 @@
     <input name="q" value="{{ q }}" placeholder="Buscar P/N">
     <button class="btn">Buscar</button>
     <a class="btn btn-secondary" href="{% url 'inventario:existencias_lista' %}?empresa={{ empresa }}">Ver existencias</a>
+    <a class="btn" href="{% url 'inventario:inventario_inicial_masivo' %}?empresa={{ empresa }}">Carga masiva Excel</a>
   </form>
 </div><br>
 

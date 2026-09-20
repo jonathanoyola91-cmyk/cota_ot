@@ -1,0 +1,20 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Reservas iniciales de PAW{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2 style="margin-top:0;">Reserva de transición · PAW existentes</h2>
+  <div style="padding:12px 14px;background:#eff6ff;border-radius:10px;color:#1e3a8a;margin-bottom:18px;">
+    Úsala únicamente para materiales que ya estaban comprometidos con un PAW antes de activar el nuevo control. Reservar no disminuye la existencia física; disminuye el disponible.
+  </div>
+  <form method="post">{% csrf_token %}
+    <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:12px;align-items:end;">
+      <label>PAW<input name="paw_numero" required placeholder="Ej. 1180" style="width:100%;padding:9px;"></label>
+      <label>Ítem IMPETUS<select name="stock_id" required style="width:100%;padding:9px;"><option value="">Seleccione...</option>{% for s in stocks %}<option value="{{ s.id }}">{{ s.codigo }} · {{ s.descripcion }} · disponible {{ s.cantidad_disponible }}</option>{% endfor %}</select></label>
+      <label>Cantidad<input type="number" name="cantidad" min="0.001" step="0.001" required style="width:100%;padding:9px;"></label>
+    </div>
+    <label style="display:block;margin-top:12px;">Observación<input name="observacion" style="width:100%;padding:9px;" placeholder="Opcional"></label>
+    <button class="btn" type="submit" style="margin-top:14px;">Confirmar reserva inicial</button>
+  </form>
+</div>
+<div class="panel" style="margin-top:18px;"><h3>Últimas reservas de transición</h3><div style="overflow-x:auto;"><table><thead><tr><th>PAW</th><th>P/N</th><th>Cantidad</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>{% for r in reservas %}<tr><td>#{{ r.purchase_request.paw_numero }}</td><td>{{ r.stock.codigo }}</td><td>{{ r.cantidad }}</td><td>{{ r.get_estado_display }}</td><td>{{ r.creado_en|date:"d/m/Y H:i" }}</td></tr>{% empty %}<tr><td colspan="5">Aún no hay reservas de transición.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
