@@ -418,9 +418,9 @@ def generar_entrega(request, pk):
         return redirect("inventario:dashboard")
 
     destino = (request.POST.get("destino") or "").upper().strip()
-    destinos_validos = {"TALLER", "CAMPO", "INVENTARIO"}
+    destinos_validos = {"TALLER", "CAMPO", "CLIENTE", "INVENTARIO"}
     if destino not in destinos_validos:
-        messages.error(request, "Selecciona Taller, Campo o Despacho.")
+        messages.error(request, "Selecciona Taller, Campo, Cliente/Despacho o Inventario/Bodega.")
         return redirect("inventario:dashboard")
 
     try:
@@ -434,6 +434,18 @@ def generar_entrega(request, pk):
     if destino == "CAMPO" and paw and not getattr(paw, "aplica_campo", False):
         messages.error(request, "Este PAW no tiene habilitado Campo.")
         return redirect("inventario:dashboard")
+    if destino in {"CLIENTE", "INVENTARIO"} and paw:
+        solo_compras = (
+            getattr(paw, "aplica_compras", False)
+            and not getattr(paw, "aplica_taller", False)
+            and not getattr(paw, "aplica_campo", False)
+        )
+        if not solo_compras:
+            messages.error(
+                request,
+                "Cliente/Despacho e Inventario/Bodega solo están disponibles cuando el PAW es únicamente de Compras/Materiales.",
+            )
+            return redirect("inventario:dashboard")
 
     with transaction.atomic():
         entrega, created = WorkshopDelivery.objects.get_or_create(
@@ -449,7 +461,7 @@ def generar_entrega(request, pk):
 
         creadas = 0
         for linea in compra.lineas.filter(cantidad_requerida__gt=0):
-            _, nueva = WorkshopDeliveryLine.objects.get_or_create(
+            linea_entrega, nueva = WorkshopDeliveryLine.objects.get_or_create(
                 delivery=entrega,
                 purchase_line=linea,
                 defaults={
@@ -461,6 +473,15 @@ def generar_entrega(request, pk):
                     "cantidad_requerida": Decimal(linea.cantidad_requerida or 0),
                 },
             )
+            # Si Taller agregó un requerimiento incremental después de crear la entrega,
+            # actualizamos el total requerido sin tocar lo ya entregado.
+            requerida_actual = Decimal(linea.cantidad_requerida or 0)
+            if not nueva and Decimal(linea_entrega.cantidad_requerida or 0) != requerida_actual:
+                linea_entrega.cantidad_requerida = requerida_actual
+                linea_entrega.codigo = linea.codigo or linea_entrega.codigo
+                linea_entrega.descripcion = linea.descripcion or linea_entrega.descripcion
+                linea_entrega.unidad = linea.unidad or linea_entrega.unidad
+                linea_entrega.save(update_fields=["cantidad_requerida", "codigo", "descripcion", "unidad"])
             creadas += int(nueva)
 
     messages.success(
@@ -952,58 +973,214 @@ def recepcion_detail(request, pk):
 @login_required
 @inventario_required
 def entrega_taller_detail(request, pk):
+    """Registra la entrega física y consume exclusivamente reservas del mismo PAW/línea."""
+    from .models import InventoryReservation, InventoryMovement, InventoryStock
+
     entrega = get_object_or_404(
         WorkshopDelivery.objects
         .select_related("purchase_request", "creado_por")
-        .prefetch_related("lineas"),
+        .prefetch_related("lineas__purchase_line"),
         pk=pk
     )
 
+    # Información de reserva pendiente por línea para mostrarla en pantalla.
+    def _reserva_pendiente(purchase_line_id):
+        reservas = InventoryReservation.objects.filter(
+            purchase_line_id=purchase_line_id,
+            purchase_request=entrega.purchase_request,
+            estado=InventoryReservation.Estado.ACTIVA,
+        )
+        total = Decimal("0")
+        for r in reservas:
+            total += max(Decimal(r.cantidad or 0) - Decimal(r.cantidad_consumida or 0), Decimal("0"))
+        return total
+
     if request.method == "POST":
-        entrega.comentarios = request.POST.get("comentarios", "")
-        entrega.save(update_fields=["comentarios", "actualizado_en"])
+        errores = []
+        datos = []
 
+        # Validación completa ANTES de descontar cualquier existencia.
         for linea in entrega.lineas.all():
-            # Una línea ya entregada queda cerrada: no puede volver a modificarse.
             requerida = Decimal(linea.cantidad_requerida or 0)
-            acumulada = Decimal(linea.cantidad_entregada or 0)
-            if requerida > 0 and acumulada >= requerida:
-                continue
-
+            anterior = Decimal(linea.cantidad_entregada or 0)
             raw = request.POST.get(f"cantidad_entregada_{linea.id}")
+
+            # Inputs deshabilitados (líneas completas) no llegan en POST.
             if raw is None or raw == "":
+                nueva = anterior
+            else:
+                try:
+                    nueva = Decimal(str(raw).replace(",", "."))
+                except Exception:
+                    errores.append(f"Cantidad inválida para {linea.codigo or linea.descripcion}.")
+                    continue
+
+            if nueva < anterior:
+                errores.append(
+                    f"{linea.codigo or linea.descripcion}: no puedes reducir una entrega ya contabilizada "
+                    f"({anterior}). Para corregir una salida debe hacerse un movimiento de devolución/ajuste."
+                )
                 continue
+            if nueva > requerida:
+                errores.append(
+                    f"{linea.codigo or linea.descripcion}: no puedes entregar {nueva}; el requerido es {requerida}."
+                )
+                continue
+
+            incremento = nueva - anterior
+            if incremento > 0:
+                reserva = _reserva_pendiente(linea.purchase_line_id)
+                if incremento > reserva:
+                    errores.append(
+                        f"{linea.codigo or linea.descripcion}: intentas entregar {incremento} adicional, "
+                        f"pero este PAW solo tiene {reserva} reservado pendiente."
+                    )
+                    continue
+            datos.append((linea, anterior, nueva, incremento))
+
+        if errores:
+            for error in errores:
+                messages.error(request, error)
+        else:
             try:
-                cantidad = Decimal(str(raw).replace(",", "."))
-            except Exception:
-                cantidad = Decimal("0")
-            linea.cantidad_entregada = max(cantidad, Decimal("0"))
-            linea.save(update_fields=["cantidad_entregada"])
+                with transaction.atomic():
+                    for linea, anterior, nueva, incremento in datos:
+                        if incremento <= 0:
+                            continue
 
-        completa = True
-        for linea in entrega.lineas.all():
-            req = Decimal(linea.cantidad_requerida or 0)
-            ent = Decimal(linea.cantidad_entregada or 0)
-            if req > 0 and ent < req:
-                completa = False
-                break
+                        # Bloqueamos y consumimos SOLO reservas de esta PurchaseLine/PAW.
+                        reservas = list(
+                            InventoryReservation.objects.select_for_update()
+                            .select_related("stock")
+                            .filter(
+                                purchase_line=linea.purchase_line,
+                                purchase_request=entrega.purchase_request,
+                                estado=InventoryReservation.Estado.ACTIVA,
+                            )
+                            .order_by("creado_en", "id")
+                        )
+                        pendiente = incremento
 
-        if completa:
-            try:
-                paw = entrega.purchase_request.bom.workorder.paw
-                destino = getattr(entrega, "destino", "TALLER")
-                if destino == "TALLER" and getattr(paw, "aplica_taller", True):
-                    paw.estado_operativo = "ENTREGADO_TALLER"
-                elif destino == "INVENTARIO" and not getattr(paw, "aplica_taller", False) and not getattr(paw, "aplica_campo", False):
-                    paw.estado_operativo = "PRODUCTO_OK"
-                else:
-                    paw.estado_operativo = "MATERIAL_RECIBIDO"
-                paw.save(update_fields=["estado_operativo"])
-            except Exception:
-                pass
+                        # Agrupamos por stock por seguridad (normalmente será un único P/N/stock).
+                        consumo_por_stock = {}
+                        for reserva in reservas:
+                            disponible_reserva = max(
+                                Decimal(reserva.cantidad or 0) - Decimal(reserva.cantidad_consumida or 0),
+                                Decimal("0"),
+                            )
+                            tomar = min(disponible_reserva, pendiente)
+                            if tomar <= 0:
+                                continue
+                            reserva.cantidad_consumida = Decimal(reserva.cantidad_consumida or 0) + tomar
+                            if reserva.cantidad_consumida >= Decimal(reserva.cantidad or 0):
+                                reserva.estado = (
+                                    InventoryReservation.Estado.LIBERADA
+                                    if entrega.destino == "INVENTARIO"
+                                    else InventoryReservation.Estado.CONSUMIDA
+                                )
+                                reserva.cerrado_en = timezone.now()
+                                reserva.save(update_fields=["cantidad_consumida", "estado", "cerrado_en"])
+                            else:
+                                reserva.save(update_fields=["cantidad_consumida"])
+                            consumo_por_stock[reserva.stock_id] = consumo_por_stock.get(reserva.stock_id, Decimal("0")) + tomar
+                            pendiente -= tomar
+                            if pendiente <= 0:
+                                break
 
-        messages.success(request, f"Entrega a {entrega.get_destino_display()} actualizada correctamente.")
-        return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+                        if pendiente > 0:
+                            raise ValueError(
+                                f"La reserva de {linea.codigo or linea.descripcion} cambió mientras se procesaba la entrega."
+                            )
+
+                        for stock_id, consumo in consumo_por_stock.items():
+                            stock = InventoryStock.objects.select_for_update().get(pk=stock_id)
+                            fisico_anterior = Decimal(stock.cantidad_fisica or 0)
+                            reservado_anterior = Decimal(stock.cantidad_reservada or 0)
+                            if consumo > reservado_anterior:
+                                raise ValueError(
+                                    f"{stock.codigo}: inconsistencia de reserva. Reservado {reservado_anterior}, proceso {consumo}."
+                                )
+
+                            if entrega.destino == "INVENTARIO":
+                                # Compra para stock/bodega: la recepción ya aumentó el físico.
+                                # Aquí NO hay salida física; únicamente liberamos la reserva
+                                # del PAW para que las unidades queden disponibles.
+                                stock.cantidad_reservada = reservado_anterior - consumo
+                                stock.save(update_fields=["cantidad_reservada", "actualizado_en"])
+                            else:
+                                if consumo > fisico_anterior:
+                                    raise ValueError(
+                                        f"{stock.codigo}: existencia física insuficiente. Físico {fisico_anterior}, salida {consumo}."
+                                    )
+                                stock.cantidad_fisica = fisico_anterior - consumo
+                                stock.cantidad_reservada = reservado_anterior - consumo
+                                stock.save(update_fields=["cantidad_fisica", "cantidad_reservada", "actualizado_en"])
+
+                                InventoryMovement.objects.create(
+                                    stock=stock,
+                                    tipo=InventoryMovement.Tipo.ENTREGA,
+                                    cantidad=-consumo,
+                                    costo_unitario=Decimal(stock.costo_promedio or 0),
+                                    saldo_anterior=fisico_anterior,
+                                    saldo_nuevo=Decimal(stock.cantidad_fisica or 0),
+                                    costo_promedio_anterior=Decimal(stock.costo_promedio or 0),
+                                    costo_promedio_nuevo=Decimal(stock.costo_promedio or 0),
+                                    referencia=f"PAW-{entrega.purchase_request.paw_numero}",
+                                    motivo=(
+                                        f"Entrega a {entrega.get_destino_display()} - consumo de reserva del PAW. "
+                                        f"P/N {linea.codigo or '-'}"
+                                    ),
+                                    creado_por=request.user,
+                                )
+
+                        linea.cantidad_entregada = nueva
+                        linea.save(update_fields=["cantidad_entregada"])
+
+                    entrega.comentarios = request.POST.get("comentarios", "")
+                    entrega.save(update_fields=["comentarios", "actualizado_en"])
+
+                    completa = True
+                    for linea in entrega.lineas.all():
+                        req = Decimal(linea.cantidad_requerida or 0)
+                        ent = Decimal(linea.cantidad_entregada or 0)
+                        if req > 0 and ent < req:
+                            completa = False
+                            break
+
+                    if completa:
+                        try:
+                            paw = entrega.purchase_request.bom.workorder.paw
+                            destino = getattr(entrega, "destino", "TALLER")
+                            if destino == "TALLER" and getattr(paw, "aplica_taller", True):
+                                paw.estado_operativo = "ENTREGADO_TALLER"
+                            elif destino == "INVENTARIO" and not getattr(paw, "aplica_taller", False) and not getattr(paw, "aplica_campo", False):
+                                paw.estado_operativo = "PRODUCTO_OK"
+                            else:
+                                paw.estado_operativo = "MATERIAL_RECIBIDO"
+                            paw.save(update_fields=["estado_operativo"])
+                        except Exception:
+                            pass
+
+                    registrar_movimiento(
+                        request=request,
+                        paw_numero=entrega.purchase_request.paw_numero,
+                        modulo="INVENTARIO",
+                        accion=f"Entrega a {entrega.get_destino_display()}",
+                        descripcion=("Ingreso a bodega y liberación de reservas del PAW." if entrega.destino == "INVENTARIO" else "Salida física de inventario y consumo de reservas del PAW."),
+                        objeto=entrega,
+                    )
+
+                messages.success(
+                    request,
+                    (f"Ingreso a {entrega.get_destino_display()} confirmado. El stock físico permanece y la reserva del PAW fue liberada." if entrega.destino == "INVENTARIO" else f"Entrega a {entrega.get_destino_display()} actualizada. Stock físico y reservas descontados correctamente.")
+                )
+                return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+            except ValueError as exc:
+                messages.error(request, str(exc))
+
+    # Valores informativos para el template.
+    for linea in entrega.lineas.all():
+        linea.reserva_pendiente_paw = _reserva_pendiente(linea.purchase_line_id)
 
     return render(request, "inventario/entrega_taller_detail.html", {"entrega": entrega})
 

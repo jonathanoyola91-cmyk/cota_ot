@@ -102,7 +102,8 @@ class WorkshopDelivery(models.Model):
     class Destino(models.TextChoices):
         TALLER = "TALLER", "Taller"
         CAMPO = "CAMPO", "Campo"
-        INVENTARIO = "INVENTARIO", "Despacho / cliente"
+        CLIENTE = "CLIENTE", "Cliente / despacho"
+        INVENTARIO = "INVENTARIO", "Inventario / bodega"
     purchase_request = models.OneToOneField(
         "compras_oil.PurchaseRequest",
         on_delete=models.PROTECT,
@@ -403,6 +404,10 @@ class InventoryReservation(models.Model):
 
     stock = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="reservas")
     cantidad = models.DecimalField(max_digits=14, decimal_places=3)
+    # Cantidad ya consumida físicamente en entregas a Taller/Campo/Despacho.
+    # Se mantiene separada de ``cantidad`` para conservar el histórico original
+    # de cuánto fue reservado para el PAW.
+    cantidad_consumida = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     purchase_request = models.ForeignKey("compras_oil.PurchaseRequest", on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario")
     purchase_line = models.ForeignKey("compras_oil.PurchaseLine", on_delete=models.PROTECT, null=True, blank=True, related_name="reservas_inventario")
     es_transicion = models.BooleanField(default=False, help_text="Reserva creada para PAW ya activo al momento de iniciar el control de existencias.")

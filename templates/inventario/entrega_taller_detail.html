@@ -41,6 +41,15 @@
     <h2>Entrega a {{ entrega.get_destino_display }} · PAW {{ entrega.purchase_request.paw_numero }}</h2>
     <p><strong>Destino:</strong> {{ entrega.get_destino_display }}</p>
     <p>{{ entrega.purchase_request.paw_nombre }}</p>
+    <div style="padding:10px 12px;background:#eff6ff;border-radius:8px;margin:10px 0 14px;color:#1e3a8a;font-size:13px;">
+        {% if entrega.destino == "INVENTARIO" %}
+        Al guardar, el material queda en Inventario/Bodega: <strong>no sale del stock físico</strong>.
+        Solo se libera la reserva de este PAW y las unidades pasan a Disponible.
+        {% else %}
+        Al guardar, solo el incremento nuevo se descuenta del stock físico y de la reserva de este PAW.
+        Una cantidad ya entregada no se puede reducir desde esta pantalla.
+        {% endif %}
+    </div>
 
     <div class="progress-wrap">
         <div id="progressBar" class="progress-bar"></div>
@@ -60,6 +69,7 @@
                     <th>Descripción</th>
                     <th>Unidad</th>
                     <th>Cantidad requerida</th>
+                    <th>Reserva pendiente PAW</th>
                     <th>Cantidad entregada</th>
                     <th>Estado</th>
                 </tr>
@@ -73,16 +83,21 @@
                     <td>{{ linea.unidad }}</td>
 
                     <td>
-                        {{ linea.cantidad_requerida|floatformat:0 }}
+                        {{ linea.cantidad_requerida|floatformat:3 }}
+                    </td>
+
+                    <td>
+                        <strong>{{ linea.reserva_pendiente_paw|floatformat:3 }}</strong>
                     </td>
 
                     <td>
                         <input
                             type="number"
                             name="cantidad_entregada_{{ linea.id }}"
-                            value="{{ linea.cantidad_entregada|default:0|floatformat:0 }}"
+                            value="{{ linea.cantidad_entregada|default:0|floatformat:3 }}"
                             min="0"
-                            step="1"
+                            max="{{ linea.cantidad_requerida|floatformat:3 }}"
+                            step="0.001"
                             class="form-control input-entrega"
                             {% if linea.cantidad_entregada >= linea.cantidad_requerida and linea.cantidad_requerida > 0 %}disabled title="Este ítem ya fue entregado completamente"{% endif %}
                         >
@@ -91,7 +106,7 @@
                     <td>
                         <span
                             class="estado estado-span"
-                            data-req="{{ linea.cantidad_requerida|floatformat:0 }}"
+                            data-req="{{ linea.cantidad_requerida|floatformat:3 }}"
                         >
                             PENDIENTE
                         </span>
@@ -99,7 +114,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6">No hay líneas de entrega.</td>
+                    <td colspan="7">No hay líneas de entrega.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -113,7 +128,7 @@
         <br>
 
         <button class="btn" type="submit">
-            Guardar entrega
+            {% if entrega.destino == "INVENTARIO" %}Confirmar ingreso a bodega{% else %}Guardar entrega{% endif %}
         </button>
 
         <a href="{% url 'inventario:entrega_taller_pdf' entrega.id %}" target="_blank" class="btn">

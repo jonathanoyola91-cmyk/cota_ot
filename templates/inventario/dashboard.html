@@ -57,7 +57,7 @@
 <div class="panel">
     <h3>Material listo para entrega</h3>
     <div style="font-size:12px;color:#64748b;margin-bottom:12px;">
-        Inventario define aquí el destino físico: Taller, Campo o Despacho. Compras ya no define el destino.
+        Inventario define el destino según el alcance del PAW. Si es solo Compras/Materiales, elige Cliente/Despacho o Inventario/Bodega. En Bodega se libera la reserva y el material queda disponible.
     </div>
     <table>
         <thead><tr><th>PAW</th><th>Nombre</th><th>Destino</th><th>Acción</th></tr></thead>
@@ -72,7 +72,10 @@
                             <option value="">Seleccionar...</option>
                             {% if c.bom.workorder.paw.aplica_taller %}<option value="TALLER">Taller</option>{% endif %}
                             {% if c.bom.workorder.paw.aplica_campo %}<option value="CAMPO">Campo</option>{% endif %}
-                            <option value="INVENTARIO">Despacho / cliente</option>
+                            {% if c.bom.workorder.paw.aplica_compras and not c.bom.workorder.paw.aplica_taller and not c.bom.workorder.paw.aplica_campo %}
+                                <option value="CLIENTE">Cliente / Despacho</option>
+                                <option value="INVENTARIO">Inventario / Bodega</option>
+                            {% endif %}
                         </select>
                         <button class="btn" type="submit">Generar entrega</button>
                     </form>

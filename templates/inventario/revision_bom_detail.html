@@ -217,7 +217,10 @@ function confirmarInventario() {
                         <option value="">Destino...</option>
                         {% if compra.bom.workorder.paw.aplica_taller %}<option value="TALLER">Taller</option>{% endif %}
                         {% if compra.bom.workorder.paw.aplica_campo %}<option value="CAMPO">Campo</option>{% endif %}
-                        <option value="INVENTARIO">Despacho / cliente</option>
+                        {% if compra.bom.workorder.paw.aplica_compras and not compra.bom.workorder.paw.aplica_taller and not compra.bom.workorder.paw.aplica_campo %}
+                            <option value="CLIENTE">Cliente / Despacho</option>
+                            <option value="INVENTARIO">Inventario / Bodega</option>
+                        {% endif %}
                     </select>
                     <button class="btn" type="submit">Generar entrega</button>
                 </form>
