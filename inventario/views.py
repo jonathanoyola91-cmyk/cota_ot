@@ -168,7 +168,7 @@ def inventario_dashboard(request):
 
     revisiones_pendientes = (
         PurchaseRequest.objects
-        .filter(inventario_revisado_en__isnull=True)
+        .filter(Q(inventario_revisado_en__isnull=True) | Q(revision_reservas_pendiente=True))
         .exclude(estado="CERRADA")
         .exclude(bom__workorder__paw__estado_operativo__in=["FACTURADO", "RADICADO"])
         .select_related("bom", "bom__workorder", "creado_por")
@@ -240,6 +240,10 @@ def revision_bom_detail(request, pk):
         PurchaseRequest.objects.select_related("bom", "bom__workorder", "creado_por")
         .prefetch_related("lineas__bom_item"), pk=pk,
     )
+
+    if compra.revision_reservas_pendiente:
+        from .revision_reservas import revisar_reservas
+        return revisar_reservas(request, compra)
 
     # CLAVE DEL FLUJO INCREMENTAL:
     # una línea aparece solo si el BOM requiere más de lo que Inventario ya revisó.

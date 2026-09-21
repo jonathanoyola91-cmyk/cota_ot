@@ -10,6 +10,34 @@ from django.utils import timezone
 
 from item_oil_gas.models import ItemImpetus
 from auditoria.utils import registrar_movimiento
+from django.views.decorators.http import require_POST
+from django.db import transaction
+from django.contrib import messages
+
+
+@login_required
+@require_POST
+def reenviar_revision_reservas(request, bom_id):
+    # Mismo acceso autenticado que el envío de BOM existente.
+    with transaction.atomic():
+        compra = get_object_or_404(
+            PurchaseRequest.objects.select_for_update(), bom_id=bom_id,
+        )
+        paw = compra.bom.workorder.paw
+        if compra.estado == "CERRADA" or paw.estado_operativo in ("FACTURADO", "RADICADO"):
+            messages.error(request, "No se puede reabrir una PAW cerrada o facturada.")
+            return redirect("bom_detail", bom_id=bom_id)
+        if not compra.revision_reservas_pendiente:
+            compra.revision_reservas_pendiente = True
+            compra.save(update_fields=["revision_reservas_pendiente", "actualizado_en"])
+            registrar_movimiento(
+                request=request, paw_numero=compra.paw_numero, modulo="TALLER",
+                accion="Revisión de reservas solicitada",
+                descripcion="Reenvío a Inventario sin modificar líneas, compras, recepciones ni entregas.",
+                objeto=compra,
+            )
+    messages.success(request, "PAW enviada nuevamente a Inventario para revisar sus reservas.")
+    return redirect("bom_detail", bom_id=bom_id)
 
 
 

@@ -75,6 +75,7 @@ class PurchaseRequest(models.Model):
     # Revisión previa obligatoria de Inventario.
     # Mientras esté vacío, la solicitud todavía no debe ser gestionada por Compras.
     inventario_revisado_en = models.DateTimeField(null=True, blank=True)
+    revision_reservas_pendiente = models.BooleanField(default=False)
     inventario_revisado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

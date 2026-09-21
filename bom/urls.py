@@ -3,6 +3,7 @@ from . import views
 
 
 urlpatterns = [
+    path("<int:bom_id>/revisar-reservas/", views.reenviar_revision_reservas, name="reenviar_revision_reservas"),
 
     path(
         "crear-desde-ot/<int:ot_numero>/",
