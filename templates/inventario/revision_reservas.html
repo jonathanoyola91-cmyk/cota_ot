@@ -5,8 +5,9 @@
 <div class="panel">
   <h2>Revisión de reservas · PAW {{ compra.paw_numero }}</h2>
   <p>{{ compra.paw_nombre }}</p>
-  <p>Revise las líneas ya procesadas y reserve únicamente la cantidad adicional necesaria desde IMPETUS. Las existencias físicas, compras, recepciones y entregas se conservan.</p>
-  <p>Si falta stock, revise la compra o recepción existente. Esta revisión no crea otra compra ni vuelve a ingresar material. Los materiales liberados a bodega se muestran, pero no se vuelven a reservar automáticamente.</p>
+  <p>Revise las cantidades y reserve únicamente el material adicional disponible en IMPETUS. Las reservas ya guardadas se conservan.</p>
+  <p>Al finalizar, se actualizan los faltantes en la misma solicitud de Compras, conservando precios y proveedores. No se crean nuevas recepciones ni se modifica la existencia física.</p>
+  <p>El recálculo corresponde a compras aún sin aprobación ni recepción. Para PAW con compras ya tramitadas puede guardar reservas; los materiales liberados a bodega no se vuelven a reservar automáticamente.</p>
   <form method="post">
     {% csrf_token %}
     <div style="overflow-x:auto"><table>
@@ -19,8 +20,9 @@
         <td><input type="number" name="reservar_{{ f.linea.pk }}" value="0" min="0" max="{{ f.maximo|unlocalize }}" step="0.001" {% if f.maximo <= 0 %}disabled{% endif %}></td>
       </tr>{% empty %}<tr><td colspan="9">No hay líneas.</td></tr>{% endfor %}</tbody>
     </table></div>
-    <p>Las líneas sin cobertura permanecerán en revisión. Las cantidades introducidas se validan nuevamente al guardar.</p>
-    <button class="btn" type="submit">Guardar revisión de reservas</button>
+    <p>Guardar permite continuar la revisión después. Finalizar guarda también las reservas adicionales introducidas y deja únicamente los faltantes para Compras.</p>
+    <button class="btn" type="submit" name="accion" value="guardar">Guardar reservas</button>
+    <button class="btn" type="submit" name="accion" value="finalizar">Finalizar revisión y enviar faltantes a Compras</button>
     <a class="btn" href="{% url 'bom_detail' compra.bom_id %}">Volver a BOM</a>
     <a class="btn" href="{% url 'inventario:dashboard' %}">Volver a Inventario</a>
   </form>
