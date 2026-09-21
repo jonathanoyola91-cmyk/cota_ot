@@ -378,6 +378,7 @@ class InventoryMovement(models.Model):
         TRANSFERENCIA_SALIDA = "TRF_SALIDA", "Transferencia salida"
         RECEPCION = "RECEPCION", "Recepción de compra"
         ENTREGA = "ENTREGA", "Entrega / salida"
+        LIBERACION_RESERVA = "LIBERACION", "Liberación de reserva a bodega"
 
     stock = models.ForeignKey(InventoryStock, on_delete=models.PROTECT, related_name="movimientos")
     tipo = models.CharField(max_length=24, choices=Tipo.choices)
@@ -416,6 +417,45 @@ class InventoryReservation(models.Model):
     creado_en = models.DateTimeField(auto_now_add=True)
     cerrado_en = models.DateTimeField(null=True, blank=True)
     observacion = models.TextField(blank=True, default="")
+
+
+class ReceptionWarehouseTransfer(models.Model):
+    """Material recibido para un PAW que finalmente se libera o traslada a bodega."""
+
+    reception_line = models.ForeignKey(
+        InventoryReceptionLine,
+        on_delete=models.PROTECT,
+        related_name="transferencias_bodega",
+    )
+    empresa_destino = models.CharField(
+        max_length=12,
+        choices=InventoryStock.Empresa.choices,
+    )
+    stock_origen = models.ForeignKey(
+        InventoryStock,
+        on_delete=models.PROTECT,
+        related_name="devoluciones_paw_origen",
+    )
+    stock_destino = models.ForeignKey(
+        InventoryStock,
+        on_delete=models.PROTECT,
+        related_name="devoluciones_paw_destino",
+    )
+    cantidad = models.DecimalField(max_digits=14, decimal_places=3)
+    motivo = models.TextField()
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="transferencias_paw_bodega_creadas",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-creado_en", "-id"]
+
+    def __str__(self):
+        paw = self.reception_line.recepcion.purchase_request.paw_numero
+        return f"PAW {paw} · {self.reception_line.codigo} · {self.cantidad} a {self.get_empresa_destino_display()}"
 
 
 class InventoryTransfer(models.Model):

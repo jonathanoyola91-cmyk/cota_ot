@@ -1,4 +1,5 @@
 {% extends "dashboard/home.html" %}
+{% load l10n %}
 {% block page_title %}Recepción inventario{% endblock %}
 
 {% block content %}
@@ -109,6 +110,15 @@
     .btn-modal-cancelar{background:#e2e8f0;color:#334155;}
     .btn-modal-confirmar{background:#1769e0;color:#fff;}
     .btn-modal-confirmar:hover{background:#1257bd;}
+    .btn-bodega{background:#0f766e;color:#fff;border:0;border-radius:7px;padding:8px 11px;font-weight:700;cursor:pointer;}
+    .btn-bodega:hover{background:#115e59;}
+    .btn-bodega:disabled{background:#94a3b8;cursor:not-allowed;}
+    .transfer-form{text-align:left;}
+    .transfer-form label{display:block;margin:14px 0 5px;color:#334155;font-weight:700;}
+    .transfer-form input,.transfer-form select,.transfer-form textarea{width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:7px;}
+    .transfer-note{margin-top:12px!important;padding:10px;border-radius:8px;background:#f8fafc;font-size:13px!important;}
+    .historial-bodega{margin-top:24px;}
+    .badge-bodega{display:inline-block;padding:3px 7px;border-radius:999px;background:#ccfbf1;color:#115e59;font-size:12px;font-weight:700;}
 
 </style>
 
@@ -139,6 +149,7 @@
                     <th>Fecha llegada</th>
                     <th>Estado</th>
                     <th>Observación</th>
+                    <th>Bodega</th>
                 </tr>
             </thead>
             <tbody>
@@ -188,10 +199,28 @@
                             class="form-control"
                         >
                     </td>
+                    <td>
+                        {% if linea.cantidad_transferible_bodega > 0 %}
+                        <button type="button" class="btn-bodega"
+                                onclick="abrirTransferenciaBodega('{{ linea.id }}')">
+                            Transferir
+                        </button>
+                        <div style="margin-top:5px;font-size:12px;color:#64748b;">
+                            Disponible: {{ linea.cantidad_transferible_bodega|floatformat:3 }}
+                        </div>
+                        {% else %}
+                        <button type="button" class="btn-bodega" disabled>Sin saldo</button>
+                        {% endif %}
+                        {% if linea.cantidad_transferida_bodega > 0 %}
+                        <div style="margin-top:5px;">
+                            <span class="badge-bodega">Transferido: {{ linea.cantidad_transferida_bodega|floatformat:3 }}</span>
+                        </div>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7">No hay líneas de recepción.</td>
+                    <td colspan="8">No hay líneas de recepción.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -227,7 +256,73 @@
         </a>
 
     </form>
+
+    {% for linea in lineas %}
+        {% if linea.cantidad_transferible_bodega > 0 %}
+        <div id="modalTransferenciaBodega{{ linea.id }}" class="recepcion-modal">
+            <div class="recepcion-modal-box">
+                <div class="recepcion-modal-icon">↔</div>
+                <h2>Transferir material a bodega</h2>
+                <p><strong>{{ linea.codigo }}</strong> · {{ linea.descripcion }}</p>
+                <form method="post"
+                      action="{% url 'inventario:recepcion_transferir_bodega' recepcion.pk linea.pk %}"
+                      class="transfer-form">
+                    {% csrf_token %}
+                    <label for="cantidad_{{ linea.id }}">Cantidad</label>
+                    <input id="cantidad_{{ linea.id }}" name="cantidad" type="number"
+                           min="0.001" step="0.001"
+                           max="{{ linea.cantidad_transferible_bodega|unlocalize }}"
+                           value="{{ linea.cantidad_transferible_bodega|unlocalize }}" required>
+
+                    <label for="destino_{{ linea.id }}">Bodega destino</label>
+                    <select id="destino_{{ linea.id }}" name="empresa_destino" required>
+                        <option value="IMPETUS">Bodega IMPETUS HPS</option>
+                        <option value="OIL_GAS">Bodega OIL &amp; GAS SUPPORT</option>
+                    </select>
+
+                    <label for="motivo_{{ linea.id }}">Motivo</label>
+                    <textarea id="motivo_{{ linea.id }}" name="motivo" rows="3" required
+                              placeholder="Ej.: referencia incorrecta para el equipo; material no utilizado en esta PAW."></textarea>
+
+                    <p class="transfer-note">
+                        La recepción original no se modifica. Se libera la reserva de esta PAW y se registra el movimiento para auditoría.
+                    </p>
+                    <div class="recepcion-modal-actions">
+                        <button type="button" class="btn-modal-cancelar"
+                                onclick="cerrarTransferenciaBodega('{{ linea.id }}')">Cancelar</button>
+                        <button type="submit" class="btn-modal-confirmar">Confirmar transferencia</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
 </div>
+
+{% if transferencias_bodega %}
+<div class="panel historial-bodega">
+    <h3>Historial de transferencias a bodega</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th><th>Código</th><th>Cantidad</th><th>Destino</th><th>Motivo</th><th>Usuario</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for movimiento in transferencias_bodega %}
+            <tr>
+                <td>{{ movimiento.creado_en|date:"d/m/Y H:i" }}</td>
+                <td>{{ movimiento.reception_line.codigo }}</td>
+                <td>{{ movimiento.cantidad|floatformat:3 }}</td>
+                <td>{{ movimiento.get_empresa_destino_display }}</td>
+                <td>{{ movimiento.motivo }}</td>
+                <td>{{ movimiento.creado_por.get_username }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 
 <script>
 
@@ -242,6 +337,12 @@ function confirmarRecepcion(){
     const form = document.getElementById("formRecepcion");
     modal.style.display = "none";
     if(form) form.submit();
+}
+function abrirTransferenciaBodega(lineaId){
+    document.getElementById("modalTransferenciaBodega" + lineaId).style.display = "flex";
+}
+function cerrarTransferenciaBodega(lineaId){
+    document.getElementById("modalTransferenciaBodega" + lineaId).style.display = "none";
 }
 
 document.addEventListener("DOMContentLoaded", function () {

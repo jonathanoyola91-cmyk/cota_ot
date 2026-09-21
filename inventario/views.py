@@ -964,10 +964,255 @@ def recepcion_detail(request, pk):
         messages.success(request, "Recepción de inventario actualizada correctamente.")
         return redirect("inventario:recepcion_detail", pk=recepcion.pk)
 
+    from .models import ReceptionWarehouseTransfer, InventoryReservation
+
+    # Cantidad aún reservada y susceptible de liberarse/trasladarse por cada línea.
+    for linea in lineas_recepcion:
+        linea.cantidad_transferida_bodega = (
+            ReceptionWarehouseTransfer.objects.filter(reception_line=linea)
+            .aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
+        )
+        reserva_disponible = Decimal("0")
+        for reserva in InventoryReservation.objects.filter(
+            purchase_line=linea.purchase_line,
+            estado=InventoryReservation.Estado.ACTIVA,
+        ):
+            reserva_disponible += max(
+                Decimal(reserva.cantidad or 0) - Decimal(reserva.cantidad_consumida or 0),
+                Decimal("0"),
+            )
+        pendiente_por_recibido = max(
+            Decimal(linea.cantidad_recibida or 0) - linea.cantidad_transferida_bodega,
+            Decimal("0"),
+        )
+        linea.cantidad_transferible_bodega = min(pendiente_por_recibido, reserva_disponible)
+
+    transferencias_bodega = ReceptionWarehouseTransfer.objects.filter(
+        reception_line__recepcion=recepcion,
+    ).select_related("reception_line", "stock_origen", "stock_destino", "creado_por")
+
     return render(request, "inventario/recepcion_detail.html", {
         "recepcion": recepcion,
         "lineas": lineas_recepcion,
+        "transferencias_bodega": transferencias_bodega,
     })
+
+
+@login_required
+@inventario_required
+@require_POST
+def recepcion_transferir_bodega(request, pk, linea_pk):
+    """Libera del PAW material recibido no utilizado y lo deja en la bodega elegida."""
+    from .models import (
+        InventoryMovement, InventoryReservation, InventoryStock,
+        InventoryTransfer, ReceptionWarehouseTransfer,
+    )
+
+    linea = get_object_or_404(
+        InventoryReceptionLine.objects.select_related(
+            "recepcion__purchase_request", "purchase_line"
+        ),
+        pk=linea_pk,
+        recepcion_id=pk,
+    )
+    empresa_destino = (request.POST.get("empresa_destino") or "").upper().strip()
+    motivo = (request.POST.get("motivo") or "").strip()
+    try:
+        cantidad = Decimal((request.POST.get("cantidad") or "0").replace(",", "."))
+    except Exception:
+        cantidad = Decimal("0")
+
+    if empresa_destino not in {InventoryStock.Empresa.IMPETUS, InventoryStock.Empresa.OIL_GAS}:
+        messages.error(request, "Seleccione Bodega IMPETUS HPS o Bodega OIL & GAS SUPPORT.")
+        return redirect("inventario:recepcion_detail", pk=pk)
+    if cantidad <= 0 or not motivo:
+        messages.error(request, "La cantidad debe ser mayor a cero y el motivo es obligatorio.")
+        return redirect("inventario:recepcion_detail", pk=pk)
+
+    with transaction.atomic():
+        linea = InventoryReceptionLine.objects.select_for_update().select_related(
+            "recepcion__purchase_request", "purchase_line"
+        ).get(pk=linea_pk, recepcion_id=pk)
+        codigo = (linea.codigo or linea.purchase_line.codigo or "").strip()
+
+        origen = InventoryStock.objects.select_for_update().filter(
+            empresa=InventoryStock.Empresa.IMPETUS,
+            codigo__iexact=codigo,
+        ).first()
+        if not origen:
+            messages.error(request, f"No se encontró el P/N {codigo or '-'} en existencias IMPETUS.")
+            return redirect("inventario:recepcion_detail", pk=pk)
+
+        ya_transferido = ReceptionWarehouseTransfer.objects.filter(
+            reception_line=linea,
+        ).aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
+        max_por_recepcion = max(Decimal(linea.cantidad_recibida or 0) - ya_transferido, Decimal("0"))
+
+        reservas = list(InventoryReservation.objects.select_for_update().filter(
+            purchase_line=linea.purchase_line,
+            stock=origen,
+            estado=InventoryReservation.Estado.ACTIVA,
+        ).order_by("creado_en", "pk"))
+        disponible_reserva = sum((
+            max(Decimal(r.cantidad or 0) - Decimal(r.cantidad_consumida or 0), Decimal("0"))
+            for r in reservas
+        ), Decimal("0"))
+        max_transferible = min(max_por_recepcion, disponible_reserva)
+        if cantidad > max_transferible:
+            messages.error(
+                request,
+                f"Solo hay {max_transferible} unidades recibidas y aún reservadas disponibles para transferir.",
+            )
+            return redirect("inventario:recepcion_detail", pk=pk)
+
+        # Libera la reserva del PAW. Si es parcial, conserva el histórico mediante
+        # una reserva separada marcada como LIBERADA.
+        pendiente = cantidad
+        for reserva in reservas:
+            if pendiente <= 0:
+                break
+            restante = max(
+                Decimal(reserva.cantidad or 0) - Decimal(reserva.cantidad_consumida or 0),
+                Decimal("0"),
+            )
+            tomar = min(restante, pendiente)
+            if tomar <= 0:
+                continue
+            if tomar == restante and Decimal(reserva.cantidad_consumida or 0) == 0:
+                reserva.estado = InventoryReservation.Estado.LIBERADA
+                reserva.cerrado_en = timezone.now()
+                reserva.observacion = (
+                    f"{reserva.observacion}\nTransferido a {empresa_destino}: {tomar}. {motivo}"
+                ).strip()
+                reserva.save(update_fields=["estado", "cerrado_en", "observacion"])
+            else:
+                reserva.cantidad = Decimal(reserva.cantidad or 0) - tomar
+                if reserva.cantidad <= Decimal(reserva.cantidad_consumida or 0):
+                    reserva.estado = InventoryReservation.Estado.CONSUMIDA
+                    reserva.cerrado_en = timezone.now()
+                    reserva.save(update_fields=["cantidad", "estado", "cerrado_en"])
+                else:
+                    reserva.save(update_fields=["cantidad"])
+                InventoryReservation.objects.create(
+                    stock=origen,
+                    cantidad=tomar,
+                    purchase_request=reserva.purchase_request,
+                    purchase_line=reserva.purchase_line,
+                    es_transicion=reserva.es_transicion,
+                    estado=InventoryReservation.Estado.LIBERADA,
+                    creado_por=request.user,
+                    cerrado_en=timezone.now(),
+                    observacion=f"Transferido a {empresa_destino}. {motivo}",
+                )
+            pendiente -= tomar
+
+        origen.cantidad_reservada = max(
+            Decimal(origen.cantidad_reservada or 0) - cantidad,
+            Decimal("0"),
+        )
+        saldo_origen_antes = Decimal(origen.cantidad_fisica or 0)
+        costo_origen = Decimal(origen.costo_promedio or 0)
+
+        if empresa_destino == InventoryStock.Empresa.IMPETUS:
+            destino = origen
+            origen.save(update_fields=["cantidad_reservada", "actualizado_en"])
+            InventoryMovement.objects.create(
+                stock=origen,
+                tipo=InventoryMovement.Tipo.LIBERACION_RESERVA,
+                cantidad=Decimal("0"),
+                costo_unitario=costo_origen,
+                saldo_anterior=saldo_origen_antes,
+                saldo_nuevo=saldo_origen_antes,
+                costo_promedio_anterior=costo_origen,
+                costo_promedio_nuevo=costo_origen,
+                referencia=f"PAW-{linea.recepcion.purchase_request.paw_numero}",
+                motivo=f"Material no utilizado liberado a Bodega IMPETUS: {cantidad}. {motivo}",
+                creado_por=request.user,
+            )
+        else:
+            _, DestModel = _catalog_model_for_empresa(InventoryStock.Empresa.OIL_GAS)
+            item_destino = DestModel.objects.filter(codigo__iexact=codigo, activo=True).first()
+            if not item_destino:
+                messages.error(
+                    request,
+                    f"El P/N {codigo} no existe en el catálogo OIL & GAS. Créelo primero para poder transferirlo.",
+                )
+                transaction.set_rollback(True)
+                return redirect("inventario:recepcion_detail", pk=pk)
+            destino = _get_or_create_stock(InventoryStock.Empresa.OIL_GAS, item_destino)
+            destino = InventoryStock.objects.select_for_update().get(pk=destino.pk)
+            if cantidad > Decimal(origen.cantidad_fisica or 0):
+                messages.error(request, "La cantidad física de origen no es suficiente para completar el traslado.")
+                transaction.set_rollback(True)
+                return redirect("inventario:recepcion_detail", pk=pk)
+
+            saldo_destino_antes = Decimal(destino.cantidad_fisica or 0)
+            costo_destino_antes = Decimal(destino.costo_promedio or 0)
+            origen.cantidad_fisica = saldo_origen_antes - cantidad
+            origen.save(update_fields=["cantidad_fisica", "cantidad_reservada", "actualizado_en"])
+
+            nuevo_total = saldo_destino_antes + cantidad
+            nuevo_costo = (
+                ((saldo_destino_antes * costo_destino_antes) + (cantidad * costo_origen)) / nuevo_total
+                if nuevo_total else Decimal("0")
+            )
+            destino.cantidad_fisica = nuevo_total
+            destino.costo_promedio = nuevo_costo
+            destino.save(update_fields=["cantidad_fisica", "costo_promedio", "actualizado_en"])
+
+            trf = InventoryTransfer.objects.create(
+                empresa_origen=InventoryStock.Empresa.IMPETUS,
+                empresa_destino=InventoryStock.Empresa.OIL_GAS,
+                stock_origen=origen,
+                stock_destino=destino,
+                cantidad=cantidad,
+                costo_unitario=costo_origen,
+                motivo=f"PAW {linea.recepcion.purchase_request.paw_numero}: {motivo}",
+                documento=f"PAW-{linea.recepcion.purchase_request.paw_numero}",
+                creado_por=request.user,
+            )
+            InventoryMovement.objects.create(
+                stock=origen,
+                tipo=InventoryMovement.Tipo.TRANSFERENCIA_SALIDA,
+                cantidad=-cantidad,
+                costo_unitario=costo_origen,
+                saldo_anterior=saldo_origen_antes,
+                saldo_nuevo=origen.cantidad_fisica,
+                costo_promedio_anterior=costo_origen,
+                costo_promedio_nuevo=costo_origen,
+                referencia=trf.numero,
+                motivo=trf.motivo,
+                creado_por=request.user,
+            )
+            InventoryMovement.objects.create(
+                stock=destino,
+                tipo=InventoryMovement.Tipo.TRANSFERENCIA_ENTRADA,
+                cantidad=cantidad,
+                costo_unitario=costo_origen,
+                saldo_anterior=saldo_destino_antes,
+                saldo_nuevo=destino.cantidad_fisica,
+                costo_promedio_anterior=costo_destino_antes,
+                costo_promedio_nuevo=nuevo_costo,
+                referencia=trf.numero,
+                motivo=trf.motivo,
+                creado_por=request.user,
+            )
+
+        ReceptionWarehouseTransfer.objects.create(
+            reception_line=linea,
+            empresa_destino=empresa_destino,
+            stock_origen=origen,
+            stock_destino=destino,
+            cantidad=cantidad,
+            motivo=motivo,
+            creado_por=request.user,
+        )
+
+    messages.success(
+        request,
+        f"{cantidad} unidades de {codigo} transferidas a {dict(InventoryStock.Empresa.choices)[empresa_destino]}.",
+    )
+    return redirect("inventario:recepcion_detail", pk=pk)
 
 
 @login_required

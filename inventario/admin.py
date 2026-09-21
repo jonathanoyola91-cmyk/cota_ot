@@ -13,6 +13,7 @@ from .models import (
     InventoryReceptionLine,
     WorkshopDelivery,
     WorkshopDeliveryLine,
+    ReceptionWarehouseTransfer,
 )
 
 # ======================================================
@@ -70,6 +71,32 @@ class InventoryReceptionAdmin(admin.ModelAdmin):
     list_display = ("purchase_request", "creado_por", "actualizado_en")
     search_fields = ("purchase_request__paw_numero", "purchase_request__paw_nombre")
     inlines = [InventoryReceptionLineInline]
+
+
+@admin.register(ReceptionWarehouseTransfer)
+class ReceptionWarehouseTransferAdmin(admin.ModelAdmin):
+    list_display = (
+        "reception_line", "cantidad", "empresa_destino", "creado_por", "creado_en"
+    )
+    list_filter = ("empresa_destino", "creado_en")
+    search_fields = (
+        "reception_line__codigo",
+        "reception_line__recepcion__purchase_request__paw_numero",
+        "motivo",
+    )
+    readonly_fields = (
+        "reception_line", "empresa_destino", "stock_origen", "stock_destino",
+        "cantidad", "motivo", "creado_por", "creado_en",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 # ======================================================
