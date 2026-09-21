@@ -167,8 +167,13 @@ class WorkshopDeliveryLine(models.Model):
         ).aggregate(total=Sum("cantidad"))["total"] or 0
 
     @property
+    def cantidad_cancelada(self):
+        from django.db.models import Sum
+        return self.cancelaciones.aggregate(total=Sum("cantidad"))["total"] or 0
+
+    @property
     def cantidad_requerida_neta(self):
-        return max(self.cantidad_requerida - self.cantidad_liberada_bodega, 0)
+        return max(self.cantidad_requerida - self.cantidad_liberada_bodega - self.cantidad_cancelada, 0)
     cantidad_requerida = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
     # Diligenciado manualmente (en papel) → debe poder ir vacío
@@ -184,6 +189,14 @@ class WorkshopDeliveryLine(models.Model):
 # ======================================================
 # SALIDAS DE INVENTARIO SIN PAW
 # ======================================================
+
+class DeliveryPendingCancellation(models.Model):
+    delivery_line = models.ForeignKey(WorkshopDeliveryLine, on_delete=models.PROTECT, related_name="cancelaciones")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=3)
+    motivo = models.TextField()
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
 
 class InventoryExit(models.Model):
     """Salida física de componentes que no está asociada a un PAW."""

@@ -93,6 +93,7 @@
                         {{ linea.cantidad_requerida|floatformat:3 }}
                         / {{ linea.cantidad_liberada_bodega|floatformat:3 }}
                         / {{ linea.cantidad_requerida_neta|floatformat:3 }}
+                        {% if linea.cantidad_cancelada %}<br><small>Cancelada: {{ linea.cantidad_cancelada|floatformat:3 }} (descontada de la neta)</small>{% endif %}
                     </td>
 
                     <td>
@@ -120,7 +121,9 @@
                             PENDIENTE
                         </span>
                     </td>
-                    <td>{% if linea.transferible > 0 %}<a href="#bodega-{{ linea.pk }}" class="btn">Liberar / transferir</a>{% else %}Sin saldo transferible{% endif %}</td>
+                    <td>{% if linea.transferible > 0 %}<a href="#bodega-{{ linea.pk }}" class="btn">Liberar / transferir</a>{% else %}Sin saldo transferible{% endif %}
+                        {% if linea.pendiente_cancelable > 0 %}<br><a class="btn" href="#cancelar-{{ linea.pk }}">Cancelar pendiente</a>{% endif %}
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -149,6 +152,28 @@
             Volver
         </a>
     </form>
+
+    {% for linea in entrega.lineas.all %}
+    {% if linea.pendiente_cancelable > 0 %}
+    <details id="cancelar-{{ linea.pk }}" style="padding:16px;margin:12px 0;border:1px solid #cbd5e1;border-radius:8px;">
+        <summary>Cancelar pendiente · {{ linea.codigo }} · {{ linea.descripcion }}</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="cancelar_pendiente">
+            <input type="hidden" name="linea_id" value="{{ linea.pk }}">
+            <p>Se cancelará el saldo pendiente de {{ linea.pendiente_cancelable|floatformat:3 }}. Use esta opción si el PAW ya no necesita el material. No registra una entrega ni una devolución y no modifica existencias o compras.</p>
+            <label>Motivo <textarea class="form-control" name="motivo" required placeholder="El PAW ya no requiere este material."></textarea></label>
+            <button class="btn" type="submit">Confirmar cancelación del pendiente</button>
+        </form>
+    </details>
+    {% endif %}
+    {% endfor %}
+    {% if historial_cancelaciones %}
+    <h3>Historial de pendientes cancelados</h3>
+    <table><thead><tr><th>Fecha</th><th>Código</th><th>Cantidad</th><th>Motivo</th><th>Usuario</th></tr></thead><tbody>
+    {% for c in historial_cancelaciones %}<tr><td>{{ c.creado_en|date:"d/m/Y H:i" }}</td><td>{{ c.delivery_line.codigo }}</td><td>{{ c.cantidad|floatformat:3 }}</td><td>{{ c.motivo }}</td><td>{{ c.creado_por.get_username }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% endif %}
 
     <h3>Liberar / transferir material a bodega</h3>
     <p>IMPETUS libera la reserva sin aumentar la existencia física. OIL &amp; GAS libera la reserva y traslada la existencia. Guarde cualquier entrega pendiente antes de usar estos formularios.</p>

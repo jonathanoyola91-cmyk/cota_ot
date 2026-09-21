@@ -1245,6 +1245,26 @@ def entrega_taller_detail(request, pk):
         pk=pk
     )
 
+    if request.method == "POST" and request.POST.get("accion") == "cancelar_pendiente":
+        from .cancelacion_entrega import cancelar_pendiente
+        try:
+            linea_id = int(request.POST.get("linea_id", "0"))
+            with transaction.atomic():
+                cancelacion = cancelar_pendiente(
+                    entrega.purchase_request_id, entrega.pk, linea_id,
+                    request.POST.get("motivo"), request.user,
+                )
+                registrar_movimiento(
+                    request=request, paw_numero=entrega.purchase_request.paw_numero,
+                    modulo="INVENTARIO", accion="Pendiente de entrega cancelado",
+                    descripcion=f"{cancelacion.delivery_line.codigo}: {cancelacion.cantidad}. {cancelacion.motivo}. Sin movimiento de existencias.",
+                    objeto=cancelacion,
+                )
+            messages.success(request, "Pendiente cancelado. Las existencias y las cantidades ya entregadas se conservan.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+
     if request.method == "POST" and request.POST.get("accion") == "actualizar_materiales":
         compra = entrega.purchase_request
         if compra.estado == "CERRADA" or compra.bom.workorder.paw.estado_operativo in ("FACTURADO", "RADICADO"):
@@ -1461,6 +1481,10 @@ def entrega_taller_detail(request, pk):
     # Valores informativos para el template.
     for linea in entrega.lineas.all():
         linea.reserva_pendiente_paw = _reserva_pendiente(linea.purchase_line_id)
+        linea.pendiente_cancelable = (
+            max(Decimal(linea.cantidad_requerida_neta) - Decimal(linea.cantidad_entregada or 0), Decimal("0"))
+            if linea.reserva_pendiente_paw == 0 else Decimal("0")
+        )
         linea.recepcion_origen = InventoryReceptionLine.objects.filter(
             purchase_line_id=linea.purchase_line_id,
             recepcion__purchase_request=entrega.purchase_request,
@@ -1476,7 +1500,14 @@ def entrega_taller_detail(request, pk):
     historial_bodega = ReceptionWarehouseTransfer.objects.filter(
         reception_line__recepcion__purchase_request=entrega.purchase_request,
     ).select_related("reception_line", "creado_por")
-    return render(request, "inventario/entrega_taller_detail.html", {"entrega": entrega, "historial_bodega": historial_bodega})
+    from .models import DeliveryPendingCancellation
+    historial_cancelaciones = DeliveryPendingCancellation.objects.filter(
+        delivery_line__delivery=entrega,
+    ).select_related("delivery_line", "creado_por").order_by("-creado_en")
+    return render(request, "inventario/entrega_taller_detail.html", {
+        "entrega": entrega, "historial_bodega": historial_bodega,
+        "historial_cancelaciones": historial_cancelaciones,
+    })
 
 
 @login_required

@@ -12,6 +12,7 @@ from compras_oil.models import PurchaseRequest
 from .models import (
     InventoryReservation, InventoryStock, WorkshopDeliveryLine,
     ReceptionWarehouseTransfer, InventoryReceptionLine,
+    DeliveryPendingCancellation,
 )
 
 
@@ -34,7 +35,7 @@ def _validar_recalculo(compra, filas, adicionales):
     for fila in filas:
         linea = fila["linea"]
         # No convertir compras recibidas en disponibilidad inicial: borraría su historial comercial.
-        if (fila["recibida"] or fila["entregada"] or fila["liberada"]
+        if (fila["recibida"] or fila["entregada"] or fila["liberada"] or fila.get("cancelada", 0)
                 or InventoryReceptionLine.objects.filter(purchase_line=linea).exists()):
             raise ValueError(
                 f"{linea.codigo}: ya tiene recepción, entrega o liberación. "
@@ -84,7 +85,11 @@ def _filas(compra, bloquear=False):
         recibida = InventoryReceptionLine.objects.filter(purchase_line=linea).aggregate(
             total=Sum("cantidad_recibida"))["total"] or Decimal("0")
         faltante = faltante_reserva(linea.cantidad_requerida, entregada, consumida, liberada, activa)
+        cancelada = DeliveryPendingCancellation.objects.filter(delivery_line__purchase_line=linea).aggregate(
+            total=Sum("cantidad"))["total"] or Decimal("0")
+        faltante = max(faltante - cancelada, Decimal("0"))
         resultado.append(dict(linea=linea, stock=stock, reservada=activa,
+            cancelada=cancelada,
             entregada=max(entregada, consumida), liberada=liberada, recibida=recibida,
             faltante=faltante, disponible=disponible, maximo=min(disponible, faltante),
             catalogo_ambiguo=len(stocks) > 1))

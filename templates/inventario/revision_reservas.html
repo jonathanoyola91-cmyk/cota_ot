@@ -13,7 +13,7 @@
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Código / descripción</th><th>Requerida</th><th>Recibida</th><th>Entregada / consumida</th><th>Liberada</th><th>Reserva activa</th><th>Falta reservar</th><th>Disponible IMPETUS</th><th>Reservar adicional</th></tr></thead>
       <tbody>{% for f in filas %}<tr>
-        <td>{{ f.linea.codigo }} · {{ f.linea.descripcion }}{% if f.catalogo_ambiguo %}<br>Revise el código duplicado en existencias.{% endif %}</td>
+        <td>{{ f.linea.codigo }} · {{ f.linea.descripcion }}{% if f.catalogo_ambiguo %}<br>Revise el código duplicado en existencias.{% endif %}{% if f.cancelada %}<br>Pendiente cancelado: {{ f.cancelada|floatformat:3 }}{% endif %}</td>
         <td>{{ f.linea.cantidad_requerida|floatformat:3 }}</td><td>{{ f.recibida|floatformat:3 }}</td>
         <td>{{ f.entregada|floatformat:3 }}</td><td>{{ f.liberada|floatformat:3 }}</td>
         <td>{{ f.reservada|floatformat:3 }}</td><td>{{ f.faltante|floatformat:3 }}</td><td>{{ f.disponible|floatformat:3 }}</td>
