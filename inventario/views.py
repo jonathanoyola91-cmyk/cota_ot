@@ -117,7 +117,7 @@ def inventario_dashboard(request):
         cantidad_entregada_total = Decimal("0")
 
         for linea in lineas:
-            requerida = Decimal(linea.cantidad_requerida or 0)
+            requerida = Decimal(linea.cantidad_requerida_neta or 0)
             entregada = Decimal(linea.cantidad_entregada or 0)
 
             cantidad_requerida_total += requerida
@@ -142,7 +142,7 @@ def inventario_dashboard(request):
                 ))
             )
         else:
-            entrega.porcentaje_entrega = 0
+            entrega.porcentaje_entrega = 100 if entrega.entrega_completa else 0
 
         destino = str(getattr(entrega, "destino", "TALLER") or "TALLER").upper()
         entrega.destino_codigo = destino
@@ -1025,7 +1025,7 @@ def recepcion_transferir_bodega(request, pk, linea_pk):
     if empresa_destino not in {InventoryStock.Empresa.IMPETUS, InventoryStock.Empresa.OIL_GAS}:
         messages.error(request, "Seleccione Bodega IMPETUS HPS o Bodega OIL & GAS SUPPORT.")
         return redirect("inventario:recepcion_detail", pk=pk)
-    if cantidad <= 0 or not motivo:
+    if not cantidad.is_finite() or cantidad <= 0 or cantidad.as_tuple().exponent < -3 or not motivo:
         messages.error(request, "La cantidad debe ser mayor a cero y el motivo es obligatorio.")
         return redirect("inventario:recepcion_detail", pk=pk)
 
@@ -1058,6 +1058,16 @@ def recepcion_transferir_bodega(request, pk, linea_pk):
             for r in reservas
         ), Decimal("0"))
         max_transferible = min(max_por_recepcion, disponible_reserva)
+        from .models import WorkshopDeliveryLine
+        entrega_linea = WorkshopDeliveryLine.objects.filter(purchase_line=linea.purchase_line).first()
+        if entrega_linea:
+            max_transferible = min(max_transferible, max(
+                Decimal(entrega_linea.cantidad_requerida_neta) - Decimal(entrega_linea.cantidad_entregada or 0),
+                Decimal("0"),
+            ))
+        if cantidad > Decimal(origen.cantidad_reservada or 0) or cantidad > Decimal(origen.cantidad_fisica or 0):
+            messages.error(request, "Las existencias o reservas no coinciden. Revise el Kardex antes de transferir.")
+            return redirect("inventario:recepcion_detail", pk=pk)
         if cantidad > max_transferible:
             messages.error(
                 request,
@@ -1246,7 +1256,7 @@ def entrega_taller_detail(request, pk):
 
         # Validación completa ANTES de descontar cualquier existencia.
         for linea in entrega.lineas.all():
-            requerida = Decimal(linea.cantidad_requerida or 0)
+            requerida = Decimal(linea.cantidad_requerida_neta or 0)
             anterior = Decimal(linea.cantidad_entregada or 0)
             raw = request.POST.get(f"cantidad_entregada_{linea.id}")
 
@@ -1386,7 +1396,7 @@ def entrega_taller_detail(request, pk):
 
                     completa = True
                     for linea in entrega.lineas.all():
-                        req = Decimal(linea.cantidad_requerida or 0)
+                        req = Decimal(linea.cantidad_requerida_neta or 0)
                         ent = Decimal(linea.cantidad_entregada or 0)
                         if req > 0 and ent < req:
                             completa = False
@@ -1426,8 +1436,38 @@ def entrega_taller_detail(request, pk):
     # Valores informativos para el template.
     for linea in entrega.lineas.all():
         linea.reserva_pendiente_paw = _reserva_pendiente(linea.purchase_line_id)
+        linea.recepcion_origen = InventoryReceptionLine.objects.filter(
+            purchase_line_id=linea.purchase_line_id,
+            recepcion__purchase_request=entrega.purchase_request,
+        ).first()
+        if linea.recepcion_origen:
+            linea.transferible = min(
+                linea.reserva_pendiente_paw,
+                max(Decimal(linea.recepcion_origen.cantidad_recibida or 0) - Decimal(linea.cantidad_liberada_bodega), Decimal("0")),
+                max(Decimal(linea.cantidad_requerida_neta) - Decimal(linea.cantidad_entregada or 0), Decimal("0")),
+            )
 
-    return render(request, "inventario/entrega_taller_detail.html", {"entrega": entrega})
+    from .models import ReceptionWarehouseTransfer
+    historial_bodega = ReceptionWarehouseTransfer.objects.filter(
+        reception_line__recepcion__purchase_request=entrega.purchase_request,
+    ).select_related("reception_line", "creado_por")
+    return render(request, "inventario/entrega_taller_detail.html", {"entrega": entrega, "historial_bodega": historial_bodega})
+
+
+@login_required
+@inventario_required
+@require_POST
+def entrega_transferir_bodega(request, pk, linea_pk):
+    from .models import WorkshopDeliveryLine
+    linea = get_object_or_404(WorkshopDeliveryLine, pk=linea_pk, delivery_id=pk)
+    recepcion = get_object_or_404(
+        InventoryReceptionLine,
+        purchase_line_id=linea.purchase_line_id,
+        recepcion__purchase_request_id=linea.delivery.purchase_request_id,
+    )
+    # Reutiliza las validaciones, bloqueo y movimientos de la recepción.
+    recepcion_transferir_bodega(request, recepcion.recepcion_id, recepcion.pk)
+    return redirect("inventario:entrega_taller_detail", pk=pk)
 
 
 @login_required
@@ -1483,7 +1523,7 @@ def entrega_taller_pdf(request, pk):
             linea.codigo or "",
             Paragraph(linea.descripcion or "", styles["Normal"]),
             linea.unidad or "",
-            f"{Decimal(linea.cantidad_requerida or 0):.0f}",
+            f"{Decimal(linea.cantidad_requerida_neta or 0):.0f}",
             f"{Decimal(linea.cantidad_entregada or 0):.0f}",
         ])
 

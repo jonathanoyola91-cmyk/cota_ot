@@ -158,6 +158,17 @@ class WorkshopDeliveryLine(models.Model):
     codigo = models.CharField(max_length=80, blank=True)
     descripcion = models.CharField(max_length=200, blank=True)
     unidad = models.CharField(max_length=20, blank=True)
+
+    @property
+    def cantidad_liberada_bodega(self):
+        from django.db.models import Sum
+        return ReceptionWarehouseTransfer.objects.filter(
+            reception_line__purchase_line_id=self.purchase_line_id,
+        ).aggregate(total=Sum("cantidad"))["total"] or 0
+
+    @property
+    def cantidad_requerida_neta(self):
+        return max(self.cantidad_requerida - self.cantidad_liberada_bodega, 0)
     cantidad_requerida = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
     # Diligenciado manualmente (en papel) → debe poder ir vacío
