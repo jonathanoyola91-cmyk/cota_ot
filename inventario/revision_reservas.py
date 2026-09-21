@@ -154,6 +154,8 @@ def revisar_reservas(request, compra):
                     paw.estado_operativo = "EN_COMPRAS" if sin_cubrir else "MATERIAL_RECIBIDO"
                     paw.save(update_fields=["estado_operativo"])
                 compra.save(update_fields=campos)
+                from .entrega_sync import sincronizar_entrega_existente
+                sincronizar_entrega_existente(compra.pk)
                 registrar_movimiento(
                     request=request, paw_numero=compra.paw_numero, modulo="INVENTARIO",
                     accion="Revisión finalizada para Compras" if finalizar else "Reservas de PAW conciliadas",

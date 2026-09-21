@@ -42,6 +42,11 @@
     <h2>Entrega a {{ entrega.get_destino_display }} · PAW {{ entrega.purchase_request.paw_numero }}</h2>
     <p><strong>Destino:</strong> {{ entrega.get_destino_display }}</p>
     <p>{{ entrega.purchase_request.paw_nombre }}</p>
+    <form method="post" style="margin:12px 0;">
+        {% csrf_token %}
+        <button class="btn" type="submit" name="accion" value="actualizar_materiales">Actualizar materiales del PAW</button>
+        <small>Incorpora materiales revisados o reservados que faltan en esta entrega. Conserva las cantidades ya entregadas.</small>
+    </form>
     <div style="padding:10px 12px;background:#eff6ff;border-radius:8px;margin:10px 0 14px;color:#1e3a8a;font-size:13px;">
         {% if entrega.destino == "INVENTARIO" %}
         Al guardar, el material queda en Inventario/Bodega: <strong>no sale del stock físico</strong>.

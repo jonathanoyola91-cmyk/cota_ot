@@ -330,6 +330,9 @@ def revision_bom_detail(request, pk):
                 compra.inventario_revisado_por = request.user
                 compra.save(update_fields=["inventario_revisado_en", "inventario_revisado_por", "actualizado_en"])
 
+                from .entrega_sync import sincronizar_entrega_existente
+                sincronizar_entrega_existente(compra.pk)
+
                 registrar_movimiento(
                     request=request, paw_numero=compra.paw_numero, modulo="INVENTARIO",
                     accion="BOM revisado y reservado",
@@ -1241,6 +1244,24 @@ def entrega_taller_detail(request, pk):
         .prefetch_related("lineas__purchase_line"),
         pk=pk
     )
+
+    if request.method == "POST" and request.POST.get("accion") == "actualizar_materiales":
+        compra = entrega.purchase_request
+        if compra.estado == "CERRADA" or compra.bom.workorder.paw.estado_operativo in ("FACTURADO", "RADICADO"):
+            messages.error(request, "No se pueden actualizar materiales de un PAW cerrado o facturado.")
+            return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
+        from .entrega_sync import sincronizar_entrega_existente
+        with transaction.atomic():
+            creadas, actualizadas = sincronizar_entrega_existente(compra.pk)
+            if creadas or actualizadas:
+                registrar_movimiento(
+                    request=request, paw_numero=compra.paw_numero, modulo="INVENTARIO",
+                    accion="Materiales de entrega actualizados",
+                    descripcion=f"Líneas incorporadas: {creadas}; incrementos: {actualizadas}. Sin movimiento de stock.",
+                    objeto=entrega,
+                )
+        messages.success(request, f"Materiales actualizados: {creadas} línea(s) nueva(s), {actualizadas} cantidad(es) ampliada(s).")
+        return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
 
     # Información de reserva pendiente por línea para mostrarla en pantalla.
     def _reserva_pendiente(purchase_line_id):
