@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (
-    BudgetAllocation, Category, Expense, ExtraRequest, FamilyMembership,
+    BudgetAllocation, Category, Debt, DebtPayment, Expense, ExtraRequest, FamilyMembership,
     FixedExpense, Household, Income, MonthlyPlan, PersonalBudget,
     PersonalBudgetLine, SavingsGoal, WalletTransfer,
 )
@@ -22,6 +22,8 @@ admin.site.register(Category)
 admin.site.register(MonthlyPlan)
 admin.site.register(Income)
 admin.site.register(FixedExpense)
+admin.site.register(Debt)
+admin.site.register(DebtPayment)
 admin.site.register(BudgetAllocation)
 admin.site.register(PersonalBudget)
 admin.site.register(PersonalBudgetLine)

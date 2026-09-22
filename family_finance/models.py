@@ -202,6 +202,68 @@ class FixedExpense(models.Model):
         return self.name
 
 
+class Debt(models.Model):
+    household = models.ForeignKey(
+        Household, on_delete=models.CASCADE, related_name="debts"
+    )
+    category = models.ForeignKey(Category, on_delete=models.PROTECT)
+    name = models.CharField("nombre de la deuda", max_length=120)
+    bank = models.CharField("banco o entidad", max_length=120, blank=True)
+    opening_balance = models.DecimalField(
+        "saldo pendiente al iniciar", max_digits=14, decimal_places=2,
+        validators=MONEY_VALIDATORS,
+    )
+    monthly_payment = models.DecimalField(
+        "cuota mensual", max_digits=14, decimal_places=2,
+        validators=MONEY_VALIDATORS,
+    )
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    @property
+    def principal_paid(self):
+        return self.payments.aggregate(total=Sum("principal_amount"))["total"] or ZERO
+
+    @property
+    def remaining_balance(self):
+        return max(ZERO, self.opening_balance - self.principal_paid)
+
+    @property
+    def paid_percent(self):
+        return round((self.principal_paid / self.opening_balance) * 100) if self.opening_balance else 100
+
+    def __str__(self):
+        return self.name
+
+
+class DebtPayment(models.Model):
+    debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name="payments")
+    plan = models.ForeignKey(MonthlyPlan, on_delete=models.PROTECT, related_name="debt_payments")
+    payment_amount = models.DecimalField(
+        "valor pagado", max_digits=14, decimal_places=2, validators=MONEY_VALIDATORS
+    )
+    principal_amount = models.DecimalField(
+        "abono a capital", max_digits=14, decimal_places=2, validators=MONEY_VALIDATORS
+    )
+    interest_amount = models.DecimalField(
+        "intereses incluidos", max_digits=14, decimal_places=2, default=ZERO,
+        validators=MONEY_VALIDATORS,
+    )
+    payment_date = models.DateField("fecha de pago")
+    note = models.CharField("nota", max_length=250, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-payment_date", "-id"]
+
+    def __str__(self):
+        return f"{self.debt.name} · {self.payment_amount}"
+
+
 class BudgetAllocation(models.Model):
     plan = models.ForeignKey(
         MonthlyPlan, on_delete=models.CASCADE, related_name="allocations"

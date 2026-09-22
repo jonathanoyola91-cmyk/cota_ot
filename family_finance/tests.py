@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import (
-    BudgetAllocation, Category, Expense, ExtraRequest, FamilyMembership,
+    BudgetAllocation, Category, Debt, DebtPayment, Expense, ExtraRequest, FamilyMembership,
     Household, MonthlyPlan, PersonalBudget, PersonalBudgetLine, WalletTransfer,
 )
 from .services import seed_categories, smart_recommendations, spending_ranking
@@ -304,6 +304,19 @@ class RequestAndWalletTests(FamilyBaseTest):
         transfer = WalletTransfer.objects.get()
         self.assertEqual(transfer.method, WalletTransfer.Method.CASH)
         self.assertEqual(transfer.status, WalletTransfer.Status.CONFIRMED)
+
+    def test_debt_payment_reduces_remaining_principal(self):
+        category = self.household.categories.get(name="Tarjetas de crédito")
+        debt = Debt.objects.create(
+            household=self.household, category=category, name="Tarjeta Banco",
+            opening_balance=Decimal("5000000"), monthly_payment=Decimal("450000"),
+        )
+        DebtPayment.objects.create(
+            debt=debt, plan=self.plan, payment_amount=Decimal("450000"),
+            principal_amount=Decimal("300000"), interest_amount=Decimal("150000"),
+            payment_date=date(2026, 9, 22), created_by=self.owner_user,
+        )
+        self.assertEqual(debt.remaining_balance, Decimal("4700000"))
 
     def test_child_login_goes_directly_to_family_module(self):
         response = self.client.post(reverse("accounts:login"), {

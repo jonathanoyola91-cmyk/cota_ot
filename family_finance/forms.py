@@ -7,6 +7,8 @@ from django.contrib.auth.models import User
 from .models import (
     BudgetAllocation,
     Category,
+    Debt,
+    DebtPayment,
     Expense,
     ExtraRequest,
     FamilyMembership,
@@ -126,6 +128,41 @@ class FixedExpenseForm(StyledModelForm):
             self.fields["category"].queryset = household.categories.filter(
                 kind__in=[Category.Kind.FIXED, Category.Kind.DEBT], active=True
             )
+
+
+class DebtForm(StyledModelForm):
+    class Meta:
+        model = Debt
+        fields = ["category", "name", "bank", "opening_balance", "monthly_payment"]
+
+    def __init__(self, *args, household=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if household:
+            self.fields["category"].queryset = household.categories.filter(
+                kind=Category.Kind.DEBT, active=True
+            )
+
+
+class DebtPaymentForm(StyledModelForm):
+    class Meta:
+        model = DebtPayment
+        fields = ["payment_amount", "principal_amount", "interest_amount", "payment_date", "note"]
+        widgets = {"payment_date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["payment_date"].initial = date.today()
+
+    def clean(self):
+        cleaned = super().clean()
+        total = cleaned.get("payment_amount")
+        principal = cleaned.get("principal_amount")
+        interest = cleaned.get("interest_amount") or 0
+        if total is not None and principal is not None and principal + interest > total:
+            raise forms.ValidationError(
+                "El capital más los intereses no puede superar el valor pagado."
+            )
+        return cleaned
 
 
 class AllocationForm(StyledModelForm):

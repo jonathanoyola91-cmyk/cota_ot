@@ -11,13 +11,14 @@ from django.utils import timezone
 from . import family_messages as messages
 from .decorators import family_member_required, manager_required, owner_required
 from .forms import (
-    AllocationForm, ExpenseForm, ExistingFamilyMemberForm, ExtraRequestForm, FamilyMemberCreationForm,
+    AllocationForm, DebtForm, DebtPaymentForm, ExpenseForm, ExistingFamilyMemberForm,
+    ExtraRequestForm, FamilyMemberCreationForm,
     FixedExpenseForm, HouseholdSetupForm, IncomeForm, MonthlyPlanForm,
     PersonalBudgetHeaderForm, PersonalBudgetLineForm, SavingsGoalForm,
     WalletTransferForm,
 )
 from .models import (
-    BudgetAllocation, Category, Expense, ExtraRequest, FamilyMembership,
+    BudgetAllocation, Category, Debt, DebtPayment, Expense, ExtraRequest, FamilyMembership,
     FixedExpense, Household, Income, MonthlyPlan, PersonalBudget,
     PersonalBudgetLine, SavingsGoal, WalletTransfer, ZERO,
 )
@@ -111,6 +112,7 @@ def dashboard(request):
             "my_personal": personal_summary(plan, membership)
             if membership.role == FamilyMembership.Role.ADMIN else None,
             "fixed_expenses": plan.fixed_expenses.select_related("category"),
+            "debts": request.household.debts.filter(active=True).select_related("category"),
             "incomes": plan.incomes.select_related("created_by"),
         })
     else:
@@ -259,6 +261,80 @@ def fixed_expense_edit(request, item_id):
     return render(request, "family_finance/form.html", {
         "form": form, "title": "Actualizar gasto fijo o deuda",
         "submit_label": "Guardar cambios",
+    })
+
+
+@manager_required
+def debt_create(request):
+    plan = _selected_plan(request)
+    if not plan:
+        messages.error(request, "Primero debe existir un presupuesto mensual.")
+        return redirect("family_finance:dashboard")
+    form = DebtForm(request.POST or None, household=request.household)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            debt = form.save(commit=False)
+            debt.household = request.household
+            debt.save()
+            FixedExpense.objects.get_or_create(
+                plan=plan,
+                name=f"Cuota · {debt.name}",
+                defaults={
+                    "category": debt.category,
+                    "budgeted_amount": debt.monthly_payment,
+                    "created_by": request.user,
+                    "recurring": True,
+                    "notes": f"Deuda vinculada: {debt.bank}".strip(": "),
+                },
+            )
+        messages.success(request, "Deuda creada y cuota mensual agregada a gastos fijos.")
+        return redirect(f"{redirect('family_finance:dashboard').url}?plan={plan.pk}")
+    return render(request, "family_finance/form.html", {
+        "form": form, "title": "Registrar deuda bancaria",
+        "submit_label": "Crear deuda",
+        "helper": "Registre el saldo que aún deben hoy; cada pago posterior reducirá ese valor.",
+    })
+
+
+@manager_required
+def debt_payment_create(request, debt_id):
+    plan = _selected_plan(request)
+    if not plan:
+        return redirect("family_finance:dashboard")
+    debt = get_object_or_404(Debt, pk=debt_id, household=request.household, active=True)
+    form = DebtPaymentForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        payment = form.save(commit=False)
+        if payment.principal_amount > debt.remaining_balance:
+            form.add_error("principal_amount", "El abono a capital supera el saldo pendiente.")
+        else:
+            with transaction.atomic():
+                payment.debt = debt
+                payment.plan = plan
+                payment.created_by = request.user
+                payment.save()
+                fixed, _ = FixedExpense.objects.get_or_create(
+                    plan=plan,
+                    name=f"Cuota · {debt.name}",
+                    defaults={
+                        "category": debt.category,
+                        "budgeted_amount": debt.monthly_payment,
+                        "created_by": request.user,
+                        "recurring": True,
+                        "notes": f"Deuda vinculada: {debt.bank}".strip(": "),
+                    },
+                )
+                fixed.paid_amount += payment.payment_amount
+                if fixed.paid_amount >= fixed.budgeted_amount:
+                    fixed.status = FixedExpense.Status.PAID
+                fixed.save(update_fields=["paid_amount", "status"])
+            messages.success(request, "Pago registrado: el saldo de la deuda fue actualizado.")
+            return redirect(f"{redirect('family_finance:dashboard').url}?plan={plan.pk}")
+    return render(request, "family_finance/form.html", {
+        "form": form,
+        "title": f"Registrar pago · {debt.name}",
+        "submit_label": "Registrar pago",
+        "helper": f"Saldo pendiente actual: ${debt.remaining_balance:,.0f}. Indique cuánto del pago redujo capital.",
     })
 
 
