@@ -117,7 +117,7 @@ class AllocationForm(StyledModelForm):
         if household:
             qs = household.categories.filter(kind=Category.Kind.VARIABLE, active=True)
             if plan and not self.instance.pk:
-                qs = qs.exclude(allocations__plan=plan)
+                qs = qs.exclude(budgetallocation__plan=plan)
             self.fields["category"].queryset = qs
 
 
