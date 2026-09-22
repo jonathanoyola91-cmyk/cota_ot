@@ -268,6 +268,11 @@ class PersonalBudget(models.Model):
 
 
 class PersonalBudgetLine(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pendiente"
+        APPROVED = "APPROVED", "Aprobada"
+        REJECTED = "REJECTED", "Rechazada"
+
     budget = models.ForeignKey(
         PersonalBudget, on_delete=models.CASCADE, related_name="lines"
     )
@@ -280,6 +285,9 @@ class PersonalBudgetLine(models.Model):
     approved_amount = models.DecimalField(
         "valor aprobado", max_digits=14, decimal_places=2, default=ZERO,
         validators=MONEY_VALIDATORS,
+    )
+    status = models.CharField(
+        "decisión", max_length=10, choices=Status.choices, default=Status.PENDING
     )
     notes = models.CharField("explicación", max_length=250, blank=True)
 

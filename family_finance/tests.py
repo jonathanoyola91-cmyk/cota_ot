@@ -176,6 +176,29 @@ class BudgetApprovalTests(FamilyBaseTest):
         self.assertEqual(self.line.approved_amount, Decimal("60000"))
         self.assertEqual(self.budget.reviewed_by, self.owner_user)
 
+    def test_owner_can_approve_and_reject_different_lines(self):
+        second_line = PersonalBudgetLine.objects.create(
+            budget=self.budget, category=self.fun, description="Juego",
+            requested_amount=Decimal("50000"),
+        )
+        self.client.force_login(self.owner_user)
+        response = self.client.post(
+            reverse("family_finance:budget_review", args=[self.budget.pk]),
+            {
+                "action": "review",
+                f"decision_{self.line.pk}": "approve",
+                f"approved_{self.line.pk}": "60000",
+                f"decision_{second_line.pk}": "reject",
+                f"approved_{second_line.pk}": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.line.refresh_from_db()
+        second_line.refresh_from_db()
+        self.assertEqual(self.line.status, PersonalBudgetLine.Status.APPROVED)
+        self.assertEqual(second_line.status, PersonalBudgetLine.Status.REJECTED)
+        self.assertEqual(second_line.approved_amount, Decimal("0"))
+
     def test_child_cannot_spend_above_approved_category(self):
         self.budget.status = PersonalBudget.Status.APPROVED
         self.budget.save(update_fields=["status"])

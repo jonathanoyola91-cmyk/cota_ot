@@ -390,33 +390,64 @@ def budget_review(request, budget_id):
     )
     if request.method == "POST":
         action = request.POST.get("action")
-        if action not in {"approve", "changes", "reject"}:
+        if action not in {"review", "approve", "changes", "reject"}:
             raise Http404
-        valid = True
-        amounts = {}
-        for line in budget.lines.all():
-            amount = _money(request.POST.get(f"approved_{line.pk}", "0"))
-            if amount is None:
-                valid = False
-                messages.error(request, f"Valor inválido para {line.description}.")
-            amounts[line.pk] = amount
-        if valid:
+        lines = list(budget.lines.all())
+        if action == "changes":
             with transaction.atomic():
-                for line in budget.lines.all():
-                    line.approved_amount = amounts[line.pk] if action == "approve" else ZERO
-                    line.save(update_fields=["approved_amount"])
-                budget.status = {
-                    "approve": PersonalBudget.Status.APPROVED,
-                    "changes": PersonalBudget.Status.CHANGES,
-                    "reject": PersonalBudget.Status.REJECTED,
-                }[action]
+                budget.lines.update(
+                    approved_amount=ZERO,
+                    status=PersonalBudgetLine.Status.PENDING,
+                )
+                budget.status = PersonalBudget.Status.CHANGES
                 budget.reviewer_comment = request.POST.get("reviewer_comment", "").strip()
                 budget.reviewed_by = request.user
                 budget.reviewed_at = timezone.now()
                 budget.save(update_fields=[
                     "status", "reviewer_comment", "reviewed_by", "reviewed_at"
                 ])
-            messages.success(request, "La decisión quedó registrada.")
+            messages.success(request, "El presupuesto quedó abierto para ajustes.")
+            return redirect(f"{redirect('family_finance:dashboard').url}?plan={budget.plan_id}")
+        valid = True
+        decisions = {}
+        for line in lines:
+            decision = "reject" if action == "reject" else request.POST.get(
+                f"decision_{line.pk}", "approve"
+            )
+            if decision not in {"approve", "reject"}:
+                valid = False
+                messages.error(request, f"Selecciona una decisión para {line.description}.")
+                continue
+            amount = ZERO
+            if decision == "approve":
+                amount = _money(request.POST.get(f"approved_{line.pk}", "0"))
+                if amount is None:
+                    valid = False
+                    messages.error(request, f"Valor inválido para {line.description}.")
+            decisions[line.pk] = (decision, amount)
+        if valid:
+            with transaction.atomic():
+                approved_any = False
+                for line in lines:
+                    decision, amount = decisions[line.pk]
+                    line.status = (
+                        PersonalBudgetLine.Status.APPROVED
+                        if decision == "approve" else PersonalBudgetLine.Status.REJECTED
+                    )
+                    line.approved_amount = amount if decision == "approve" else ZERO
+                    line.save(update_fields=["status", "approved_amount"])
+                    approved_any = approved_any or decision == "approve"
+                budget.status = (
+                    PersonalBudget.Status.APPROVED
+                    if approved_any else PersonalBudget.Status.REJECTED
+                )
+                budget.reviewer_comment = request.POST.get("reviewer_comment", "").strip()
+                budget.reviewed_by = request.user
+                budget.reviewed_at = timezone.now()
+                budget.save(update_fields=[
+                    "status", "reviewer_comment", "reviewed_by", "reviewed_at"
+                ])
+            messages.success(request, "Decisiones por línea registradas.")
             return redirect(f"{redirect('family_finance:dashboard').url}?plan={budget.plan_id}")
     return render(request, "family_finance/review_budget.html", {"budget": budget})
 
@@ -431,7 +462,10 @@ def budget_reopen(request, budget_id):
     )
     if budget.status in {PersonalBudget.Status.REJECTED, PersonalBudget.Status.APPROVED}:
         with transaction.atomic():
-            budget.lines.update(approved_amount=ZERO)
+            budget.lines.update(
+                approved_amount=ZERO,
+                status=PersonalBudgetLine.Status.PENDING,
+            )
             budget.status = PersonalBudget.Status.CHANGES
             budget.reviewer_comment = ""
             budget.reviewed_by = request.user
