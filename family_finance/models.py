@@ -361,6 +361,10 @@ class Expense(models.Model):
 
 
 class WalletTransfer(models.Model):
+    class Method(models.TextChoices):
+        NEQUI = "NEQUI", "Nequi"
+        CASH = "CASH", "Efectivo"
+
     class Status(models.TextChoices):
         SENT = "SENT", "Enviado"
         CONFIRMED = "CONFIRMED", "Confirmado por el hijo"
@@ -375,6 +379,9 @@ class WalletTransfer(models.Model):
         "valor transferido", max_digits=14, decimal_places=2,
         validators=MONEY_VALIDATORS,
     )
+    method = models.CharField(
+        "forma de entrega", max_length=10, choices=Method.choices, default=Method.NEQUI
+    )
     date = models.DateField("fecha")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.SENT)
     note = models.CharField("nota", max_length=200, blank=True)
@@ -385,7 +392,7 @@ class WalletTransfer(models.Model):
         ordering = ["-date", "-id"]
 
     def __str__(self):
-        return f"Nequi {self.member.display_name} · {self.amount}"
+        return f"{self.get_method_display()} {self.member.display_name} · {self.amount}"
 
 
 class SavingsGoal(models.Model):

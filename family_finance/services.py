@@ -99,8 +99,17 @@ def personal_summary(plan, membership):
     )
     spent = money_sum(plan.expenses.filter(member=membership), "amount")
     transferred = money_sum(plan.wallet_transfers.filter(member=membership), "amount")
+    nequi_transferred = money_sum(
+        plan.wallet_transfers.filter(member=membership, method="NEQUI"), "amount"
+    )
+    cash_received = money_sum(
+        plan.wallet_transfers.filter(member=membership, method="CASH"), "amount"
+    )
     nequi_spent = money_sum(
         plan.expenses.filter(member=membership, source=Expense.Source.NEQUI), "amount"
+    )
+    cash_spent = money_sum(
+        plan.expenses.filter(member=membership, source=Expense.Source.CASH), "amount"
     )
     limit = approved + approved_extra
     return {
@@ -111,8 +120,11 @@ def personal_summary(plan, membership):
         "spent": spent,
         "remaining": limit - spent,
         "transferred": transferred,
+        "nequi_transferred": nequi_transferred,
+        "cash_received": cash_received,
         "pending_delivery": limit - transferred,
-        "nequi_balance": transferred - nequi_spent,
+        "nequi_balance": nequi_transferred - nequi_spent,
+        "cash_balance": cash_received - cash_spent,
         "percent": min(100, round((spent / limit) * 100)) if limit else 0,
     }
 

@@ -238,6 +238,23 @@ class RequestAndWalletTests(FamilyBaseTest):
         own.refresh_from_db()
         self.assertEqual(own.status, WalletTransfer.Status.CONFIRMED)
 
+    def test_mother_can_register_cash_delivery_for_child(self):
+        self.client.force_login(self.spouse_user)
+        response = self.client.post(
+            reverse("family_finance:wallet_transfer_create") + f"?plan={self.plan.pk}",
+            {
+                "member": self.child.pk,
+                "amount": "30000",
+                "method": WalletTransfer.Method.CASH,
+                "date": date(2026, 9, 22),
+                "note": "Merienda",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        transfer = WalletTransfer.objects.get()
+        self.assertEqual(transfer.method, WalletTransfer.Method.CASH)
+        self.assertEqual(transfer.status, WalletTransfer.Status.CONFIRMED)
+
     def test_child_login_goes_directly_to_family_module(self):
         response = self.client.post(reverse("accounts:login"), {
             "username": "hijo", "password": "test12345",

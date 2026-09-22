@@ -192,7 +192,7 @@ class ExtraRequestForm(StyledModelForm):
 class WalletTransferForm(StyledModelForm):
     class Meta:
         model = WalletTransfer
-        fields = ["member", "amount", "date", "note"]
+        fields = ["member", "amount", "method", "date", "note"]
         widgets = {"date": forms.DateInput(attrs={"type": "date"})}
 
     def __init__(self, *args, household=None, **kwargs):

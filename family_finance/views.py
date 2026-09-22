@@ -567,13 +567,19 @@ def wallet_transfer_create(request):
     if request.method == "POST" and form.is_valid():
         transfer = form.save(commit=False)
         transfer.plan, transfer.created_by = plan, request.user
+        if transfer.method == WalletTransfer.Method.CASH:
+            transfer.status = WalletTransfer.Status.CONFIRMED
+            transfer.confirmed_at = timezone.now()
         transfer.save()
-        messages.success(request, "Transferencia a Nequi registrada; el hijo puede confirmarla.")
+        if transfer.method == WalletTransfer.Method.CASH:
+            messages.success(request, "Entrega de efectivo registrada.")
+        else:
+            messages.success(request, "Transferencia a Nequi registrada; el hijo puede confirmarla.")
         return redirect(f"{redirect('family_finance:dashboard').url}?plan={plan.pk}")
     return render(request, "family_finance/form.html", {
-        "form": form, "title": "Registrar transferencia a Nequi",
-        "submit_label": "Registrar transferencia",
-        "helper": "No se guardan claves ni códigos de Nequi.",
+        "form": form, "title": "Registrar dinero entregado",
+        "submit_label": "Registrar entrega",
+        "helper": "Seleccione Nequi o efectivo. No se guardan claves ni códigos de Nequi.",
     })
 
 
@@ -590,7 +596,7 @@ def wallet_transfer_confirm(request, transfer_id):
     transfer.status = WalletTransfer.Status.CONFIRMED
     transfer.confirmed_at = timezone.now()
     transfer.save(update_fields=["status", "confirmed_at"])
-    messages.success(request, "Confirmaste que recibiste el dinero en Nequi.")
+    messages.success(request, "Confirmaste que recibiste el dinero.")
     return redirect("family_finance:dashboard")
 
 
