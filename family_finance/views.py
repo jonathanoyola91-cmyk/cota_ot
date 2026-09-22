@@ -130,6 +130,7 @@ def dashboard(request):
         personal_members = request.household.memberships.filter(
             active=True,
         ).exclude(role=FamilyMembership.Role.OWNER)
+        owner_member = request.household.memberships.get(role=FamilyMembership.Role.OWNER)
         context.update({
             "totals": plan_totals(plan),
             "spending_ranking": spending_ranking(plan),
@@ -144,8 +145,8 @@ def dashboard(request):
                 {"member": member, **personal_summary(plan, member)}
                 for member in personal_members
             ],
-            "my_personal": personal_summary(plan, membership)
-            if membership.role == FamilyMembership.Role.ADMIN else None,
+            "my_personal": personal_summary(plan, membership),
+            "owner_personal": personal_summary(plan, owner_member),
             "fixed_expenses": plan.fixed_expenses.select_related("category"),
             "debts": request.household.debts.filter(active=True).select_related("category"),
             "incomes": plan.incomes.select_related("created_by"),
@@ -158,6 +159,11 @@ def dashboard(request):
             "my_expenses": plan.expenses.filter(member=membership)[:8],
         })
     return render(request, "family_finance/dashboard.html", context)
+
+
+@family_member_required
+def install_access(request):
+    return render(request, "family_finance/install_access.html")
 
 
 @owner_required
@@ -475,37 +481,45 @@ def allocation_edit(request, item_id):
 @family_member_required
 def my_budget(request):
     membership = request.family_membership
-    if membership.role == FamilyMembership.Role.OWNER:
-        return redirect("family_finance:dashboard")
     plan = _selected_plan(request)
     if not plan:
         messages.info(request, "Aún no hay un presupuesto mensual activo.")
         return redirect("family_finance:dashboard")
-    budget, _ = PersonalBudget.objects.get_or_create(plan=plan, member=membership)
+    budget, created = PersonalBudget.objects.get_or_create(
+        plan=plan, member=membership,
+        defaults={"status": PersonalBudget.Status.APPROVED}
+        if membership.is_owner else {},
+    )
+    if membership.is_owner and budget.status != PersonalBudget.Status.APPROVED:
+        budget.status = PersonalBudget.Status.APPROVED
+        budget.save(update_fields=["status"])
     form = PersonalBudgetHeaderForm(request.POST or None, instance=budget)
-    if request.method == "POST" and form.is_valid() and budget.status in {
+    if request.method == "POST" and form.is_valid() and (membership.is_owner or budget.status in {
         PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES,
         PersonalBudget.Status.SUBMITTED,
-    }:
+    }):
         form.save()
         messages.success(request, "Tu mensaje quedó guardado.")
         return redirect(f"{redirect('family_finance:my_budget').url}?plan={plan.pk}")
     return render(request, "family_finance/my_budget.html", {
         "plan": plan, "budget": budget, "form": form,
         "summary": personal_summary(plan, membership),
+        "is_owner_budget": membership.is_owner,
     })
 
 
 @family_member_required
 def budget_line_create(request):
     membership = request.family_membership
-    if membership.role == FamilyMembership.Role.OWNER:
-        raise Http404
     plan = _selected_plan(request)
     if not plan:
         return redirect("family_finance:dashboard")
-    budget, _ = PersonalBudget.objects.get_or_create(plan=plan, member=membership)
-    if budget.status not in {
+    budget, _ = PersonalBudget.objects.get_or_create(
+        plan=plan, member=membership,
+        defaults={"status": PersonalBudget.Status.APPROVED}
+        if membership.is_owner else {},
+    )
+    if not membership.is_owner and budget.status not in {
         PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES,
         PersonalBudget.Status.SUBMITTED,
     }:
@@ -515,8 +529,11 @@ def budget_line_create(request):
     if request.method == "POST" and form.is_valid():
         line = form.save(commit=False)
         line.budget = budget
+        if membership.is_owner:
+            line.status = PersonalBudgetLine.Status.APPROVED
+            line.approved_amount = line.requested_amount
         line.save()
-        messages.success(request, "Concepto agregado a tu propuesta.")
+        messages.success(request, "Compra personal agregada." if membership.is_owner else "Concepto agregado a tu propuesta.")
         return redirect(f"{redirect('family_finance:my_budget').url}?plan={plan.pk}")
     return render(request, "family_finance/form.html", {
         "form": form, "title": "Agregar a mi presupuesto", "submit_label": "Agregar"
@@ -525,7 +542,7 @@ def budget_line_create(request):
 
 @family_member_required
 def budget_line_delete(request, line_id):
-    if request.method != "POST" or request.family_membership.role == FamilyMembership.Role.OWNER:
+    if request.method != "POST":
         raise Http404
     line = get_object_or_404(
         PersonalBudgetLine,
@@ -533,7 +550,7 @@ def budget_line_delete(request, line_id):
         budget__member=request.family_membership,
         budget__plan__household=request.household,
     )
-    if line.budget.status not in {
+    if not request.family_membership.is_owner and line.budget.status not in {
         PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES,
         PersonalBudget.Status.SUBMITTED,
     }:

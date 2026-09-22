@@ -168,6 +168,22 @@ class AccessTests(FamilyBaseTest):
         response = self.client.get(reverse("family_finance:my_budget"), {"plan": self.plan.pk})
         self.assertEqual(response.status_code, 200)
 
+    def test_owner_can_register_personal_purchase_and_spouse_can_see_it(self):
+        self.client.force_login(self.owner_user)
+        response = self.client.post(reverse("family_finance:budget_line_create") + f"?plan={self.plan.pk}", {
+            "category": self.fun.pk, "description": "Herramienta personal",
+            "requested_amount": "250000", "notes": "Compra planeada",
+        })
+        self.assertEqual(response.status_code, 302)
+        owner_budget = PersonalBudget.objects.get(plan=self.plan, member=self.owner)
+        line = owner_budget.lines.get()
+        self.assertEqual(owner_budget.status, PersonalBudget.Status.APPROVED)
+        self.assertEqual(line.approved_amount, Decimal("250000"))
+        self.client.force_login(self.spouse_user)
+        response = self.client.get(reverse("family_finance:dashboard"), {"plan": self.plan.pk})
+        self.assertContains(response, "Compras personales de Papá")
+        self.assertContains(response, "Herramienta personal")
+
     def test_employee_cannot_discover_family_module(self):
         self.client.force_login(self.employee)
         response = self.client.get(reverse("family_finance:dashboard"))
@@ -217,6 +233,12 @@ class AccessTests(FamilyBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Ingreso confidencial")
         self.assertNotContains(response, "99,999,999")
+
+    def test_family_member_can_open_install_access_guide(self):
+        self.client.force_login(self.child_user)
+        response = self.client.get(reverse("family_finance:install_access"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Instalar acceso en el celular")
 
 
 class BudgetApprovalTests(FamilyBaseTest):
