@@ -23,6 +23,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from .models import (
     InventoryReception, InventoryReceptionLine, WorkshopDelivery,
     InventoryExit, InventoryExitLine, DispatchRemission, DispatchRemissionLine, RemissionSequence,
+    InventoryStock, InventoryMovement,
 )
 from auditoria.utils import registrar_movimiento
 
@@ -1684,11 +1685,44 @@ def salidas_lista(request):
 def salida_nueva(request):
     if request.method == "POST":
         filas = _lineas_desde_post(request, "item")
+        empresa = (request.POST.get("empresa") or "").strip().upper()
+        if empresa not in {InventoryStock.Empresa.IMPETUS, InventoryStock.Empresa.OIL_GAS}:
+            messages.error(request, "Selecciona la empresa/bodega de donde sale el material.")
+            return render(request, "inventario/salida_form.html", {"salida_controlada": True})
         if not filas:
             messages.error(request, "Agrega al menos un componente a la salida.")
         else:
             with transaction.atomic():
+                # No se permite digitar ítems manuales: cada línea debe provenir
+                # del catálogo de la bodega y tener disponible no reservado.
+                catalogo, ItemModel = _catalog_model_for_empresa(empresa)
+                requeridos = {}
+                for fila in filas:
+                    if fila["catalogo"] != catalogo or not fila["catalogo_id"]:
+                        messages.error(request, "Selecciona cada ítem desde el catálogo de la empresa elegida.")
+                        return render(request, "inventario/salida_form.html", {"salida_controlada": True})
+                    item = ItemModel.objects.filter(pk=fila["catalogo_id"], activo=True).first()
+                    if not item:
+                        messages.error(request, "Uno de los ítems seleccionados ya no existe o está inactivo.")
+                        return render(request, "inventario/salida_form.html", {"salida_controlada": True})
+                    stock = InventoryStock.objects.select_for_update().filter(
+                        empresa=empresa, catalogo=catalogo, catalogo_item_id=item.pk
+                    ).first()
+                    if not stock:
+                        messages.error(request, f"{item.codigo}: no tiene existencias en esta bodega.")
+                        return render(request, "inventario/salida_form.html", {"salida_controlada": True})
+                    fila["item"] = item
+                    fila["stock"] = stock
+                    requeridos[stock.pk] = requeridos.get(stock.pk, Decimal("0")) + fila["cantidad"]
+
+                for stock_id, cantidad in requeridos.items():
+                    stock = InventoryStock.objects.select_for_update().get(pk=stock_id)
+                    if cantidad <= 0 or cantidad > Decimal(stock.cantidad_disponible or 0):
+                        messages.error(request, f"{stock.codigo}: disponible no reservado {stock.cantidad_disponible}.")
+                        return render(request, "inventario/salida_form.html", {"salida_controlada": True})
+
                 salida = InventoryExit.objects.create(
+                    empresa=empresa,
                     destino=(request.POST.get("destino") or "").strip(),
                     solicitado_por=(request.POST.get("solicitado_por") or "").strip(),
                     recibido_por=(request.POST.get("recibido_por") or "").strip(),
@@ -1696,22 +1730,31 @@ def salida_nueva(request):
                     comentarios=(request.POST.get("comentarios") or "").strip(),
                     creado_por=request.user,
                 )
-                InventoryExitLine.objects.bulk_create([
+                lineas = [
                     InventoryExitLine(
                         salida=salida,
-                        catalogo=f["catalogo"],
-                        catalogo_item_id=f["catalogo_id"],
-                        codigo=f["codigo"],
-                        descripcion=f["descripcion"],
-                        unidad=f["unidad"],
-                        cantidad=f["cantidad"],
-                        numero_serial=f["serial"],
+                        catalogo=catalogo, catalogo_item_id=f["item"].pk,
+                        codigo=f["item"].codigo or "", descripcion=f["item"].descripcion or "",
+                        unidad=f["item"].unidad_medida or "UND", cantidad=f["cantidad"], numero_serial=f["serial"],
                     ) for f in filas
-                ])
+                ]
+                InventoryExitLine.objects.bulk_create(lineas)
+                for fila in filas:
+                    stock = InventoryStock.objects.select_for_update().get(pk=fila["stock"].pk)
+                    saldo_anterior = Decimal(stock.cantidad_fisica or 0)
+                    costo = Decimal(stock.costo_promedio or 0)
+                    stock.cantidad_fisica = saldo_anterior - fila["cantidad"]
+                    stock.save(update_fields=["cantidad_fisica", "actualizado_en"])
+                    InventoryMovement.objects.create(
+                        stock=stock, tipo=InventoryMovement.Tipo.ENTREGA, cantidad=-fila["cantidad"],
+                        costo_unitario=costo, saldo_anterior=saldo_anterior, saldo_nuevo=stock.cantidad_fisica,
+                        costo_promedio_anterior=costo, costo_promedio_nuevo=costo, referencia=salida.codigo,
+                        motivo=f"Salida sin PAW a {salida.destino}. {salida.motivo}".strip(), creado_por=request.user,
+                    )
             messages.success(request, f"Salida {salida.codigo} creada correctamente.")
             return redirect("inventario:salida_detail", pk=salida.pk)
 
-    return render(request, "inventario/salida_form.html")
+    return render(request, "inventario/salida_form.html", {"salida_controlada": True})
 
 
 @login_required
@@ -1943,6 +1986,7 @@ def buscar_items_inventario(request):
         .order_by("codigo")[:20]
     )
 
+    controlar_stock = request.GET.get("con_stock") == "1"
     resultados = [{
         "catalogo": catalogo,
         "id": item.pk,
@@ -1950,6 +1994,7 @@ def buscar_items_inventario(request):
         "descripcion": item.descripcion or "",
         "unidad": item.unidad_medida or "UND",
         "label": f"{item.codigo} - {item.descripcion[:100]}",
+        "disponible": str((InventoryStock.objects.filter(empresa=empresa, catalogo=catalogo, catalogo_item_id=item.pk).first().cantidad_disponible) if controlar_stock and InventoryStock.objects.filter(empresa=empresa, catalogo=catalogo, catalogo_item_id=item.pk).exists() else Decimal("0")),
     } for item in qs]
 
     return JsonResponse({"results": resultados})

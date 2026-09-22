@@ -201,6 +201,11 @@ class DeliveryPendingCancellation(models.Model):
 class InventoryExit(models.Model):
     """Salida física de componentes que no está asociada a un PAW."""
 
+    empresa = models.CharField(
+        max_length=12,
+        choices=[("IMPETUS", "IMPETUS HPS"), ("OIL_GAS", "OIL & GAS SUPPORT")],
+        default="IMPETUS",
+    )
     destino = models.CharField(max_length=160)
     solicitado_por = models.CharField(max_length=160, blank=True)
     recibido_por = models.CharField(max_length=160, blank=True)

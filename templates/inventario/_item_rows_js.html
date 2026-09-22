@@ -14,8 +14,8 @@
           <input type="hidden" name="item_catalogo[]" class="item-catalogo">
           <input type="hidden" name="item_catalogo_id[]" class="item-catalogo-id">
         </td>
-        <td><input class="form-control item-codigo" name="item_codigo[]" placeholder="Parte número / código"></td>
-        <td><input class="form-control item-descripcion" name="item_descripcion[]" required placeholder="Descripción"></td>
+        <td><input class="form-control item-codigo" name="item_codigo[]" placeholder="Parte número / código" {% if salida_controlada %}readonly{% endif %}></td>
+        <td><input class="form-control item-descripcion" name="item_descripcion[]" required placeholder="Descripción" {% if salida_controlada %}readonly{% endif %}></td>
         <td style="width:110px"><input class="form-control" name="item_cantidad[]" type="number" min="0" step="0.001" value="1" required></td>
         <td style="width:100px"><input class="form-control item-unidad" name="item_unidad[]" value="UND"></td>
         <td><input class="form-control" name="item_serial[]" placeholder="Serial (opcional)"></td>
@@ -100,18 +100,18 @@
       try{
         const url = searchUrl
           + '?empresa=' + encodeURIComponent(empresa)
-          + '&q=' + encodeURIComponent(input.value.trim());
+          + '&q=' + encodeURIComponent(input.value.trim()){% if salida_controlada %} + '&con_stock=1'{% endif %};
         const res = await fetch(url);
         const data = await res.json();
         box.innerHTML = (data.results || []).map(x => `
-          <button type="button" class="search-result"
+          <button type="button" class="search-result" ${Number(x.disponible || 0) <= 0 && {{ salida_controlada|yesno:"true,false" }} ? 'disabled title="Sin disponible"' : ''}
             data-id="${x.id}" data-catalogo="${x.catalogo}"
             data-codigo="${String(x.codigo).replace(/"/g,'&quot;')}"
             data-descripcion="${String(x.descripcion).replace(/"/g,'&quot;')}"
             data-unidad="${String(x.unidad).replace(/"/g,'&quot;')}"
             data-label="${String(x.label).replace(/"/g,'&quot;')}">
-            <strong>${x.codigo}</strong> — ${x.descripcion}<small>${x.catalogo}</small>
-          </button>`).join('') || '<div class="search-empty">Sin coincidencias. Puedes diligenciar manualmente.</div>';
+            <strong>${x.codigo}</strong> — ${x.descripcion}<small>${x.catalogo}{% if salida_controlada %} · Disponible: ${x.disponible || 0}{% endif %}</small>
+          </button>`).join('') || '<div class="search-empty">Sin coincidencias en el catálogo.</div>';
       }catch(err){
         box.innerHTML='';
       }
