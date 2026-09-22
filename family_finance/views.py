@@ -11,7 +11,7 @@ from django.utils import timezone
 from . import family_messages as messages
 from .decorators import family_member_required, manager_required, owner_required
 from .forms import (
-    AllocationForm, ExpenseForm, ExtraRequestForm, FamilyMemberCreationForm,
+    AllocationForm, ExpenseForm, ExistingFamilyMemberForm, ExtraRequestForm, FamilyMemberCreationForm,
     FixedExpenseForm, HouseholdSetupForm, IncomeForm, MonthlyPlanForm,
     PersonalBudgetHeaderForm, PersonalBudgetLineForm, SavingsGoalForm,
     WalletTransferForm,
@@ -88,6 +88,9 @@ def dashboard(request):
         status=ExtraRequest.Status.PENDING
     ).count()
     if membership.can_manage:
+        personal_members = request.household.memberships.filter(
+            active=True,
+        ).exclude(role=FamilyMembership.Role.OWNER)
         context.update({
             "totals": plan_totals(plan),
             "pending_budgets": plan.personal_budgets.filter(
@@ -96,14 +99,14 @@ def dashboard(request):
             "pending_requests": plan.extra_requests.filter(
                 status=ExtraRequest.Status.PENDING
             ).select_related("member", "category"),
-            "children_summaries": [
-                {"member": child, **personal_summary(plan, child)}
-                for child in request.household.memberships.filter(
-                    role=FamilyMembership.Role.CHILD, active=True
-                )
+            "personal_summaries": [
+                {"member": member, **personal_summary(plan, member)}
+                for member in personal_members
             ],
+            "my_personal": personal_summary(plan, membership)
+            if membership.role == FamilyMembership.Role.ADMIN else None,
             "fixed_expenses": plan.fixed_expenses.select_related("category"),
-            "incomes": plan.incomes.all(),
+            "incomes": plan.incomes.select_related("created_by"),
         })
     else:
         context.update({
@@ -131,6 +134,26 @@ def member_create(request):
         return redirect("family_finance:dashboard")
     return render(request, "family_finance/form.html", {
         "form": form, "title": "Agregar integrante", "submit_label": "Crear acceso"
+    })
+
+
+@owner_required
+def member_link_existing(request):
+    form = ExistingFamilyMemberForm(request.POST or None, household=request.household)
+    if request.method == "POST" and form.is_valid():
+        member = FamilyMembership.objects.create(
+            household=request.household,
+            user=form.cleaned_data["user"],
+            display_name=form.cleaned_data["display_name"],
+            role=form.cleaned_data["role"],
+        )
+        messages.success(request, f"{member.display_name} fue vinculado a la familia con su usuario actual.")
+        return redirect("family_finance:dashboard")
+    return render(request, "family_finance/form.html", {
+        "form": form,
+        "title": "Vincular usuario existente",
+        "submit_label": "Vincular a la familia",
+        "helper": "Úselo para su esposa si ya tiene acceso a IMPETUS Control.",
     })
 
 
@@ -270,7 +293,7 @@ def allocation_edit(request, item_id):
 @family_member_required
 def my_budget(request):
     membership = request.family_membership
-    if membership.role != FamilyMembership.Role.CHILD:
+    if membership.role == FamilyMembership.Role.OWNER:
         return redirect("family_finance:dashboard")
     plan = _selected_plan(request)
     if not plan:
@@ -294,7 +317,7 @@ def my_budget(request):
 @family_member_required
 def budget_line_create(request):
     membership = request.family_membership
-    if membership.role != FamilyMembership.Role.CHILD:
+    if membership.role == FamilyMembership.Role.OWNER:
         raise Http404
     plan = _selected_plan(request)
     if not plan:
@@ -320,7 +343,7 @@ def budget_line_create(request):
 
 @family_member_required
 def budget_line_delete(request, line_id):
-    if request.method != "POST" or request.family_membership.role != FamilyMembership.Role.CHILD:
+    if request.method != "POST" or request.family_membership.role == FamilyMembership.Role.OWNER:
         raise Http404
     line = get_object_or_404(
         PersonalBudgetLine,
@@ -343,7 +366,7 @@ def budget_line_delete(request, line_id):
 
 @family_member_required
 def budget_submit(request):
-    if request.method != "POST" or request.family_membership.role != FamilyMembership.Role.CHILD:
+    if request.method != "POST" or request.family_membership.role == FamilyMembership.Role.OWNER:
         raise Http404
     plan = _selected_plan(request)
     budget = get_object_or_404(
@@ -398,6 +421,30 @@ def budget_review(request, budget_id):
     return render(request, "family_finance/review_budget.html", {"budget": budget})
 
 
+@owner_required
+def budget_reopen(request, budget_id):
+    if request.method != "POST":
+        raise Http404
+    budget = get_object_or_404(
+        PersonalBudget.objects.prefetch_related("lines"),
+        pk=budget_id, plan__household=request.household,
+    )
+    if budget.status in {PersonalBudget.Status.REJECTED, PersonalBudget.Status.APPROVED}:
+        with transaction.atomic():
+            budget.lines.update(approved_amount=ZERO)
+            budget.status = PersonalBudget.Status.CHANGES
+            budget.reviewer_comment = ""
+            budget.reviewed_by = request.user
+            budget.reviewed_at = timezone.now()
+            budget.save(update_fields=[
+                "status", "reviewer_comment", "reviewed_by", "reviewed_at"
+            ])
+        messages.success(request, f"El presupuesto de {budget.member.display_name} quedó abierto para editar.")
+    else:
+        messages.info(request, "Ese presupuesto ya se encuentra disponible para editar.")
+    return redirect(f"{redirect('family_finance:dashboard').url}?plan={budget.plan_id}")
+
+
 @family_member_required
 def expense_list(request):
     plan = _selected_plan(request)
@@ -415,18 +462,22 @@ def _category_limit(plan, membership, category):
     extras = plan.extra_requests.filter(
         member=membership, category=category, status=ExtraRequest.Status.APPROVED
     ).aggregate(total=Sum("approved_amount"))["total"] or ZERO
-    if membership.role == FamilyMembership.Role.CHILD:
-        base = PersonalBudgetLine.objects.filter(
-            budget__plan=plan, budget__member=membership,
-            budget__status=PersonalBudget.Status.APPROVED, category=category,
-        ).aggregate(total=Sum("approved_amount"))["total"] or ZERO
+    personal_lines = PersonalBudgetLine.objects.filter(
+        budget__plan=plan, budget__member=membership,
+        budget__status=PersonalBudget.Status.APPROVED, category=category,
+    )
+    if membership.role == FamilyMembership.Role.CHILD or personal_lines.exists():
+        base = personal_lines.aggregate(total=Sum("approved_amount"))["total"] or ZERO
+        spent = plan.expenses.filter(member=membership, category=category).aggregate(
+            total=Sum("amount")
+        )["total"] or ZERO
     else:
         base = plan.allocations.filter(category=category).aggregate(
             total=Sum("planned_amount")
         )["total"] or ZERO
-    spent = plan.expenses.filter(category=category).aggregate(
-        total=Sum("amount")
-    )["total"] or ZERO
+        spent = plan.expenses.filter(category=category).aggregate(
+            total=Sum("amount")
+        )["total"] or ZERO
     return base + extras - spent
 
 
@@ -440,7 +491,7 @@ def expense_create(request):
     form = ExpenseForm(
         request.POST or None, request.FILES or None,
         household=request.household,
-        child=membership.role == FamilyMembership.Role.CHILD,
+        child=membership.role != FamilyMembership.Role.OWNER,
     )
     if request.method == "POST" and form.is_valid():
         limit = _category_limit(plan, membership, form.cleaned_data["category"])
@@ -468,7 +519,7 @@ def extra_request_create(request):
         return redirect("family_finance:dashboard")
     form = ExtraRequestForm(
         request.POST or None, household=request.household,
-        child=request.family_membership.role == FamilyMembership.Role.CHILD,
+        child=request.family_membership.role != FamilyMembership.Role.OWNER,
     )
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)

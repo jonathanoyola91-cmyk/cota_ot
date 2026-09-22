@@ -82,6 +82,19 @@ class AccessTests(FamilyBaseTest):
         self.assertContains(response, "Pendiente del propietario")
         self.assertNotContains(response, reverse("family_finance:request_review", args=[request_item.pk]))
 
+    def test_spouse_has_individual_budget_access_and_her_income_counts_for_home(self):
+        self.plan.incomes.create(
+            name="Ingreso de mamá", expected_amount=Decimal("2000000"),
+            received_amount=Decimal("1800000"), created_by=self.spouse_user,
+        )
+        self.client.force_login(self.spouse_user)
+        response = self.client.get(reverse("family_finance:dashboard"), {"plan": self.plan.pk})
+        self.assertContains(response, "Mi presupuesto personal")
+        self.assertContains(response, "Ingresos familiares")
+        self.assertContains(response, "Ingreso de mamá")
+        response = self.client.get(reverse("family_finance:my_budget"), {"plan": self.plan.pk})
+        self.assertEqual(response.status_code, 200)
+
     def test_employee_cannot_discover_family_module(self):
         self.client.force_login(self.employee)
         response = self.client.get(reverse("family_finance:dashboard"))
@@ -93,6 +106,19 @@ class AccessTests(FamilyBaseTest):
         self.assertRedirects(response, reverse("family_finance:dashboard"))
         response = self.client.get(reverse("family_finance:member_create"))
         self.assertRedirects(response, reverse("family_finance:dashboard"))
+
+    def test_owner_can_link_existing_company_user_as_spouse(self):
+        company_user = User.objects.create_user("gerencia", password="test12345")
+        self.client.force_login(self.owner_user)
+        response = self.client.post(reverse("family_finance:member_link_existing"), {
+            "user": company_user.pk,
+            "display_name": "Esposa",
+            "role": FamilyMembership.Role.ADMIN,
+        })
+        self.assertRedirects(response, reverse("family_finance:dashboard"))
+        self.assertTrue(FamilyMembership.objects.filter(
+            household=self.household, user=company_user, role=FamilyMembership.Role.ADMIN
+        ).exists())
 
     def test_spouse_cannot_approve_requests(self):
         item = ExtraRequest.objects.create(

@@ -59,6 +59,27 @@ class FamilyMemberCreationForm(UserCreationForm):
         self.fields["username"].help_text = "Se usará para ingresar a IMPETUS Control."
 
 
+class ExistingFamilyMemberForm(forms.Form):
+    user = forms.ModelChoiceField(label="Usuario existente", queryset=User.objects.none())
+    display_name = forms.CharField(label="Nombre para mostrar", max_length=100)
+    role = forms.ChoiceField(
+        label="Rol familiar",
+        choices=[
+            (FamilyMembership.Role.ADMIN, "Esposa/o · administra el presupuesto"),
+            (FamilyMembership.Role.CHILD, "Hijo/a · administra solo su presupuesto"),
+        ],
+    )
+
+    def __init__(self, *args, household=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        existing_members = household.memberships.values_list("user_id", flat=True)
+        self.fields["user"].queryset = User.objects.exclude(pk__in=existing_members).order_by(
+            "first_name", "username"
+        )
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "form-control"
+
+
 class MonthlyPlanForm(StyledModelForm):
     copy_previous = forms.BooleanField(
         label="Copiar gastos fijos y metas del mes anterior", required=False, initial=True
