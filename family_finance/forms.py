@@ -133,7 +133,10 @@ class FixedExpenseForm(StyledModelForm):
 class DebtForm(StyledModelForm):
     class Meta:
         model = Debt
-        fields = ["category", "name", "bank", "opening_balance", "monthly_payment"]
+        fields = [
+            "category", "name", "bank", "opening_balance", "monthly_payment",
+            "monthly_interest_rate", "active",
+        ]
 
     def __init__(self, *args, household=None, **kwargs):
         super().__init__(*args, **kwargs)

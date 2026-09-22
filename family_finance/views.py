@@ -205,6 +205,37 @@ def plan_create(request):
 
 
 @manager_required
+def plan_copy_next_month(request, plan_id):
+    if request.method != "POST":
+        raise Http404
+    previous = _plan_for_household(request, plan_id)
+    year, month = previous.year, previous.month + 1
+    if month == 13:
+        year, month = year + 1, 1
+    plan, created = MonthlyPlan.objects.get_or_create(
+        household=request.household, year=year, month=month,
+        defaults={"created_by": request.user, "savings_target": previous.savings_target},
+    )
+    if not created:
+        messages.info(request, f"{plan.month_label} ya existe; no se duplicó información.")
+        return redirect(f"{redirect('family_finance:dashboard').url}?plan={plan.pk}")
+    FixedExpense.objects.bulk_create([
+        FixedExpense(
+            plan=plan, category=item.category, name=item.name,
+            budgeted_amount=item.budgeted_amount, due_date=None,
+            recurring=item.recurring, notes=item.notes, created_by=request.user,
+        )
+        for item in previous.fixed_expenses.filter(recurring=True)
+    ])
+    BudgetAllocation.objects.bulk_create([
+        BudgetAllocation(plan=plan, category=item.category, planned_amount=item.planned_amount, notes=item.notes)
+        for item in previous.allocations.all()
+    ], ignore_conflicts=True)
+    messages.success(request, f"{plan.month_label} fue creado con los gastos recurrentes y metas del mes anterior.")
+    return redirect(f"{redirect('family_finance:dashboard').url}?plan={plan.pk}")
+
+
+@manager_required
 def income_create(request, plan_id):
     plan = _plan_for_household(request, plan_id)
     form = IncomeForm(request.POST or None)
@@ -265,6 +296,17 @@ def fixed_expense_edit(request, item_id):
 
 
 @manager_required
+def fixed_expense_delete(request, item_id):
+    if request.method != "POST":
+        raise Http404
+    item = get_object_or_404(FixedExpense, pk=item_id, plan__household=request.household)
+    plan_id = item.plan_id
+    item.delete()
+    messages.success(request, "La obligación fue eliminada de este mes.")
+    return redirect(f"{redirect('family_finance:dashboard').url}?plan={plan_id}")
+
+
+@manager_required
 def debt_create(request):
     plan = _selected_plan(request)
     if not plan:
@@ -293,6 +335,28 @@ def debt_create(request):
         "form": form, "title": "Registrar deuda bancaria",
         "submit_label": "Crear deuda",
         "helper": "Registre el saldo que aún deben hoy; cada pago posterior reducirá ese valor.",
+    })
+
+
+@manager_required
+def debt_edit(request, debt_id):
+    debt = get_object_or_404(Debt, pk=debt_id, household=request.household)
+    previous_name = debt.name
+    form = DebtForm(request.POST or None, instance=debt, household=request.household)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            debt = form.save()
+            FixedExpense.objects.filter(
+                plan__household=request.household, name=f"Cuota · {previous_name}"
+            ).update(
+                name=f"Cuota · {debt.name}", category=debt.category,
+                budgeted_amount=debt.monthly_payment,
+            )
+        messages.success(request, "Deuda actualizada. Sus cuotas mensuales fueron sincronizadas.")
+        return redirect(f"{redirect('family_finance:dashboard').url}?plan={_selected_plan(request).pk}")
+    return render(request, "family_finance/form.html", {
+        "form": form, "title": f"Editar deuda · {debt.name}", "submit_label": "Guardar deuda",
+        "helper": "La tasa debe ser mensual (%). Si el crédito no cobra intereses, escriba 0.",
     })
 
 
@@ -531,6 +595,43 @@ def budget_review(request, budget_id):
             messages.success(request, "Decisiones por línea registradas.")
             return redirect(f"{redirect('family_finance:dashboard').url}?plan={budget.plan_id}")
     return render(request, "family_finance/review_budget.html", {"budget": budget})
+
+
+def _refresh_budget_status(budget, user):
+    lines = budget.lines.all()
+    if lines.filter(status=PersonalBudgetLine.Status.APPROVED).exists():
+        status = PersonalBudget.Status.APPROVED
+    elif lines.exists() and not lines.filter(status=PersonalBudgetLine.Status.PENDING).exists():
+        status = PersonalBudget.Status.REJECTED
+    else:
+        status = PersonalBudget.Status.SUBMITTED
+    budget.status = status
+    budget.reviewed_by = user
+    budget.reviewed_at = timezone.now()
+    budget.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+
+
+@owner_required
+def budget_line_review(request, line_id):
+    if request.method != "POST":
+        raise Http404
+    line = get_object_or_404(
+        PersonalBudgetLine.objects.select_related("budget__plan"),
+        pk=line_id, budget__plan__household=request.household,
+    )
+    action = request.POST.get("action")
+    if action not in {"approve", "reject"}:
+        raise Http404
+    amount = ZERO if action == "reject" else _money(request.POST.get("approved_amount", "0"))
+    if amount is None:
+        messages.error(request, "El valor aprobado no es válido.")
+        return redirect("family_finance:budget_review", budget_id=line.budget_id)
+    line.status = PersonalBudgetLine.Status.APPROVED if action == "approve" else PersonalBudgetLine.Status.REJECTED
+    line.approved_amount = amount
+    line.save(update_fields=["status", "approved_amount"])
+    _refresh_budget_status(line.budget, request.user)
+    messages.success(request, f"{line.description}: {'aprobado' if action == 'approve' else 'rechazado'}.")
+    return redirect("family_finance:budget_review", budget_id=line.budget_id)
 
 
 @owner_required

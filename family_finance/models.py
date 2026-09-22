@@ -217,6 +217,11 @@ class Debt(models.Model):
         "cuota mensual", max_digits=14, decimal_places=2,
         validators=MONEY_VALIDATORS,
     )
+    monthly_interest_rate = models.DecimalField(
+        "tasa de interés mensual (%)", max_digits=7, decimal_places=4,
+        default=ZERO, validators=MONEY_VALIDATORS,
+        help_text="Use la tasa mes vencido. Para un préstamo sin intereses escriba 0.",
+    )
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -234,6 +239,22 @@ class Debt(models.Model):
     @property
     def paid_percent(self):
         return round((self.principal_paid / self.opening_balance) * 100) if self.opening_balance else 100
+
+    @property
+    def total_paid(self):
+        return self.payments.aggregate(total=Sum("payment_amount"))["total"] or ZERO
+
+    @property
+    def interest_paid(self):
+        return self.payments.aggregate(total=Sum("interest_amount"))["total"] or ZERO
+
+    @property
+    def estimated_next_interest(self):
+        return (self.remaining_balance * self.monthly_interest_rate / Decimal("100")).quantize(Decimal("0.01"))
+
+    @property
+    def estimated_next_principal(self):
+        return max(ZERO, self.monthly_payment - self.estimated_next_interest)
 
     def __str__(self):
         return self.name

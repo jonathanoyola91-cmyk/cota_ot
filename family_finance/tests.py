@@ -236,6 +236,21 @@ class BudgetApprovalTests(FamilyBaseTest):
         self.assertEqual(second_line.status, PersonalBudgetLine.Status.REJECTED)
         self.assertEqual(second_line.approved_amount, Decimal("0"))
 
+    def test_owner_can_approve_one_line_directly_before_full_submission(self):
+        self.budget.status = PersonalBudget.Status.DRAFT
+        self.budget.save(update_fields=["status"])
+        self.client.force_login(self.owner_user)
+        response = self.client.post(
+            reverse("family_finance:budget_line_review", args=[self.line.pk]),
+            {"action": "approve", "approved_amount": "55000"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.line.refresh_from_db()
+        self.budget.refresh_from_db()
+        self.assertEqual(self.line.status, PersonalBudgetLine.Status.APPROVED)
+        self.assertEqual(self.line.approved_amount, Decimal("55000"))
+        self.assertEqual(self.budget.status, PersonalBudget.Status.APPROVED)
+
     def test_child_cannot_spend_above_approved_category(self):
         self.budget.status = PersonalBudget.Status.APPROVED
         self.budget.save(update_fields=["status"])
@@ -327,6 +342,33 @@ class RequestAndWalletTests(FamilyBaseTest):
             payment_date=date(2026, 9, 22), created_by=self.owner_user,
         )
         self.assertEqual(debt.remaining_balance, Decimal("4700000"))
+
+    def test_debt_estimates_interest_from_monthly_rate(self):
+        category = self.household.categories.get(name="Tarjetas de crédito")
+        debt = Debt.objects.create(
+            household=self.household, category=category, name="Crédito",
+            opening_balance=Decimal("1000000"), monthly_payment=Decimal("120000"),
+            monthly_interest_rate=Decimal("2"),
+        )
+        self.assertEqual(debt.estimated_next_interest, Decimal("20000.00"))
+        self.assertEqual(debt.estimated_next_principal, Decimal("100000.00"))
+
+    def test_copy_month_carries_only_recurring_fixed_expenses(self):
+        fixed = self.household.categories.get(name="Servicios públicos")
+        self.plan.fixed_expenses.create(
+            category=fixed, name="Internet", budgeted_amount=Decimal("100000"),
+            recurring=True, created_by=self.owner_user,
+        )
+        self.plan.fixed_expenses.create(
+            category=fixed, name="Reparación única", budgeted_amount=Decimal("50000"),
+            recurring=False, created_by=self.owner_user,
+        )
+        self.client.force_login(self.owner_user)
+        response = self.client.post(reverse("family_finance:plan_copy_next_month", args=[self.plan.pk]))
+        self.assertEqual(response.status_code, 302)
+        copied = MonthlyPlan.objects.get(household=self.household, year=2026, month=10)
+        self.assertTrue(copied.fixed_expenses.filter(name="Internet").exists())
+        self.assertFalse(copied.fixed_expenses.filter(name="Reparación única").exists())
 
     def test_child_login_goes_directly_to_family_module(self):
         response = self.client.post(reverse("accounts:login"), {
