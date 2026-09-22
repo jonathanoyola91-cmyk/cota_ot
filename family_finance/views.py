@@ -21,7 +21,10 @@ from .models import (
     FixedExpense, Household, Income, MonthlyPlan, PersonalBudget,
     PersonalBudgetLine, SavingsGoal, WalletTransfer, ZERO,
 )
-from .services import category_rows, personal_summary, plan_totals, seed_categories, spending_ranking
+from .services import (
+    category_rows, personal_summary, plan_totals, seed_categories,
+    smart_recommendations, spending_ranking,
+)
 
 
 def _selected_plan(request):
@@ -94,6 +97,7 @@ def dashboard(request):
         context.update({
             "totals": plan_totals(plan),
             "spending_ranking": spending_ranking(plan),
+            "smart_recommendations": smart_recommendations(plan),
             "pending_budgets": plan.personal_budgets.filter(
                 status=PersonalBudget.Status.SUBMITTED
             ).select_related("member"),

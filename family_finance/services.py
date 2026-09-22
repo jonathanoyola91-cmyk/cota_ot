@@ -117,6 +117,79 @@ def spending_ranking(plan, limit=6):
     return sorted(rows, key=lambda row: row["amount"], reverse=True)[:limit]
 
 
+def smart_recommendations(plan):
+    """Short, concrete recommendations from the family's own registered data."""
+    recommendations = []
+    totals = plan_totals(plan)
+    rows = category_rows(plan)
+
+    exceeded = [row for row in rows if row["raw_percent"] >= 100]
+    caution = [row for row in rows if 75 <= row["raw_percent"] < 100]
+    if exceeded:
+        row = max(exceeded, key=lambda item: item["raw_percent"])
+        recommendations.append({
+            "level": "red",
+            "title": f"Detener gasto en {row['allocation'].category.name}",
+            "message": (
+                f"Ya se superó la meta por ${abs(row['remaining']):,.0f}. "
+                "No autoricen nuevos gastos de esta categoría sin revisar el presupuesto."
+            ),
+        })
+    elif caution:
+        row = max(caution, key=lambda item: item["raw_percent"])
+        recommendations.append({
+            "level": "yellow",
+            "title": f"Reducir el ritmo en {row['allocation'].category.name}",
+            "message": (
+                f"Ya usaron {row['raw_percent']}% de la meta. Quedan ${max(ZERO, row['remaining']):,.0f} "
+                "para el resto del mes."
+            ),
+        })
+
+    if totals["fixed_ratio"] >= 75:
+        recommendations.append({
+            "level": "red",
+            "title": "Primero cubrir las obligaciones del hogar",
+            "message": (
+                f"Los gastos fijos representan {totals['fixed_ratio']}% del ingreso recibido. "
+                "Aplacen compras no necesarias hasta pagar vivienda, colegio, servicios y deudas."
+            ),
+        })
+    elif totals["fixed_ratio"] >= 60:
+        recommendations.append({
+            "level": "yellow",
+            "title": "Cuidar las compras variables",
+            "message": (
+                f"Los gastos fijos ya usan {totals['fixed_ratio']}% del ingreso recibido. "
+                "Revisen cada compra adicional antes de autorizarla."
+            ),
+        })
+
+    ranking = spending_ranking(plan, limit=2)
+    market = next((item for item in ranking if item["name"] == "Mercado"), None)
+    food_out = next((item for item in ranking if item["name"] == "Comidas fuera"), None)
+    if food_out and (not market or food_out["amount"] >= market["amount"]):
+        recommendations.append({
+            "level": "yellow",
+            "title": "Priorizar mercado antes de comidas fuera",
+            "message": (
+                f"Comidas fuera suma ${food_out['amount']:,.0f}. Planeen el mercado y las comidas de la semana "
+                "antes de destinar más dinero a salidas o domicilios."
+            ),
+        })
+
+    if not recommendations:
+        recommendations.append({
+            "level": "green",
+            "title": "Van bien por ahora",
+            "message": (
+                "No hay categorías en alerta. Mantengan el registro diario y revisen el tablero "
+                "antes de una compra importante."
+            ),
+        })
+    return recommendations[:3]
+
+
 def personal_summary(plan, membership):
     budget = plan.personal_budgets.filter(member=membership).first()
     approved = budget.approved_total if budget and budget.status == PersonalBudget.Status.APPROVED else ZERO

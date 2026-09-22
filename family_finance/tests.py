@@ -9,7 +9,7 @@ from .models import (
     BudgetAllocation, Category, Expense, ExtraRequest, FamilyMembership,
     Household, MonthlyPlan, PersonalBudget, PersonalBudgetLine, WalletTransfer,
 )
-from .services import seed_categories, spending_ranking
+from .services import seed_categories, smart_recommendations, spending_ranking
 
 
 class FamilyBaseTest(TestCase):
@@ -88,6 +88,18 @@ class AccessTests(FamilyBaseTest):
         ranking = spending_ranking(self.plan)
         self.assertEqual(ranking[0]["name"], "Comidas fuera")
         self.assertEqual(ranking[0]["amount"], Decimal("200000"))
+
+    def test_smart_recommendation_warns_when_food_outpaces_market(self):
+        Expense.objects.create(
+            plan=self.plan, member=self.child, category=self.food,
+            description="Domicilios", amount=Decimal("250000"), date=date(2026, 9, 22),
+            source=Expense.Source.CASH,
+        )
+        recommendations = smart_recommendations(self.plan)
+        self.assertTrue(any(
+            item["title"] == "Priorizar mercado antes de comidas fuera"
+            for item in recommendations
+        ))
 
     def test_spouse_dashboard_renders_but_does_not_offer_approval_button(self):
         request_item = ExtraRequest.objects.create(
