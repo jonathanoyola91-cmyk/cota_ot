@@ -73,6 +73,15 @@ class AccessTests(FamilyBaseTest):
         self.client.force_login(user)
         self.assertEqual(self.client.get(reverse("family_finance:trial_family_create")).status_code, 404)
 
+    def test_regular_family_owner_cannot_open_existing_company_user_list(self):
+        user = User.objects.create_user("otro_padre_2", password="test12345")
+        other = Household.objects.create(name="Otra familia 2", owner=user)
+        FamilyMembership.objects.create(
+            household=other, user=user, display_name="Otro", role=FamilyMembership.Role.OWNER,
+        )
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("family_finance:member_link_existing")).status_code, 404)
+
     def test_business_messages_are_not_rendered_in_family_space(self):
         self.client.force_login(self.child_user)
         response = self.client.get("/pruebas/mensaje-empresa/", follow=True)

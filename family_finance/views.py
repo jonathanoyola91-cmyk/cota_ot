@@ -181,6 +181,8 @@ def member_create(request):
 
 @owner_required
 def member_link_existing(request):
+    if not request.user.is_superuser:
+        raise Http404
     form = ExistingFamilyMemberForm(request.POST or None, household=request.household)
     if request.method == "POST" and form.is_valid():
         member = FamilyMembership.objects.create(
