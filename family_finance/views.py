@@ -15,7 +15,7 @@ from .forms import (
     ExtraRequestForm, FamilyMemberCreationForm,
     FixedExpenseForm, HouseholdSetupForm, IncomeForm, MonthlyPlanForm,
     PersonalBudgetHeaderForm, PersonalBudgetLineForm, SavingsGoalForm,
-    WalletTransferForm,
+    TrialFamilyCreationForm, WalletTransferForm,
 )
 from .models import (
     BudgetAllocation, Category, Debt, DebtPayment, Expense, ExtraRequest, FamilyMembership,
@@ -71,6 +71,41 @@ def setup_household(request):
         messages.success(request, "La familia quedó configurada. Ya puedes crear el primer mes.")
         return redirect("family_finance:dashboard")
     return render(request, "family_finance/setup.html", {"form": form})
+
+
+@login_required
+def trial_family_create(request):
+    if not request.user.is_superuser:
+        raise Http404
+    form = TrialFamilyCreationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            user = form.save(commit=False)
+            user.email = form.cleaned_data["email"]
+            user.first_name = form.cleaned_data["display_name"]
+            user.is_staff = False
+            user.is_superuser = False
+            user.save()
+            household = Household.objects.create(
+                name=form.cleaned_data["family_name"], owner=user,
+            )
+            FamilyMembership.objects.create(
+                household=household, user=user,
+                display_name=form.cleaned_data["display_name"],
+                role=FamilyMembership.Role.OWNER,
+            )
+            seed_categories(household)
+        messages.success(
+            request,
+            f"Acceso creado para {form.cleaned_data['display_name']}. Envíale el enlace /familia/ y el usuario que registraste.",
+        )
+        return redirect("family_finance:dashboard")
+    return render(request, "family_finance/form.html", {
+        "form": form,
+        "title": "Crear familia de prueba",
+        "submit_label": "Crear acceso familiar",
+        "helper": "Este usuario será dueño solo de su propia familia; no tendrá permisos de IMPETUS Control.",
+    })
 
 
 @family_member_required

@@ -49,6 +49,30 @@ class FamilyBaseTest(TestCase):
 
 
 class AccessTests(FamilyBaseTest):
+    def test_superuser_can_create_isolated_trial_family(self):
+        self.client.force_login(self.owner_user)
+        response = self.client.post(reverse("family_finance:trial_family_create"), {
+            "username": "padre_prueba", "first_name": "Carlos", "email": "carlos@example.com",
+            "family_name": "Familia Cliente", "display_name": "Carlos",
+            "password1": "clave-segura-123", "password2": "clave-segura-123",
+        })
+        self.assertEqual(response.status_code, 302)
+        user = User.objects.get(username="padre_prueba")
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        membership = user.family_membership
+        self.assertEqual(membership.role, FamilyMembership.Role.OWNER)
+        self.assertEqual(membership.household.name, "Familia Cliente")
+
+    def test_regular_family_owner_cannot_create_trial_family(self):
+        user = User.objects.create_user("otro_padre", password="test12345")
+        other = Household.objects.create(name="Otra familia", owner=user)
+        FamilyMembership.objects.create(
+            household=other, user=user, display_name="Otro", role=FamilyMembership.Role.OWNER,
+        )
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("family_finance:trial_family_create")).status_code, 404)
+
     def test_business_messages_are_not_rendered_in_family_space(self):
         self.client.force_login(self.child_user)
         response = self.client.get("/pruebas/mensaje-empresa/", follow=True)

@@ -40,6 +40,28 @@ class HouseholdSetupForm(StyledModelForm):
         widgets = {"name": forms.TextInput(attrs={"placeholder": "Familia Oyola"})}
 
 
+class TrialFamilyCreationForm(UserCreationForm):
+    family_name = forms.CharField(
+        label="Nombre de la familia", max_length=120,
+        widget=forms.TextInput(attrs={"placeholder": "Familia Pérez"}),
+    )
+    display_name = forms.CharField(
+        label="Nombre del cabeza de familia", max_length=100,
+        widget=forms.TextInput(attrs={"placeholder": "Carlos Pérez"}),
+    )
+    email = forms.EmailField(label="Correo (opcional)", required=False)
+
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("username", "first_name", "email", "family_name", "display_name", "password1", "password2")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "form-control"
+        self.fields["username"].help_text = "Este será el usuario con el que ingresará la familia."
+
+
 class FamilyMemberCreationForm(UserCreationForm):
     display_name = forms.CharField(label="Nombre para mostrar", max_length=100)
     role = forms.ChoiceField(

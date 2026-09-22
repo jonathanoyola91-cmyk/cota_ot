@@ -8,6 +8,7 @@ app_name = "family_finance"
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("configurar/", views.setup_household, name="setup"),
+    path("prueba/nueva-familia/", views.trial_family_create, name="trial_family_create"),
     path("familia/agregar/", views.member_create, name="member_create"),
     path("familia/vincular-usuario/", views.member_link_existing, name="member_link_existing"),
     path("mes/nuevo/", views.plan_create, name="plan_create"),
