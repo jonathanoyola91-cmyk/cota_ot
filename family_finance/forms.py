@@ -188,4 +188,3 @@ class SavingsGoalForm(StyledModelForm):
         model = SavingsGoal
         fields = ["name", "target_amount", "saved_amount", "target_date"]
         widgets = {"target_date": forms.DateInput(attrs={"type": "date"})}
-

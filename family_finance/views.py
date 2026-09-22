@@ -279,7 +279,8 @@ def my_budget(request):
     budget, _ = PersonalBudget.objects.get_or_create(plan=plan, member=membership)
     form = PersonalBudgetHeaderForm(request.POST or None, instance=budget)
     if request.method == "POST" and form.is_valid() and budget.status in {
-        PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES
+        PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES,
+        PersonalBudget.Status.SUBMITTED,
     }:
         form.save()
         messages.success(request, "Tu mensaje quedó guardado.")
@@ -299,8 +300,11 @@ def budget_line_create(request):
     if not plan:
         return redirect("family_finance:dashboard")
     budget, _ = PersonalBudget.objects.get_or_create(plan=plan, member=membership)
-    if budget.status not in {PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES}:
-        messages.error(request, "Ese presupuesto ya fue enviado y no se puede modificar.")
+    if budget.status not in {
+        PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES,
+        PersonalBudget.Status.SUBMITTED,
+    }:
+        messages.error(request, "Ese presupuesto ya fue aprobado y no se puede modificar.")
         return redirect("family_finance:my_budget")
     form = PersonalBudgetLineForm(request.POST or None, household=request.household)
     if request.method == "POST" and form.is_valid():
@@ -324,8 +328,11 @@ def budget_line_delete(request, line_id):
         budget__member=request.family_membership,
         budget__plan__household=request.household,
     )
-    if line.budget.status not in {PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES}:
-        messages.error(request, "No se puede quitar un concepto después de enviarlo.")
+    if line.budget.status not in {
+        PersonalBudget.Status.DRAFT, PersonalBudget.Status.CHANGES,
+        PersonalBudget.Status.SUBMITTED,
+    }:
+        messages.error(request, "No se puede quitar un concepto después de aprobarlo.")
     else:
         plan_id = line.budget.plan_id
         line.delete()
