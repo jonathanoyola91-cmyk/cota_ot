@@ -89,6 +89,16 @@ class AccessTests(FamilyBaseTest):
         self.assertEqual(ranking[0]["name"], "Comidas fuera")
         self.assertEqual(ranking[0]["amount"], Decimal("200000"))
 
+    def test_unpaid_fixed_expense_still_appears_as_monthly_commitment(self):
+        fixed_category = self.household.categories.get(name="Servicios públicos")
+        self.plan.fixed_expenses.create(
+            category=fixed_category, name="Internet", budgeted_amount=Decimal("120000"),
+            paid_amount=Decimal("0"), created_by=self.owner_user,
+        )
+        ranking = spending_ranking(self.plan)
+        self.assertEqual(ranking[0]["name"], "Servicios públicos")
+        self.assertEqual(ranking[0]["amount"], Decimal("120000"))
+
     def test_smart_recommendation_warns_when_food_outpaces_market(self):
         Expense.objects.create(
             plan=self.plan, member=self.child, category=self.food,

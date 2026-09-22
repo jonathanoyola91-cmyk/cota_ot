@@ -37,6 +37,7 @@ def plan_totals(plan):
         "received_income": received_income,
         "fixed_budget": fixed_budget,
         "fixed_paid": fixed_paid,
+        "fixed_pending": max(ZERO, fixed_budget - fixed_paid),
         "variable_budget": variable_budget,
         "personal_approved": personal_approved,
         "spent": variable_spent,
@@ -91,7 +92,7 @@ def category_rows(plan, visible_to_family=True):
 
 
 def spending_ranking(plan, limit=6):
-    """Actual spending by category, including fixed payments and daily expenses."""
+    """Monthly financial pressure: fixed commitments plus daily spending."""
     totals = {}
     for row in plan.expenses.values("category__name", "category__color").annotate(
         amount=Sum("amount")
@@ -99,7 +100,7 @@ def spending_ranking(plan, limit=6):
         key = (row["category__name"], row["category__color"])
         totals[key] = totals.get(key, ZERO) + (row["amount"] or ZERO)
     for row in plan.fixed_expenses.values("category__name", "category__color").annotate(
-        amount=Sum("paid_amount")
+        amount=Sum("budgeted_amount")
     ):
         key = (row["category__name"], row["category__color"])
         totals[key] = totals.get(key, ZERO) + (row["amount"] or ZERO)
