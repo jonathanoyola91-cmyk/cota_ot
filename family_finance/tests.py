@@ -37,6 +37,9 @@ class FamilyBaseTest(TestCase):
             role=FamilyMembership.Role.CHILD,
         )
         seed_categories(self.household)
+        self.assertTrue(self.household.categories.filter(
+            name="Hogar y suscripciones", kind=Category.Kind.FIXED
+        ).exists())
         self.food = self.household.categories.get(name="Comidas fuera", kind=Category.Kind.VARIABLE)
         self.fun = self.household.categories.get(name="Diversión", kind=Category.Kind.CHILD)
         self.plan = MonthlyPlan.objects.create(

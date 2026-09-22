@@ -121,6 +121,7 @@ def seed_categories(household):
     defaults = [
         ("Arriendo o vivienda", Category.Kind.FIXED, "#475569"),
         ("Servicios públicos", Category.Kind.FIXED, "#0f766e"),
+        ("Hogar y suscripciones", Category.Kind.FIXED, "#7c3aed"),
         ("Colegio", Category.Kind.FIXED, "#7c3aed"),
         ("Transporte escolar", Category.Kind.FIXED, "#2563eb"),
         ("Salud y seguros", Category.Kind.FIXED, "#0891b2"),
@@ -142,4 +143,3 @@ def seed_categories(household):
         Category.objects.get_or_create(
             household=household, name=name, kind=kind, defaults={"color": color}
         )
-
