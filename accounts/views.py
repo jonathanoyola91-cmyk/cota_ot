@@ -16,6 +16,11 @@ def login_view(request):
 
         if user is not None:
             login(request, user)
+            next_url = request.POST.get("next") or request.GET.get("next")
+            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+                return redirect(next_url)
+            if hasattr(user, "family_membership") and not user.is_staff and not user.groups.exists():
+                return redirect("/familia/")
             return redirect("/dashboard/")
 
         messages.error(request, "Usuario o contraseña incorrectos.")

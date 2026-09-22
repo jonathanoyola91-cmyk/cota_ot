@@ -1,0 +1,9 @@
+{% extends "family_finance/base.html" %}
+{% block title %}Configurar familia{% endblock %}
+{% block content %}
+<div class="form-card card">
+  <div class="empty"><div class="icon">🏡</div><h2>Configuremos su presupuesto familiar</h2><p>Este espacio será privado. Usted quedará como propietario y único aprobador.</p></div>
+  <form method="post">{% csrf_token %}{% for field in form %}<div class="form-row">{{ field.label_tag }}{{ field }}{{ field.errors }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}</div>{% endfor %}<button class="btn" type="submit">Crear mi familia</button></form>
+</div>
+{% endblock %}
+

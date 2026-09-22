@@ -1,0 +1,7 @@
+{% extends "family_finance/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="hero"><div><h1>{{ title }}</h1>{% if helper %}<p>{{ helper }}</p>{% endif %}</div></div>
+<div class="form-card card"><form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="form-row">{% if field.field.widget.input_type == 'checkbox' %}<label>{{ field }} {{ field.label }}</label>{% else %}{{ field.label_tag }}{{ field }}{% endif %}{{ field.errors }}{% if field.help_text %}<span class="helptext">{{ field.help_text|safe }}</span>{% endif %}</div>{% endfor %}<div class="actions"><button class="btn" type="submit">{{ submit_label|default:"Guardar" }}</button><a class="btn ghost" href="{% url 'family_finance:dashboard' %}">Cancelar</a></div></form></div>
+{% endblock %}
+

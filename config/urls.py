@@ -27,5 +27,6 @@ urlpatterns = [
     path("campo/", include("campo.urls")),
     path("aprobacion/", include("aprobacion.urls")),
     path("auditoria/", include("auditoria.urls")),
+    path("familia/", include("family_finance.urls")),
     
 ]

@@ -279,8 +279,9 @@
                 </div>
             {% endif %}
 
-            <form method="post">
-                {% csrf_token %}
+        <form method="post">
+            {% csrf_token %}
+            {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
 
                 {{ form.non_field_errors }}
 

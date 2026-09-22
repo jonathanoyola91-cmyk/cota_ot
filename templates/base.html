@@ -288,6 +288,9 @@ setTimeout(function () {
             <a href="/admin/">Admin Django</a>
             <a href="/quotes/">Cotizaciones</a>
             <a href="/historial/">Historial</a>
+            {% if family_access %}
+            <a href="{% url 'family_finance:dashboard' %}">🏡 Presupuesto familiar</a>
+            {% endif %}
         </nav>
     </aside>
 
