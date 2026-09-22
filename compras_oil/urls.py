@@ -8,6 +8,7 @@ urlpatterns = [
     path("purchase-request/<int:pk>/pdf/", purchase_request_pdf, name="purchase_request_pdf"),
     path("purchase-request/<int:pk>/excel/", purchase_request_excel, name="purchase_request_excel"),
     path("", views.dashboard, name="dashboard"),
+    path("stock/nueva/", views.stock_request_create, name="stock_request_create"),
     path("historial/", views.historial_compras, name="historial"),
     path("paw/<int:pk>/", views.paw_detail, name="paw_detail"),
     path("linea/<int:linea_id>/enviar-finanzas/", views.enviar_linea_finanzas, name="enviar_linea_finanzas"),

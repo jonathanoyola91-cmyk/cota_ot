@@ -186,7 +186,7 @@ def inventario_dashboard(request):
     # (por stock o por recepción de compra) y aún no tienen entrega generada.
     candidatos_entrega = (
         PurchaseRequest.objects
-        .filter(inventario_revisado_en__isnull=False)
+        .filter(inventario_revisado_en__isnull=False, origen=PurchaseRequest.Origen.PAW)
         .exclude(estado="CERRADA")
         .exclude(bom__workorder__paw__estado_operativo__in=["FACTURADO", "RADICADO"])
         .select_related("bom", "bom__workorder")
@@ -805,18 +805,21 @@ def recepcion_detail(request, pk):
                 # Solo el incremento nuevo genera entrada física y Kardex.
                 if incremento > 0:
                     codigo = (linea.codigo or getattr(linea.purchase_line, "codigo", "") or "").strip()
-                    catalogo, CatalogModel = _catalog_model_for_empresa(InventoryStock.Empresa.IMPETUS)
+                    empresa_compra = getattr(
+                        recepcion.purchase_request, "empresa_destino", InventoryStock.Empresa.IMPETUS
+                    )
+                    catalogo, CatalogModel = _catalog_model_for_empresa(empresa_compra)
                     item = CatalogModel.objects.filter(codigo__iexact=codigo).first() if codigo else None
                     if not item:
                         transaction.set_rollback(True)
                         messages.error(
                             request,
-                            f"No se encontró el P/N {codigo or '-'} en el catálogo IMPETUS. "
+                            f"No se encontró el P/N {codigo or '-'} en el catálogo {empresa_compra}. "
                             "No se contabilizó la recepción."
                         )
                         return redirect("inventario:recepcion_detail", pk=recepcion.pk)
 
-                    stock = _get_or_create_stock(InventoryStock.Empresa.IMPETUS, item)
+                    stock = _get_or_create_stock(empresa_compra, item)
                     stock = InventoryStock.objects.select_for_update().get(pk=stock.pk)
 
                     saldo_anterior = Decimal(stock.cantidad_fisica or 0)
@@ -840,7 +843,8 @@ def recepcion_detail(request, pk):
                         estado=InventoryReservation.Estado.ACTIVA,
                     ).aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
                     pendiente_reserva = max(requerida - Decimal(ya_reservado_linea), Decimal("0"))
-                    a_reservar = min(incremento, pendiente_reserva)
+                    es_stock = recepcion.purchase_request.origen == "STOCK"
+                    a_reservar = Decimal("0") if es_stock else min(incremento, pendiente_reserva)
 
                     if a_reservar > 0:
                         InventoryReservation.objects.create(
@@ -864,8 +868,8 @@ def recepcion_detail(request, pk):
                         saldo_nuevo=saldo_nuevo,
                         costo_promedio_anterior=costo_anterior,
                         costo_promedio_nuevo=costo_nuevo,
-                        referencia=f"PAW-{recepcion.purchase_request.paw_numero}",
-                        motivo=f"Recepción de compra. Reserva automática: {a_reservar}",
+                        referencia=(f"STOCK-{recepcion.purchase_request.pk}" if es_stock else f"PAW-{recepcion.purchase_request.paw_numero}"),
+                        motivo=("Recepción de reposición de stock; disponible en bodega." if es_stock else f"Recepción de compra. Reserva automática: {a_reservar}"),
                         creado_por=request.user,
                     )
 

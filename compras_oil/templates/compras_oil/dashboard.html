@@ -1,7 +1,7 @@
 {% extends "dashboard/home.html" %}
 
 {% block title %}Compras OIL{% endblock %}
-{% block page_title %}Compras OIL · Solicitudes PAW{% endblock %}
+{% block page_title %}Compras OIL · Solicitudes{% endblock %}
 
 {% block content %}
 
@@ -326,7 +326,7 @@
         <div class="panel-head">
             <div>
                 <h2>Solicitudes activas</h2>
-                <p>Solo se muestran PAW abiertos. Las solicitudes cerradas quedan fuera del listado operativo.</p>
+                <p>Incluye compras para PAW y reposición de stock. Las solicitudes cerradas quedan fuera del listado operativo.</p>
             </div>
             <div class="actions">
                 <a class="btn-small" href="{% url 'compras_oil:historial' %}">Historial de compras</a>
@@ -337,7 +337,7 @@
             <table class="table-pro">
                 <thead>
                     <tr>
-                        <th>PAW</th>
+                        <th>Origen</th>
                         <th>Nombre</th>
                         <th>Estado</th>
                         <th>Avance</th>
@@ -352,13 +352,22 @@
                     {% for compra in compras %}
                     <tr>
                         <td>
-                            <span class="paw-number">{{ compra.paw_numero }}</span>
-                            <span class="paw-label">Solicitud de compra</span>
+                            {% if compra.origen == "STOCK" %}
+                                <span class="paw-number">STOCK #{{ compra.pk }}</span>
+                                <span class="paw-label">Reposición de bodega</span>
+                            {% else %}
+                                <span class="paw-number">PAW {{ compra.paw_numero }}</span>
+                                <span class="paw-label">Solicitud de compra</span>
+                            {% endif %}
                         </td>
 
                         <td>
                             <div class="nombre-paw">
-                                {{ compra.paw_nombre }}
+                                {% if compra.origen == "STOCK" %}
+                                    {{ compra.motivo_stock|default:"Reposición de stock / bodega" }}
+                                {% else %}
+                                    {{ compra.paw_nombre }}
+                                {% endif %}
                             </div>
                         </td>
 

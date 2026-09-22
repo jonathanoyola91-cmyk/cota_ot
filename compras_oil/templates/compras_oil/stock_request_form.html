@@ -1,0 +1,49 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Compra para stock{% endblock %}
+{% block page_title %}Nueva compra para stock / bodega{% endblock %}
+{% block content %}
+<div class="card shadow-sm" style="max-width:760px; margin:auto;">
+  <div class="card-body p-4">
+    <h4 class="mb-2">Reposición de stock</h4>
+    <p class="text-muted">Inventario solicita la reposición; Compras la cotiza y tramita. No crea cotización al cliente ni reserva para una PAW.</p>
+    <form method="post">{% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="mb-3"><label class="form-label fw-bold">Empresa destino</label>{{ form.empresa_destino }}</div>
+      <div class="mb-3 position-relative">
+        <label class="form-label fw-bold">Ítem de catálogo</label>
+        <input id="item-search" class="form-control" autocomplete="off" placeholder="Buscar por P/N o descripción...">
+        {{ form.catalogo_item_id }}
+        <div id="item-results" class="list-group position-absolute w-100" style="z-index:20;"></div>
+        <div id="item-selected" class="form-text">Selecciona el ítem desde el catálogo de la empresa.</div>
+        {% for error in form.catalogo_item_id.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="mb-3"><label class="form-label fw-bold">Cantidad</label>{{ form.cantidad }}</div>
+      <div class="mb-3"><label class="form-label fw-bold">Motivo stock</label>{{ form.motivo_stock }}</div>
+      <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">Crear solicitud de compra</button><a class="btn btn-outline-secondary" href="{% url 'inventario:dashboard' %}">Cancelar</a></div>
+    </form>
+  </div>
+</div>
+<script>
+(() => {
+  const empresa = document.querySelector('[name="empresa_destino"]');
+  const search = document.getElementById('item-search');
+  const itemId = document.querySelector('[name="catalogo_item_id"]');
+  const results = document.getElementById('item-results');
+  const selected = document.getElementById('item-selected');
+  const api = "{% url 'inventario:buscar_items_inventario' %}";
+  let timer;
+  const clear = () => { itemId.value=''; selected.textContent='Selecciona el ítem desde el catálogo de la empresa.'; results.innerHTML=''; };
+  empresa.addEventListener('change', () => { search.value=''; clear(); });
+  search.addEventListener('input', () => {
+    clear(); clearTimeout(timer);
+    const q = search.value.trim(); if(q.length < 2) return;
+    timer = setTimeout(async () => {
+      const res = await fetch(`${api}?empresa=${encodeURIComponent(empresa.value)}&q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      results.innerHTML = (data.results || []).map(x => `<button type="button" class="list-group-item list-group-item-action" data-id="${x.id}" data-label="${String(x.label).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><strong>${x.codigo}</strong> — ${x.descripcion}</button>`).join('') || '<div class="list-group-item text-muted">Sin coincidencias en este catálogo.</div>';
+    }, 250);
+  });
+  results.addEventListener('click', e => { const b=e.target.closest('[data-id]'); if(!b) return; itemId.value=b.dataset.id; search.value=b.dataset.label; selected.textContent='Ítem seleccionado del catálogo.'; results.innerHTML=''; });
+})();
+</script>
+{% endblock %}

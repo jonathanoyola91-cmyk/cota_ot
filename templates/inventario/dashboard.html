@@ -6,7 +6,7 @@
 <div class="panel" style="margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
         <div><h3 style="margin:0 0 4px;">Administrador de inventario</h3><div style="font-size:12px;color:#64748b;">Existencias físicas, inventario inicial, kardex, ajustes y transferencias entre empresas.</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;"><a class="btn" href="{% url 'inventario:existencias_lista' %}">Existencias</a><a class="btn btn-secondary" href="{% url 'inventario:inventario_inicial' %}">Inventario inicial</a><a class="btn btn-secondary" href="{% url 'inventario:transferencias_lista' %}">Transferencias</a><a class="btn btn-secondary" href="{% url 'inventario:reserva_transicion' %}">Reservas PAW existentes</a></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><a class="btn" href="{% url 'inventario:existencias_lista' %}">Existencias</a><a class="btn" href="{% url 'compras_oil:stock_request_create' %}">Solicitar compra de stock</a><a class="btn btn-secondary" href="{% url 'inventario:inventario_inicial' %}">Inventario inicial</a><a class="btn btn-secondary" href="{% url 'inventario:transferencias_lista' %}">Transferencias</a><a class="btn btn-secondary" href="{% url 'inventario:reserva_transicion' %}">Reservas PAW existentes</a></div>
     </div>
 </div>
 

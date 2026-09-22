@@ -39,11 +39,29 @@ class PurchaseRequest(models.Model):
         CREDITO = "CREDITO", "Crédito"
         CONTADO = "CONTADO", "Contado"
 
+    class Origen(models.TextChoices):
+        PAW = "PAW", "PAW / servicio"
+        STOCK = "STOCK", "Reposición de stock / bodega"
+
+    class EmpresaDestino(models.TextChoices):
+        IMPETUS = "IMPETUS", "IMPETUS HPS"
+        OIL_GAS = "OIL_GAS", "OIL & GAS SUPPORT"
+
+    # Para una compra de stock no existe BOM ni PAW.  Se deja nullable para
+    # conservar el flujo actual de compras originadas en una reparación.
     bom = models.OneToOneField(
         "bom.Bom",
         on_delete=models.PROTECT,
-        related_name="compra"
+        related_name="compra",
+        null=True,
+        blank=True,
     )
+
+    origen = models.CharField(max_length=12, choices=Origen.choices, default=Origen.PAW)
+    empresa_destino = models.CharField(
+        max_length=12, choices=EmpresaDestino.choices, default=EmpresaDestino.IMPETUS
+    )
+    motivo_stock = models.TextField(blank=True, default="")
 
     estado = models.CharField(
         max_length=20,
@@ -90,6 +108,8 @@ class PurchaseRequest(models.Model):
         Esto es lo que se ve en el selector/autocomplete del admin.
         Debe mostrar PAW (no OT) porque PAW es el identificador del proceso.
         """
+        if self.origen == self.Origen.STOCK:
+            return f"STOCK #{self.pk or '-'} - {(self.motivo_stock or 'Reposición de bodega')[:80]}"
         paw = self.paw_numero or "-"
         nombre = (self.paw_nombre or "").strip()
         nombre = nombre[:80]

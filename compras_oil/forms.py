@@ -6,6 +6,18 @@ from django.forms import modelformset_factory
 from .models import Supplier, PurchaseLine, PurchaseRequest
 
 
+class StockPurchaseRequestForm(forms.Form):
+    empresa_destino = forms.ChoiceField(
+        choices=PurchaseRequest.EmpresaDestino.choices,
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    # El usuario no digita P/N ni descripción. Debe seleccionar un ítem vigente
+    # del catálogo de la empresa elegida; el servidor lo vuelve a validar.
+    catalogo_item_id = forms.IntegerField(widget=forms.HiddenInput())
+    cantidad = forms.DecimalField(min_value=Decimal("0.001"), decimal_places=3, max_digits=12, widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.001"}))
+    motivo_stock = forms.CharField(required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Ej.: Reposición por nivel mínimo / consumo habitual"}))
+
+
 class SupplierForm(forms.ModelForm):
     class Meta:
         model = Supplier

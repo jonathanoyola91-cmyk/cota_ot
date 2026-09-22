@@ -4,6 +4,7 @@ from io import BytesIO
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
+from django.utils import timezone
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_POST
@@ -17,7 +18,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from core.roles import tiene_rol
-from .forms import SupplierForm
+from .forms import SupplierForm, StockPurchaseRequestForm
 from .models import PurchaseRequest, PurchaseLine, Supplier
 
 
@@ -221,6 +222,8 @@ def _get_entrega(compra):
 
 def _entrega_completa(compra):
     entrega = _get_entrega(compra)
+    # No tener entrega todavía es normal, incluso en una compra de stock.
+    # Esta función solo responde si existe una entrega completa.
     if not entrega:
         return False
 
@@ -328,6 +331,45 @@ def dashboard(request):
 
 
 @login_required
+def stock_request_create(request):
+    """Crea una compra de reposición sin cotización ni vínculo a una PAW."""
+    # La necesidad nace en Inventario; Compras solamente la gestiona después.
+    es_inventario = request.user.is_superuser or request.user.groups.filter(name__iexact="INVENTARIO").exists()
+    if not es_inventario:
+        messages.error(request, "No tienes permiso para solicitar compras de stock.")
+        return redirect("/")
+
+    if request.method == "POST":
+        form = StockPurchaseRequestForm(request.POST)
+        if form.is_valid():
+            data = form.cleaned_data
+            from item_oil_gas.models import Item, ItemImpetus
+            ItemModel = ItemImpetus if data["empresa_destino"] == "IMPETUS" else Item
+            item = ItemModel.objects.filter(pk=data["catalogo_item_id"], activo=True).first()
+            if not item:
+                form.add_error(None, "Selecciona un ítem válido del catálogo de la empresa destino.")
+                return render(request, "compras_oil/stock_request_form.html", {"form": form})
+            compra = PurchaseRequest.objects.create(
+                origen=PurchaseRequest.Origen.STOCK,
+                empresa_destino=data["empresa_destino"],
+                motivo_stock=data["motivo_stock"],
+                inventario_revisado_en=timezone.now(),
+                inventario_revisado_por=request.user,
+                creado_por=request.user,
+                paw_nombre="Reposición de stock / bodega",
+            )
+            PurchaseLine.objects.create(
+                request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "",
+                unidad=item.unidad_medida or "UND", cantidad_requerida=data["cantidad"],
+            )
+            messages.success(request, "Solicitud de compra para stock creada. No se generó cotización ni reserva PAW.")
+            return redirect("compras_oil:paw_detail", pk=compra.pk)
+    else:
+        form = StockPurchaseRequestForm()
+    return render(request, "compras_oil/stock_request_form.html", {"form": form})
+
+
+@login_required
 def compras_dashboard(request):
     return dashboard(request)
 
@@ -397,11 +439,11 @@ def cerrar_solicitud(request, pk):
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     entrega = _get_entrega(compra)
-    if not entrega:
+    if compra.origen != PurchaseRequest.Origen.STOCK and not entrega:
         messages.error(request, "No puedes cerrar la compra. Primero debes definir y registrar la entrega del material.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-    if not _entrega_completa(compra):
+    if compra.origen != PurchaseRequest.Origen.STOCK and not _entrega_completa(compra):
         messages.error(request, "No puedes cerrar la compra. La entrega todavía tiene cantidades pendientes.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
@@ -421,7 +463,8 @@ def cerrar_solicitud(request, pk):
                 paw.save(update_fields=["estado_operativo"])
         # CAMPO conserva MATERIAL_RECIBIDO: el módulo Campo continúa el flujo.
 
-    messages.success(request, f"Compra PAW {compra.paw_numero} cerrada correctamente.")
+    etiqueta = "Compra de stock" if compra.origen == PurchaseRequest.Origen.STOCK else f"Compra PAW {compra.paw_numero}"
+    messages.success(request, f"{etiqueta} cerrada correctamente.")
     return redirect("compras_oil:dashboard")
 
 @login_required
@@ -667,7 +710,8 @@ def paw_detail(request, pk):
 
     # El BOM primero debe ser validado por Inventario.
     # ADMIN conserva acceso de soporte para no bloquear PAW históricos.
-    if not compra.inventario_revisado_en and not tiene_rol(request.user, ["ADMIN"]):
+    if (compra.origen == PurchaseRequest.Origen.PAW and not compra.inventario_revisado_en
+            and not tiene_rol(request.user, ["ADMIN"])):
         messages.warning(
             request,
             "Esta solicitud todavía está pendiente de revisión por Inventario."
@@ -751,7 +795,10 @@ def paw_detail(request, pk):
     )
     # La entrega física ya no pertenece a Compras; la genera Inventario.
     puede_generar_entrega = False
-    puede_cerrar_compra = flujo_recepcion_ok and flujo_entrega_ok and compra.estado != "CERRADA"
+    puede_cerrar_compra = (
+        flujo_recepcion_ok and (compra.origen == PurchaseRequest.Origen.STOCK or flujo_entrega_ok)
+        and compra.estado != "CERRADA"
+    )
 
     if compra.estado == "CERRADA":
         siguiente_paso = "Compra cerrada"
@@ -766,8 +813,8 @@ def paw_detail(request, pk):
         siguiente_paso = "Enviar a inventario"
     elif not flujo_recepcion_ok:
         siguiente_paso = "Registrar recepción de material"
-    elif not flujo_recepcion_ok:
-        siguiente_paso = "Inventario debe completar la recepción"
+    elif compra.origen == PurchaseRequest.Origen.STOCK:
+        siguiente_paso = "Material recibido en bodega; puedes cerrar la compra"
     else:
         siguiente_paso = "Compra completada; Inventario define y registra la entrega física"
 
