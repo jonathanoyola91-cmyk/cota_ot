@@ -21,7 +21,7 @@ from .models import (
     FixedExpense, Household, Income, MonthlyPlan, PersonalBudget,
     PersonalBudgetLine, SavingsGoal, WalletTransfer, ZERO,
 )
-from .services import category_rows, personal_summary, plan_totals, seed_categories
+from .services import category_rows, personal_summary, plan_totals, seed_categories, spending_ranking
 
 
 def _selected_plan(request):
@@ -93,6 +93,7 @@ def dashboard(request):
         ).exclude(role=FamilyMembership.Role.OWNER)
         context.update({
             "totals": plan_totals(plan),
+            "spending_ranking": spending_ranking(plan),
             "pending_budgets": plan.personal_budgets.filter(
                 status=PersonalBudget.Status.SUBMITTED
             ).select_related("member"),

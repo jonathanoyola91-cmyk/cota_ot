@@ -9,7 +9,7 @@ from .models import (
     BudgetAllocation, Category, Expense, ExtraRequest, FamilyMembership,
     Household, MonthlyPlan, PersonalBudget, PersonalBudgetLine, WalletTransfer,
 )
-from .services import seed_categories
+from .services import seed_categories, spending_ranking
 
 
 class FamilyBaseTest(TestCase):
@@ -73,6 +73,21 @@ class AccessTests(FamilyBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Ingresos recibidos")
         self.assertContains(response, "Comidas fuera")
+
+    def test_spending_ranking_combines_daily_and_fixed_spending(self):
+        fixed_category = self.household.categories.get(name="Servicios públicos")
+        self.plan.fixed_expenses.create(
+            category=fixed_category, name="Internet", budgeted_amount=Decimal("120000"),
+            paid_amount=Decimal("120000"), created_by=self.owner_user,
+        )
+        Expense.objects.create(
+            plan=self.plan, member=self.child, category=self.food,
+            description="Almuerzo", amount=Decimal("200000"), date=date(2026, 9, 22),
+            source=Expense.Source.CASH,
+        )
+        ranking = spending_ranking(self.plan)
+        self.assertEqual(ranking[0]["name"], "Comidas fuera")
+        self.assertEqual(ranking[0]["amount"], Decimal("200000"))
 
     def test_spouse_dashboard_renders_but_does_not_offer_approval_button(self):
         request_item = ExtraRequest.objects.create(

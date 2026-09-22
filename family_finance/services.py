@@ -90,6 +90,33 @@ def category_rows(plan, visible_to_family=True):
     return rows
 
 
+def spending_ranking(plan, limit=6):
+    """Actual spending by category, including fixed payments and daily expenses."""
+    totals = {}
+    for row in plan.expenses.values("category__name", "category__color").annotate(
+        amount=Sum("amount")
+    ):
+        key = (row["category__name"], row["category__color"])
+        totals[key] = totals.get(key, ZERO) + (row["amount"] or ZERO)
+    for row in plan.fixed_expenses.values("category__name", "category__color").annotate(
+        amount=Sum("paid_amount")
+    ):
+        key = (row["category__name"], row["category__color"])
+        totals[key] = totals.get(key, ZERO) + (row["amount"] or ZERO)
+
+    total_spent = sum(totals.values(), ZERO)
+    rows = [
+        {
+            "name": name,
+            "color": color,
+            "amount": amount,
+            "percent": round((amount / total_spent) * 100) if total_spent else 0,
+        }
+        for (name, color), amount in totals.items()
+    ]
+    return sorted(rows, key=lambda row: row["amount"], reverse=True)[:limit]
+
+
 def personal_summary(plan, membership):
     budget = plan.personal_budgets.filter(member=membership).first()
     approved = budget.approved_total if budget and budget.status == PersonalBudget.Status.APPROVED else ZERO
