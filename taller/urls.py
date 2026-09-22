@@ -7,6 +7,7 @@ app_name = "taller"
 urlpatterns = [
     # TALLER ACTUAL
     path("", views.dashboard, name="dashboard"),
+    path("material/<int:entrega_id>/", views.detalle_material, name="detalle_material"),
     path("cerrar-ensamble/<int:ot_id>/", views.confirmar_ensamble_ok, name="confirmar_ensamble_ok"),
     path("camaras/", views.camaras_taller, name="camaras_taller"),
     path("camaras/nueva/", views.camara_nueva, name="camara_nueva"),

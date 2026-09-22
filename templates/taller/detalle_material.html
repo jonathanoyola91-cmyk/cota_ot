@@ -1,0 +1,76 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Materiales de Taller{% endblock %}
+
+{% block content %}
+<style>
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700;}
+.badge-yellow{background:#fef3c7;color:#92400e;}
+.badge-green{background:#dcfce7;color:#166534;}
+.progress-wrap{background:#e5e7eb;border-radius:999px;height:12px;overflow:hidden;max-width:520px;}
+.progress-bar{background:#2563eb;height:100%;border-radius:999px;}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;}
+</style>
+
+<div class="panel">
+    <h2>Materiales de Taller · OT {{ ot.numero }}</h2>
+    <p><strong>PAW:</strong> {{ entrega.purchase_request.paw_numero }} · {{ entrega.purchase_request.paw_nombre }}</p>
+
+    <div class="progress-wrap">
+        <div class="progress-bar" style="width:{{ progreso.porcentaje }}%;"></div>
+    </div>
+    <p><strong>{{ progreso.porcentaje }}%</strong> recibido · {{ progreso.lineas_entregadas }} de {{ progreso.total_lineas }} líneas completas</p>
+
+    {% if progreso.completa %}
+        <p><span class="badge badge-green">MATERIAL COMPLETO</span> Taller ya puede confirmar el ensamble.</p>
+    {% else %}
+        <p><span class="badge badge-yellow">MATERIAL PARCIAL</span> Puede avanzar con lo disponible; los saldos pendientes continúan a cargo de Inventario.</p>
+    {% endif %}
+
+    <table>
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Unidad</th>
+                <th>Requerido neto</th>
+                <th>Recibido</th>
+                <th>Pendiente</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for linea in lineas_material %}
+            <tr>
+                <td>{{ linea.objeto.codigo|default:"-" }}</td>
+                <td>{{ linea.objeto.descripcion }}</td>
+                <td>{{ linea.objeto.unidad|default:"-" }}</td>
+                <td>{{ linea.requerido|floatformat:3 }}</td>
+                <td>{{ linea.entregado|floatformat:3 }}</td>
+                <td><strong>{{ linea.pendiente|floatformat:3 }}</strong></td>
+                <td>
+                    {% if linea.completa %}
+                        <span class="badge badge-green">COMPLETO</span>
+                    {% else %}
+                        <span class="badge badge-yellow">PENDIENTE</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">No hay materiales registrados.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="actions">
+        <a class="btn btn-secondary" href="{% url 'taller:dashboard' %}">Volver a Taller</a>
+        <a class="btn btn-secondary" href="/ot/{{ ot.numero }}/">Ver OT</a>
+
+        {% if progreso.completa and puede_editar_taller and not ot.ensamble_ok %}
+        <form method="post" action="{% url 'taller:confirmar_ensamble_ok' ot.numero %}">
+            {% csrf_token %}
+            <button class="btn" type="submit">Confirmar ensamble OK</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

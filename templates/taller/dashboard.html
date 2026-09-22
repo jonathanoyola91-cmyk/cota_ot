@@ -64,6 +64,7 @@
     <p>
         Aquí Taller ve qué PAW/OT requieren BOM, cuáles están en compras,
         cuáles tienen material parcial y cuáles ya pueden avanzar a ensamble.
+        Las aprobaciones de Taller se realizan directamente desde este panel.
     </p>
 </div>
 
@@ -178,6 +179,11 @@
 <h3 class="section-title">4. Material parcial disponible</h3>
 
 <div class="panel">
+    <p>
+        Taller puede consultar lo recibido e iniciar las actividades posibles. La confirmación
+        final se habilitará automáticamente cuando Inventario complete o cierre justificadamente
+        todos los pendientes.
+    </p>
     <table>
         <thead>
             <tr>
@@ -203,9 +209,10 @@
                     <small>{{ item.porcentaje_entrega }}%</small>
                 </td>
                 <td>
-                    <a class="btn" href="/inventario/entrega/{{ item.entrega.id }}/">
-                        Ver entrega
+                    <a class="btn" href="{% url 'taller:detalle_material' item.entrega.id %}">
+                        Ver materiales
                     </a>
+                    <a class="btn btn-secondary" href="/ot/{{ item.ot.numero }}/">Ver OT</a>
                 </td>
             </tr>
             {% empty %}
@@ -243,6 +250,9 @@
                     <small>100%</small>
                 </td>
                 <td>
+                    <a class="btn btn-secondary" href="{% url 'taller:detalle_material' item.entrega.id %}">
+                        Ver materiales
+                    </a>
                     <a class="btn btn-secondary" href="/ot/{{ item.ot.numero }}/">
                         Ver OT
                     </a>

@@ -29,6 +29,46 @@ def puede_editar_taller(user):
     return tiene_rol(user, ["TALLER", "ADMIN"])
 
 
+def calcular_progreso_entrega(entrega):
+    """Calcula el avance con la cantidad neta que todavía exige el PAW.
+
+    La cantidad original deja de ser la referencia cuando Inventario libera a
+    bodega o cancela justificadamente un saldo. Usar la cantidad neta evita que
+    Taller vea entregas completas como si todavía estuvieran parciales.
+    """
+    total_requerido = Decimal("0")
+    total_entregado = Decimal("0")
+    total_lineas = 0
+    lineas_entregadas = 0
+
+    for linea in entrega.lineas.all():
+        requerido = Decimal(linea.cantidad_requerida_neta or 0)
+        entregado = Decimal(linea.cantidad_entregada or 0)
+
+        if requerido <= 0:
+            continue
+
+        total_requerido += requerido
+        total_entregado += min(entregado, requerido)
+        total_lineas += 1
+
+        if entregado >= requerido:
+            lineas_entregadas += 1
+
+    porcentaje = 0
+    if total_requerido > 0:
+        porcentaje = min(round((total_entregado / total_requerido) * 100), 100)
+
+    return {
+        "total_requerido": total_requerido,
+        "total_entregado": total_entregado,
+        "total_lineas": total_lineas,
+        "lineas_entregadas": lineas_entregadas,
+        "porcentaje": porcentaje,
+        "completa": total_requerido > 0 and total_entregado >= total_requerido,
+    }
+
+
 @login_required
 def dashboard(request):
     estados_paw_fuera_operacion = [
@@ -82,49 +122,31 @@ def dashboard(request):
                 .first()
             )
 
-        total_lineas = 0
-        entregadas = 0
-        porcentaje_entrega = 0
-
-        if entrega:
-            total_req = Decimal("0")
-            total_ent = Decimal("0")
-
-            for linea in entrega.lineas.all():
-                req = Decimal(linea.cantidad_requerida or 0)
-                ent = Decimal(linea.cantidad_entregada or 0)
-
-                if req <= 0:
-                    continue
-
-                total_req += req
-                total_ent += min(ent, req)
-
-                total_lineas += 1
-                if ent >= req:
-                    entregadas += 1
-
-            if total_req > 0:
-                porcentaje_entrega = round((total_ent / total_req) * 100)
+        progreso = calcular_progreso_entrega(entrega) if entrega else {
+            "total_lineas": 0,
+            "lineas_entregadas": 0,
+            "porcentaje": 0,
+            "completa": False,
+        }
 
         item = {
             "ot": ot,
             "bom": bom,
             "compra": compra,
             "entrega": entrega,
-            "total_lineas": total_lineas,
-            "entregadas": entregadas,
-            "porcentaje_entrega": porcentaje_entrega,
+            "total_lineas": progreso["total_lineas"],
+            "entregadas": progreso["lineas_entregadas"],
+            "porcentaje_entrega": progreso["porcentaje"],
         }
 
         estado_bom = getattr(bom, "estado", "")
 
         if estado_bom == "BORRADOR":
             bom_borrador.append(item)
-        elif entrega and porcentaje_entrega >= 100:
+        elif entrega and progreso["completa"]:
             if not ot.ensamble_ok:
                 material_entregado.append(item)
-        elif entrega and porcentaje_entrega > 0:
+        elif entrega and progreso["porcentaje"] > 0:
             material_parcial.append(item)
         else:
             esperando_material.append(item)
@@ -151,6 +173,40 @@ def dashboard(request):
         "total_material_entregado": len(material_entregado),
         "total_historial_ensamble": historial_ensamble.count(),
 
+        "puede_editar_taller": puede_editar_taller(request.user),
+    })
+
+
+@login_required
+def detalle_material(request, entrega_id):
+    """Detalle de solo lectura para que Taller no dependa de Inventario/PAW."""
+    entrega = get_object_or_404(
+        WorkshopDelivery.objects
+        .select_related("purchase_request__bom__workorder__paw")
+        .prefetch_related("lineas"),
+        pk=entrega_id,
+        destino="TALLER",
+    )
+
+    progreso = calcular_progreso_entrega(entrega)
+    lineas = []
+    for linea in entrega.lineas.all():
+        requerido = Decimal(linea.cantidad_requerida_neta or 0)
+        entregado = min(Decimal(linea.cantidad_entregada or 0), requerido)
+        pendiente = max(requerido - entregado, Decimal("0"))
+        lineas.append({
+            "objeto": linea,
+            "requerido": requerido,
+            "entregado": entregado,
+            "pendiente": pendiente,
+            "completa": requerido <= 0 or pendiente <= 0,
+        })
+
+    return render(request, "taller/detalle_material.html", {
+        "entrega": entrega,
+        "ot": entrega.purchase_request.bom.workorder,
+        "lineas_material": lineas,
+        "progreso": progreso,
         "puede_editar_taller": puede_editar_taller(request.user),
     })
 
@@ -194,24 +250,13 @@ def confirmar_ensamble_ok(request, ot_id):
         messages.error(request, "No hay entrega a taller.")
         return redirect("taller:dashboard")
 
-    total_req = Decimal("0")
-    total_ent = Decimal("0")
+    progreso = calcular_progreso_entrega(entrega)
 
-    for linea in entrega.lineas.all():
-        req = Decimal(linea.cantidad_requerida or 0)
-        ent = Decimal(linea.cantidad_entregada or 0)
-
-        if req <= 0:
-            continue
-
-        total_req += req
-        total_ent += min(ent, req)
-
-    if total_req <= 0:
+    if progreso["total_requerido"] <= 0:
         messages.error(request, "No se puede confirmar: no hay cantidades requeridas válidas.")
         return redirect("taller:dashboard")
 
-    if total_ent < total_req:
+    if not progreso["completa"]:
         messages.error(request, "Aún hay material pendiente.")
         return redirect("taller:dashboard")
 
