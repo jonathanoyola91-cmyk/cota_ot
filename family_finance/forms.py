@@ -1,7 +1,7 @@
 from datetime import date
 
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm, UserCreationForm
 from django.contrib.auth.models import User
 
 from .models import (
@@ -81,6 +81,24 @@ class FamilyMemberCreationForm(UserCreationForm):
         for field in self.fields.values():
             field.widget.attrs["class"] = "form-control"
         self.fields["username"].help_text = "Se usará para ingresar a IMPETUS Control."
+
+
+class FamilyMemberPasswordResetForm(SetPasswordForm):
+    """Clave nueva que el cabeza de familia puede asignar a otro integrante."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "form-control"
+
+
+class FamilyPasswordChangeForm(PasswordChangeForm):
+    """Cambio de la propia clave desde el perfil."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "form-control"
 
 
 class ExistingFamilyMemberForm(forms.Form):

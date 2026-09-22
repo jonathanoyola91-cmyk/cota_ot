@@ -31,7 +31,7 @@
 <div class="shell">
   <header class="family-top"><div class="top-inner">
     <a class="brand" href="{% url 'family_finance:dashboard' %}"><span class="brand-mark">⌂</span><span>Presupuesto Familiar<small>{% if family_nav_membership %}{{ family_nav_membership.household.name }}{% else %}IMPETUS Control{% endif %}</small></span></a>
-    <div class="top-actions"><span class="user-label">{{ request.user.first_name|default:request.user.username }}</span>{% if request.user.is_staff or request.user.groups.exists %}<a class="company-link" href="/dashboard/">Empresa</a>{% endif %}<a href="{% url 'accounts:logout' %}">Salir</a></div>
+    <div class="top-actions"><span class="user-label">{{ request.user.first_name|default:request.user.username }}</span>{% if family_nav_membership %}<a href="{% url 'family_finance:profile_password_change' %}">Mi perfil</a>{% endif %}{% if request.user.is_staff or request.user.groups.exists %}<a class="company-link" href="/dashboard/">Empresa</a>{% endif %}<a href="{% url 'accounts:logout' %}">Salir</a></div>
   </div></header>
   <main class="container">
     {% if messages %}<div class="toast-stack">{% for message in messages %}{% if 'family' in message.tags %}<div class="alert {% if 'error' in message.tags %}error{% elif 'warning' in message.tags %}warning{% elif 'info' in message.tags %}info{% endif %}">{{ message }}</div>{% endif %}{% endfor %}</div>{% endif %}

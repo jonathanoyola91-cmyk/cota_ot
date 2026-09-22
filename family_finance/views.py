@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import update_session_auth_hash
 from django.db import transaction
 from django.db.models import Sum
 from django.http import Http404
@@ -12,7 +13,8 @@ from . import family_messages as messages
 from .decorators import family_member_required, manager_required, owner_required
 from .forms import (
     AllocationForm, DebtForm, DebtPaymentForm, ExpenseForm, ExistingFamilyMemberForm,
-    ExtraRequestForm, FamilyMemberCreationForm,
+    ExtraRequestForm, FamilyMemberCreationForm, FamilyMemberPasswordResetForm,
+    FamilyPasswordChangeForm,
     FixedExpenseForm, HouseholdSetupForm, IncomeForm, MonthlyPlanForm,
     PersonalBudgetHeaderForm, PersonalBudgetLineForm, SavingsGoalForm,
     TrialFamilyCreationForm, WalletTransferForm,
@@ -182,6 +184,46 @@ def member_create(request):
         return redirect("family_finance:dashboard")
     return render(request, "family_finance/form.html", {
         "form": form, "title": "Agregar integrante", "submit_label": "Crear acceso"
+    })
+
+
+@owner_required
+def member_password_reset(request, member_id):
+    """El cabeza de familia puede asignar una clave nueva a sus integrantes.
+
+    La cuenta propietaria se excluye: durante la prueba, su clave solo puede
+    ser gestionada por el administrador de la plataforma.
+    """
+    member = get_object_or_404(
+        request.household.memberships.exclude(role=FamilyMembership.Role.OWNER),
+        pk=member_id,
+    )
+    form = FamilyMemberPasswordResetForm(member.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, f"La contraseña de {member.display_name} fue actualizada.")
+        return redirect("family_finance:dashboard")
+    return render(request, "family_finance/form.html", {
+        "form": form,
+        "title": f"Restablecer contraseña · {member.display_name}",
+        "submit_label": "Guardar nueva contraseña",
+        "helper": "No se muestra la contraseña anterior. Comparte la nueva clave directamente con el integrante.",
+    })
+
+
+@family_member_required
+def profile_password_change(request):
+    form = FamilyPasswordChangeForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        update_session_auth_hash(request, user)
+        messages.success(request, "Tu contraseña fue actualizada.")
+        return redirect("family_finance:dashboard")
+    return render(request, "family_finance/form.html", {
+        "form": form,
+        "title": "Cambiar mi contraseña",
+        "submit_label": "Actualizar contraseña",
+        "helper": "Por seguridad debes indicar tu contraseña actual antes de crear la nueva.",
     })
 
 
