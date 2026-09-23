@@ -50,3 +50,9 @@ venv/-e "\n__pycache__/\n*.pyc"
 __pycache__/
 *.py[cod]
 venv/
+
+# Archivos estáticos generados por Django
+staticfiles/
+
+# Archivos temporales comprimidos
+*.zip

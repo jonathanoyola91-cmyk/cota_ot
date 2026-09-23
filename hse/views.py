@@ -67,9 +67,50 @@ def _catalog_item(pk):
 
 @login_required
 def dashboard(request):
-    own = HSERequest.objects.filter(empleado=request.user).order_by("-creado_en")
-    solicitudes = HSERequest.objects.all().select_related("empleado", "solicitado_por").prefetch_related("lineas").order_by("-creado_en") if _hse_manager(request.user) else own
-    return render(request, "hse/dashboard.html", {"solicitudes": solicitudes, "es_gestor": _hse_manager(request.user), "stock": HSEStock.objects.order_by("codigo")})
+    # El bloque personal SIEMPRE muestra únicamente lo asignado/solicitado
+    # para el usuario conectado. La gestión operativa se presenta aparte.
+    propias = (
+        HSERequest.objects.filter(empleado=request.user)
+        .select_related("empleado", "solicitado_por", "compra")
+        .prefetch_related("lineas")
+        .order_by("-creado_en")
+    )
+    es_gestor = _hse_manager(request.user)
+    grupos = set(request.user.groups.values_list("name", flat=True))
+    es_inventario = request.user.is_superuser or "INVENTARIO" in grupos
+    es_gerencia = request.user.is_superuser or "GERENCIA" in grupos
+    es_hse = request.user.is_superuser or "HSE" in grupos
+
+    pendientes_entrega = HSERequest.objects.none()
+    solicitudes_stock = []
+    if es_gestor:
+        pendientes_entrega = (
+            HSERequest.objects.filter(
+                estado__in=[HSERequest.Estado.PENDIENTE, HSERequest.Estado.EN_COMPRAS, HSERequest.Estado.LISTA]
+            )
+            .select_related("empleado", "solicitado_por", "compra")
+            .prefetch_related("lineas")
+            .order_by("-creado_en")[:12]
+        )
+        # Seguimiento de las reposiciones de bodega creadas por este usuario.
+        try:
+            from compras_oil.models import PurchaseRequest
+            solicitudes_stock = PurchaseRequest.objects.filter(
+                origen=PurchaseRequest.Origen.HSE, creado_por=request.user
+            ).order_by("-pk")[:20]
+        except Exception:
+            solicitudes_stock = []
+
+    return render(request, "hse/dashboard.html", {
+        "solicitudes": propias,
+        "es_gestor": es_gestor,
+        "es_inventario": es_inventario,
+        "es_gerencia": es_gerencia,
+        "es_hse": es_hse,
+        "pendientes_entrega": pendientes_entrega,
+        "solicitudes_stock": solicitudes_stock,
+        "stock": HSEStock.objects.order_by("codigo") if es_gestor else HSEStock.objects.none(),
+    })
 
 
 @login_required
@@ -138,6 +179,68 @@ def solicitar(request, tipo):
             messages.success(request, f"Solicitud {sol.codigo} enviada a Inventario.")
             return redirect("hse:detalle", pk=sol.pk)
     return render(request, "hse/solicitud_form.html", {"tipo": tipo, "empleados": empleados})
+
+
+@login_required
+def editar_solicitud(request, pk):
+    """Edita una solicitud HSE conservando el mismo consecutivo.
+
+    Por decisión operativa, no se bloquea por estado de Compras. Si ya existe
+    una PurchaseRequest asociada, se sincronizan sus líneas con los faltantes
+    actuales para evitar crear otra compra.
+    """
+    sol = get_object_or_404(HSERequest.objects.prefetch_related("lineas"), pk=pk)
+    if sol.empleado_id != request.user.id and not _hse_manager(request.user):
+        messages.error(request, "No tienes permiso para modificar esta solicitud.")
+        return redirect("hse:dashboard")
+    empleados = _empleados_impetus()
+    if request.method == "POST":
+        empleado_id = request.POST.get("empleado") if sol.tipo == HSERequest.Tipo.DOTACION else sol.empleado_id
+        empleado = empleados.filter(pk=empleado_id).first()
+        ids, cantidades = request.POST.getlist("item_id"), request.POST.getlist("cantidad")
+        filas = []
+        for i, item_id in enumerate(ids):
+            item = _catalog_item(item_id)
+            try:
+                cantidad = Decimal((cantidades[i] if i < len(cantidades) else "0").replace(",", "."))
+            except Exception:
+                cantidad = Decimal("0")
+            if item and cantidad > 0:
+                filas.append((item, cantidad))
+        if not empleado or not filas:
+            messages.error(request, "Selecciona al menos un P/N con cantidad válida.")
+        else:
+            with transaction.atomic():
+                sol.empleado = empleado
+                sol.observacion = (request.POST.get("observacion") or "").strip()
+                motivo = request.POST.get("motivo_entrega") or sol.motivo_entrega
+                if sol.tipo == HSERequest.Tipo.EPP and motivo in HSERequest.MotivoEntrega.values:
+                    sol.motivo_entrega = motivo
+                sol.save()
+                sol.lineas.all().delete()
+                HSERequestLine.objects.bulk_create([
+                    HSERequestLine(solicitud=sol, catalogo="IMPETUS", catalogo_item_id=item.pk,
+                                   codigo=item.codigo or "", descripcion=item.descripcion or "",
+                                   unidad=item.unidad_medida or "UND", cantidad_solicitada=cantidad)
+                    for item, cantidad in filas
+                ])
+                if sol.compra_id:
+                    from compras_oil.models import PurchaseLine
+                    PurchaseLine.objects.filter(request_id=sol.compra_id).delete()
+                    nuevas = []
+                    for item, cantidad in filas:
+                        stock = HSEStock.objects.filter(catalogo="IMPETUS", catalogo_item_id=item.pk).first()
+                        disponible = Decimal(stock.cantidad_fisica or 0) if stock else Decimal("0")
+                        faltante = max(Decimal("0"), cantidad - disponible)
+                        if faltante > 0:
+                            nuevas.append(PurchaseLine(request_id=sol.compra_id, codigo=item.codigo or "",
+                                descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND",
+                                cantidad_requerida=faltante))
+                    if nuevas:
+                        PurchaseLine.objects.bulk_create(nuevas)
+            messages.success(request, f"Solicitud {sol.codigo} actualizada.")
+            return redirect("hse:detalle", pk=sol.pk)
+    return render(request, "hse/solicitud_editar.html", {"solicitud": sol, "empleados": empleados})
 
 
 @login_required
@@ -364,3 +467,56 @@ def comprobante_pdf(request, pk):
     response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="{sol.codigo}.pdf"'
     return response
+
+@login_required
+def editar_solicitud_stock(request, pk):
+    """Edita una reposición HSE ya enviada a Compras sin crear otra solicitud."""
+    if not _hse_manager(request.user):
+        messages.error(request, "No tienes permiso para editar solicitudes de stock HSE.")
+        return redirect("hse:dashboard")
+
+    from compras_oil.models import PurchaseLine, PurchaseRequest
+    compra = get_object_or_404(PurchaseRequest, pk=pk, origen=PurchaseRequest.Origen.HSE)
+
+    # Conserva la visibilidad actual: el creador puede editar sus solicitudes;
+    # los gestores HSE mantienen la capacidad operativa ya existente.
+    lineas = PurchaseLine.objects.filter(request=compra).order_by("pk")
+
+    if request.method == "POST":
+        codigos = request.POST.getlist("codigo_existente")
+        cantidades = request.POST.getlist("cantidad_existente")
+        with transaction.atomic():
+            actuales = {str(x.codigo): x for x in PurchaseLine.objects.filter(request=compra)}
+            for i, codigo in enumerate(codigos):
+                linea = actuales.get(str(codigo))
+                if not linea:
+                    continue
+                try:
+                    cantidad = Decimal((cantidades[i] if i < len(cantidades) else "0").replace(",", "."))
+                except Exception:
+                    cantidad = Decimal("0")
+                if cantidad <= 0:
+                    linea.delete()
+                else:
+                    linea.cantidad_requerida = cantidad
+                    linea.save(update_fields=["cantidad_requerida"])
+
+            item = _catalog_item(request.POST.get("item_id"))
+            try:
+                cantidad_nueva = Decimal((request.POST.get("cantidad_nueva") or "0").replace(",", "."))
+            except Exception:
+                cantidad_nueva = Decimal("0")
+            if item and cantidad_nueva > 0:
+                existente = PurchaseLine.objects.filter(request=compra, codigo=item.codigo or "").first()
+                if existente:
+                    existente.cantidad_requerida = Decimal(existente.cantidad_requerida or 0) + cantidad_nueva
+                    existente.save(update_fields=["cantidad_requerida"])
+                else:
+                    PurchaseLine.objects.create(
+                        request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "",
+                        unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad_nueva
+                    )
+        messages.success(request, f"Solicitud de stock #{compra.pk} actualizada. Se conserva la misma solicitud en Compras.")
+        return redirect("hse:editar_stock", pk=compra.pk)
+
+    return render(request, "hse/reposicion_editar.html", {"compra": compra, "lineas": lineas})

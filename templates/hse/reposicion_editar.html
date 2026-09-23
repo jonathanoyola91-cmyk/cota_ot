@@ -1,0 +1,14 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Editar solicitud de stock{% endblock %}{% block page_title %}Editar solicitud de stock HSE{% endblock %}
+{% block content %}
+<div class="card" style="max-width:980px;margin:auto;border-radius:16px"><div class="card-body p-4">
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3"><div><h4 class="mb-1">Solicitud de Compras #{{ compra.pk }}</h4><p class="text-muted mb-0">Modifica cantidades, elimina líneas o agrega EPP. Se conserva la misma solicitud de Compras.</p></div><a class="btn btn-outline-secondary" href="{% url 'hse:dashboard' %}">Volver</a></div>
+<form method="post">{% csrf_token %}<div class="table-responsive"><table class="table align-middle" id="lineas"><thead><tr><th>P/N</th><th>Descripción</th style="width:42%">Cantidad</th><th></th></tr></thead><tbody>
+{% for l in lineas %}<tr><td><strong>{{ l.codigo }}</strong><input type="hidden" name="codigo_existente" value="{{ l.codigo }}"></td><td>{{ l.descripcion }}<div class="input-group mt-1" style="max-width:220px"><input class="form-control" type="number" min="0" step="0.01" name="cantidad_existente" value="{{ l.cantidad_requerida }}"><span class="input-group-text">{{ l.unidad }}</span></div><small class="text-muted">Cantidad 0 elimina esta línea.</small></td><td></td></tr>{% endfor %}
+</tbody></table></div><hr><h6>Agregar otro EPP</h6><div class="row g-2 align-items-end"><div class="col-md-7"><label class="form-label">Buscar P/N</label><input id="buscar" class="form-control" placeholder="Escribe P/N o descripción..."><input type="hidden" name="item_id" id="item_id"><div id="resultados" class="list-group position-absolute shadow" style="z-index:10;max-width:620px"></div></div><div class="col-md-3"><label class="form-label">Cantidad</label><input class="form-control" type="number" min="0" step="0.01" name="cantidad_nueva" value="0"></div></div><div class="mt-4 d-flex gap-2"><button class="btn btn-primary" type="submit">Guardar cambios</button><a class="btn btn-outline-secondary" href="{% url 'compras_oil:paw_detail' compra.pk %}">Ver seguimiento</a></div></form>
+</div></div>
+<script>
+const q=document.getElementById('buscar'), box=document.getElementById('resultados'), hid=document.getElementById('item_id');let t;
+q.addEventListener('input',()=>{clearTimeout(t);hid.value='';box.innerHTML='';if(q.value.trim().length<2)return;t=setTimeout(async()=>{const r=await fetch("{% url 'hse:buscar_items' %}?tipo=EPP&q="+encodeURIComponent(q.value));const d=await r.json();box.innerHTML='';d.results.forEach(x=>{const a=document.createElement('button');a.type='button';a.className='list-group-item list-group-item-action';a.textContent=x.label;a.onclick=()=>{q.value=x.label;hid.value=x.id;box.innerHTML=''};box.appendChild(a)})},250)});
+</script>
+{% endblock %}
