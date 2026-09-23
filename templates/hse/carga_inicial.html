@@ -1,0 +1,19 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Carga inicial HSE{% endblock %}
+{% block page_title %}Carga inicial · Bodega HSE{% endblock %}
+{% block content %}
+<div class="card" style="max-width:900px"><div class="card-body">
+  <h4>Cargar existencias actuales de EPP</h4>
+  <p class="text-muted">Este ingreso es solo físico para Bodega HSE: no afecta Inventario, Kardex ni contabilidad.</p>
+  <form method="post">{% csrf_token %}
+    <div id="filas"><div class="row g-2 mb-2 fila"><div class="col-md-7 position-relative"><input class="form-control buscar" autocomplete="off" placeholder="Buscar P/N EPP"><input type="hidden" name="item_id"><div class="list-group resultados position-absolute w-100" style="z-index:5"></div></div><div class="col-md-3"><input class="form-control" type="number" min="0.001" step="0.001" name="cantidad" value="1"></div><div class="col-md-2"><button class="btn btn-outline-danger quitar" type="button">Quitar</button></div></div></div>
+    <button id="agregar" class="btn btn-outline-secondary btn-sm" type="button">+ Agregar EPP</button>
+    <button class="btn btn-primary ms-2" type="submit">Guardar carga inicial</button>
+  </form>
+</div></div>
+<script>
+(()=>{const api="{% url 'hse:buscar_items' %}", filas=document.querySelector('#filas');
+function activar(f){let t,b=f.querySelector('.buscar'),r=f.querySelector('.resultados');b.addEventListener('input',()=>{clearTimeout(t);let q=b.value.trim();if(q.length<2){r.innerHTML='';return}t=setTimeout(async()=>{let d=await (await fetch(`${api}?tipo=EPP&q=${encodeURIComponent(q)}`)).json();r.innerHTML=(d.results||[]).map(x=>`<button type="button" class="list-group-item list-group-item-action" data-id="${x.id}" data-label="${x.label}"><b>${x.codigo}</b> — ${x.descripcion}</button>`).join('')||'<div class="list-group-item text-muted">Sin EPP activo en catálogo IMPETUS.</div>'},250)});r.addEventListener('click',e=>{let x=e.target.closest('[data-id]');if(!x)return;f.querySelector('[name=item_id]').value=x.dataset.id;b.value=x.dataset.label;r.innerHTML='' });f.querySelector('.quitar').onclick=()=>f.remove()}
+activar(filas.firstElementChild);document.querySelector('#agregar').onclick=()=>{let f=filas.firstElementChild.cloneNode(true);f.querySelector('.buscar').value='';f.querySelector('[name=item_id]').value='';f.querySelector('.resultados').innerHTML='';filas.append(f);activar(f)}})();
+</script>
+{% endblock %}

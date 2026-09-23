@@ -1,0 +1,28 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Stock EPP{% endblock %}
+{% block page_title %}Reposición Bodega HSE{% endblock %}
+{% block content %}
+<div class="card" style="max-width:900px"><div class="card-body">
+<h4>Stock EPP / Bodega HSE</h4>
+<p class="text-muted">Compra preventiva sin asignar aún a un empleado. Selecciona un P/N de la misma base de datos IMPETUS.</p>
+<form method="post">{% csrf_token %}
+  <div class="row g-2 item-row mb-2">
+    <div class="col-md-8 position-relative">
+      <label class="form-label fw-bold">P/N EPP</label>
+      <input class="form-control search" autocomplete="off" placeholder="Buscar P/N o descripción">
+      <input type="hidden" name="item_id">
+      <div class="list-group results position-absolute w-100" style="z-index:5"></div>
+    </div>
+    <div class="col-md-4"><label class="form-label fw-bold">Cantidad</label><input class="form-control" type="number" name="cantidad" min="0.001" step="0.001" value="1"></div>
+  </div>
+  <button class="btn btn-primary mt-2">Enviar a Compras</button>
+</form>
+</div></div>
+<script>
+// Esta es exactamente la misma lógica de solicitud_form.html, que ya carga los P/N.
+(()=>{const api="{% url 'hse:buscar_items' %}", tipo="EPP", row=document.querySelector('.item-row');let t;
+row.querySelector('.search').addEventListener('input',e=>{clearTimeout(t);let q=e.target.value;if(q.length<2)return;t=setTimeout(async()=>{let d=await (await fetch(`${api}?tipo=${tipo}&q=${encodeURIComponent(q)}`)).json();row.querySelector('.results').innerHTML=d.results.map(x=>`<button class="list-group-item list-group-item-action" type="button" data-id="${x.id}" data-label="${x.label}">${x.label}</button>`).join('')},250)});
+row.querySelector('.results').addEventListener('click',e=>{let b=e.target.closest('[data-id]');if(!b)return;row.querySelector('[name=item_id]').value=b.dataset.id;row.querySelector('.search').value=b.dataset.label;row.querySelector('.results').innerHTML='' });
+})();
+</script>
+{% endblock %}

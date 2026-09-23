@@ -1,0 +1,16 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Entregas HSE{% endblock %}
+{% block page_title %}Entregas HSE a empleados{% endblock %}
+{% block content %}
+<div class="card"><div class="card-body">
+  <h4>Solicitudes por gestionar</h4>
+  <p class="text-muted">Aquí Inventario revisa disponibilidad y confirma la entrega física al empleado.</p>
+  <div class="table-responsive"><table class="table align-middle">
+    <thead><tr><th>Consecutivo</th><th>Tipo</th><th>Empleado</th><th>Estado</th><th>Acción</th></tr></thead>
+    <tbody>{% for s in solicitudes %}<tr>
+      <td>{{ s.codigo }}</td><td>{{ s.get_tipo_display }}</td><td>{{ s.empleado.get_full_name|default:s.empleado.username }}</td><td><span class="badge {% if s.estado == 'LISTA' %}bg-success{% else %}bg-secondary{% endif %}">{{ s.get_estado_display }}</span></td>
+      <td>{% if s.estado == 'LISTA' %}<form method="post" action="{% url 'hse:entregar' s.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-success">Entregar y generar PDF</button></form>{% else %}<a class="btn btn-sm btn-outline-primary" href="{% url 'hse:detalle' s.pk %}">{% if s.estado == 'PENDIENTE' %}Revisar disponibilidad{% else %}Ver proceso{% endif %}</a>{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="5" class="text-muted">No hay solicitudes pendientes de entrega.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div></div>
+{% endblock %}
