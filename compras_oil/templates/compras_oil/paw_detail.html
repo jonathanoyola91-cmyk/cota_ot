@@ -304,17 +304,13 @@
                 📦 Compras gestiona proveedor, precio y aprobación. Inventario recibe el material y define la entrega física a Taller, Campo o Despacho.
             </div>
 
-            {% if flujo_entrega_creada %}
-                <a class="flow-btn {% if flujo_entrega_ok %}step-done{% else %}step-active{% endif %}"
-                   href="{% url 'inventario:entrega_taller_detail' entrega.pk %}">
-                    {% if flujo_entrega_ok %}✅{% else %}🔵{% endif %}
-                    Entrega Inventario: {{ entrega.get_destino_display }}
-                </a>
-            {% else %}
-                <button class="flow-btn step-pending" type="button" disabled>
-                    ⚪ Entrega pendiente de Inventario
-                </button>
-            {% endif %}
+            <div class="flow-muted-note" style="margin:0 8px 0 0;">
+                {% if flujo_entrega_creada %}
+                    ✅ Entrega {{ entrega.get_destino_display }} gestionada exclusivamente por Inventario.
+                {% else %}
+                    ⏳ Entrega pendiente: Inventario es quien la gestiona.
+                {% endif %}
+            </div>
 
             <span class="flow-btn {% if compra.estado == 'CERRADA' %}step-done{% else %}step-pending{% endif %}">
                 {% if compra.estado == "CERRADA" %}
@@ -339,7 +335,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;">
             <h2 style="margin:0;">Líneas de Compra</h2>
 
-            {% if puede_compras %}
+            {% if puede_editar_compra %}
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <a class="btn" href="{% url 'compras_oil:supplier_create' %}?next={{ request.path }}">
                         + Crear proveedor
@@ -394,7 +390,7 @@
                                     <span class="line-status status-muted">{{ form.instance.flujo_texto }}</span>
                                 {% endif %}
 
-                                {% if puede_compras and compra.estado != "CERRADA" %}
+                                {% if puede_editar_compra %}
                                     {% if form.instance.flujo_estado == "PENDIENTE_ENVIO" %}
                                         {% if form.instance.tipo_pago == "CONTADO" %}
                                             <button class="line-action-btn" type="submit" form="send-fin-{{ form.instance.id }}">Enviar a Finanzas</button>
@@ -447,7 +443,7 @@
                         </td>
 
                         <td style="min-width:180px;">
-                            {% if puede_compras %}
+                            {% if puede_editar_compra %}
                                 {{ form.proveedor }}
                             {% else %}
                                 {{ form.instance.proveedor|default:"-" }}
@@ -455,7 +451,7 @@
                         </td>
 
                         <td style="min-width:120px;">
-                            {% if puede_compras %}
+                            {% if puede_editar_compra %}
                                 {{ form.precio_unitario }}
                             {% else %}
                                 $ {{ form.instance.precio_unitario|default:"0" }}
@@ -463,7 +459,7 @@
                         </td>
 
                         <td style="min-width:140px;">
-                            {% if puede_compras %}
+                            {% if puede_editar_compra %}
                                 {{ form.tipo_pago }}
                             {% else %}
                                 {{ form.instance.tipo_pago|default:"-" }}
@@ -471,7 +467,7 @@
                         </td>
                         
                         <td style="min-width:100px;">
-                            {% if puede_compras %}
+                            {% if puede_editar_compra %}
                                 {{ form.porcentaje_pago }}
                             {% else %}
                                 {{ form.instance.porcentaje_pago|default:"100" }} %
@@ -479,7 +475,7 @@
                         </td> 
 
                         <td style="min-width:300px;">
-                            {% if puede_compras %}
+                            {% if puede_editar_compra %}
                                 {{ form.observaciones_compras }}
                             {% else %}
                                 {{ form.instance.observaciones_compras|default:"-" }}
@@ -516,7 +512,7 @@
     </div>
 </form>
 
-{% if puede_compras and compra.estado != "CERRADA" %}
+{% if puede_editar_compra %}
     {% for form in formset %}
         <form id="send-fin-{{ form.instance.id }}" method="post" action="{% url 'compras_oil:enviar_linea_finanzas' form.instance.id %}" style="display:none;">
             {% csrf_token %}

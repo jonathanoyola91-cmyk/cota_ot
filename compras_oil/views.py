@@ -220,6 +220,22 @@ def _get_entrega(compra):
     )
 
 
+def _compra_bloqueada_por_operacion(compra):
+    """Después de que Inventario toma la entrega, Compras queda solo lectura."""
+    if compra.estado == PurchaseRequest.Estado.CERRADA:
+        return True
+
+    # La entrega física pertenece a Inventario. Desde su creación, Compras no
+    # puede reenviar, editar ni cambiar el PAW a una etapa anterior.
+    if _get_entrega(compra):
+        return True
+
+    paw = _get_paw_from_compra(compra)
+    return bool(paw and paw.estado_operativo in {
+        "ENTREGADO_TALLER", "PRODUCTO_OK", "EN_FACTURACION", "FACTURADO", "RADICADO",
+    })
+
+
 def _entrega_completa(compra):
     entrega = _get_entrega(compra)
     # No tener entrega todavía es normal, incluso en una compra de stock.
@@ -248,6 +264,9 @@ def aprobar_gerencia_compra(request, pk):
     from aprobacion.models import PurchaseApproval
 
     compra = get_object_or_404(PurchaseRequest, pk=pk)
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes aprobar desde Compras: Inventario/Taller ya tomó este proceso.")
+        return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     aprobacion, created = PurchaseApproval.objects.get_or_create(
         purchase_request=compra,
@@ -692,10 +711,19 @@ def paw_detail(request, pk):
         return redirect("compras_oil:dashboard")
 
     queryset = compra.lineas.filter(cantidad_requerida__gt=0).order_by("id")
+    compra_bloqueada = _compra_bloqueada_por_operacion(compra)
 
     if request.method == "POST":
         if not tiene_rol(request.user, ["COMPRAS", "ADMIN"]):
             messages.error(request, "No tienes permiso para editar esta solicitud.")
+            return redirect("compras_oil:paw_detail", pk=compra.pk)
+
+        if compra_bloqueada:
+            messages.info(
+                request,
+                "Compras está bloqueado porque Inventario ya tomó la entrega. "
+                "El proceso continúa únicamente en Inventario y Taller.",
+            )
             return redirect("compras_oil:paw_detail", pk=compra.pk)
 
         # El estado no se puede reiniciar desde Compras; hacerlo después de
@@ -728,7 +756,7 @@ def paw_detail(request, pk):
             info["aprobado"]
             and not form.instance.en_inventario
             and Decimal(form.instance.cantidad_a_comprar or 0) > 0
-            and compra.estado != "CERRADA"
+            and not compra_bloqueada
         )
 
     paw = _get_paw_from_compra(compra)
@@ -756,20 +784,20 @@ def paw_detail(request, pk):
 
     puede_enviar_inventario = (
         bool(lineas_aprobadas_pendientes_inventario)
-        and compra.estado != "CERRADA"
+        and not compra_bloqueada
     )
     puede_registrar_recepcion = (
         resumen["todas_aprobadas"]
         and flujo_recepcion_creada
         and not flujo_recepcion_ok
-        and compra.estado != "CERRADA"
+        and not compra_bloqueada
     )
     # La entrega física ya no pertenece a Compras; la genera Inventario.
     puede_generar_entrega = False
     puede_cerrar_compra = False
 
-    if compra.estado == "CERRADA":
-        siguiente_paso = "Compra cerrada"
+    if compra_bloqueada:
+        siguiente_paso = "Compras bloqueado: Inventario y Taller continúan el proceso"
     elif lineas_aprobadas_pendientes_inventario:
         siguiente_paso = (
             f"Enviar a Inventario los ítems aprobados "
@@ -793,6 +821,8 @@ def paw_detail(request, pk):
         "total_requerido": total_requerido,
         "total_a_comprar": total_a_comprar,
         "puede_compras": tiene_rol(request.user, ["COMPRAS", "ADMIN"]),
+        "puede_editar_compra": tiene_rol(request.user, ["COMPRAS", "ADMIN"]) and not compra_bloqueada,
+        "compra_bloqueada": compra_bloqueada,
         "paw": paw,
         "resumen_aprobaciones": resumen,
         "flujo_recepcion_creada": flujo_recepcion_creada,
@@ -825,8 +855,8 @@ def enviar_linea_finanzas(request, linea_id):
     )
     compra = linea.request
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     if linea.tipo_pago != "CONTADO":
@@ -862,8 +892,8 @@ def enviar_linea_gerencia(request, linea_id):
     )
     compra = linea.request
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     if linea.tipo_pago != "CREDITO":
@@ -908,8 +938,8 @@ def enviar_finanzas(request, pk):
         pk=pk
     )
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     if not _tiene_lineas_contado(compra):
@@ -971,8 +1001,8 @@ def enviar_aprobacion(request, pk):
 
     compra = get_object_or_404(PurchaseRequest.objects.prefetch_related("lineas"), pk=pk)
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     lineas_reales = compra.lineas.filter(
@@ -1036,8 +1066,8 @@ def enviar_linea_inventario(request, linea_id):
     )
     compra = linea.request
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     info = _estado_flujo_linea(linea)
@@ -1100,8 +1130,8 @@ def enviar_inventario(request, pk):
         pk=pk,
     )
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     lineas_aprobadas = []
@@ -1161,8 +1191,8 @@ def generar_entrega(request, pk):
 
     compra = get_object_or_404(PurchaseRequest.objects.prefetch_related("lineas"), pk=pk)
 
-    if compra.estado == "CERRADA":
-        messages.error(request, "No puedes modificar una compra cerrada.")
+    if _compra_bloqueada_por_operacion(compra):
+        messages.error(request, "No puedes modificar esta compra: Inventario ya tomó la entrega o el proceso fue cerrado.")
         return redirect("compras_oil:paw_detail", pk=compra.pk)
 
     if not _recepcion_completa(compra):
