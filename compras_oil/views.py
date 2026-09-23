@@ -296,8 +296,9 @@ def dashboard(request):
 
     # También cierra solicitudes Stock/HSE recibidas antes de instalar la
     # automatización; así no quedan visibles como activas por datos históricos.
-    from .signals import sincronizar_cierres_stock_hse
+    from .signals import sincronizar_cierres_stock_hse, sincronizar_cierres_paw_facturados
     sincronizar_cierres_stock_hse()
+    sincronizar_cierres_paw_facturados()
 
     compras_all = PurchaseRequest.objects.filter(
         inventario_revisado_en__isnull=False,

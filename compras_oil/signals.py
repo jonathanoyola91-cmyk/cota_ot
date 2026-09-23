@@ -58,10 +58,25 @@ def sincronizar_cierres_stock_hse():
     return cerradas
 
 
+def sincronizar_cierres_paw_facturados():
+    """Cierra compras históricas cuyo PAW ya llegó a Facturación.
+
+    La relación se hace por BOM → OT → PAW, por lo que cada compra conserva
+    su propio PAW y nunca toma el estado de otro proceso.
+    """
+    estados_finales = {"EN_FACTURACION", "FACTURADO", "RADICADO"}
+    compras = (
+        PurchaseRequest.objects
+        .filter(origen=PurchaseRequest.Origen.PAW, bom__workorder__paw__estado_operativo__in=estados_finales)
+        .exclude(estado=PurchaseRequest.Estado.CERRADA)
+    )
+    return compras.update(estado=PurchaseRequest.Estado.CERRADA)
+
+
 @receiver(post_save, sender="paw_app.Paw")
 def cerrar_compras_al_enviar_a_facturacion(sender, instance, **kwargs):
     """El PAW se cierra en Compras únicamente al entrar a Facturación."""
-    if instance.estado_operativo != "EN_FACTURACION":
+    if instance.estado_operativo not in {"EN_FACTURACION", "FACTURADO", "RADICADO"}:
         return
 
     compras = (
@@ -70,10 +85,10 @@ def cerrar_compras_al_enviar_a_facturacion(sender, instance, **kwargs):
         .exclude(estado=PurchaseRequest.Estado.CERRADA)
         .prefetch_related("lineas", "entrega_taller__lineas")
     )
-    for compra in compras:
-        if _entrega_totalmente_registrada(compra):
-            compra.estado = PurchaseRequest.Estado.CERRADA
-            compra.save(update_fields=["estado", "actualizado_en"])
+    # La transición a Facturación es la autoridad final del PAW. Si Comercial
+    # ya lo facturó, Compras debe cerrarse aunque la entrega hubiera sido
+    # registrada antes de activar esta automatización.
+    compras.update(estado=PurchaseRequest.Estado.CERRADA)
 
 
 @receiver(post_save, sender="inventario.InventoryReceptionLine")

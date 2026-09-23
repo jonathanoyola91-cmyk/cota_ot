@@ -2,6 +2,7 @@ from decimal import Decimal
 from io import BytesIO
 
 from django.contrib import messages
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -22,6 +23,37 @@ from .models import HSEMovement, HSERequest, HSERequestLine, HSEStock
 
 def _hse_manager(user):
     return user.is_superuser or user.groups.filter(name__in=["INVENTARIO", "GERENCIA", "HSE"]).exists()
+
+
+def _empleados_impetus():
+    """Usuarios activos de IMPETUS, excluyendo integrantes de Familia.
+
+    Ambos módulos comparten la tabla de usuarios. La relación de integrantes
+    de Familia se detecta de forma dinámica para no depender de un modelo
+    concreto del módulo de presupuesto familiar.
+    """
+    User = get_user_model()
+    empleados = User.objects.filter(is_active=True)
+
+    try:
+        familia = apps.get_app_config("family_finance")
+    except LookupError:
+        return empleados.order_by("first_name", "username")
+
+    ids_familia = set()
+    nombres_miembro = ("member", "miembro", "integrante", "familyuser", "family_user")
+    for modelo in familia.get_models():
+        nombre = modelo.__name__.lower()
+        if not any(texto in nombre for texto in nombres_miembro):
+            continue
+        for campo in modelo._meta.fields:
+            if getattr(campo, "remote_field", None) and campo.remote_field.model == User:
+                ids_familia.update(
+                    modelo.objects.exclude(**{f"{campo.name}__isnull": True})
+                    .values_list(f"{campo.name}_id", flat=True)
+                )
+
+    return empleados.exclude(pk__in=ids_familia).order_by("first_name", "username")
 
 
 def _catalog_item(pk):
@@ -80,8 +112,7 @@ def solicitar(request, tipo):
     if tipo == HSERequest.Tipo.DOTACION and not _hse_manager(request.user):
         messages.error(request, "La solicitud de dotación semestral debe ser creada por Gerencia o HSE.")
         return redirect("hse:dashboard")
-    User = get_user_model()
-    empleados = User.objects.filter(is_active=True).order_by("first_name", "username")
+    empleados = _empleados_impetus()
     if request.method == "POST":
         empleado_id = request.POST.get("empleado") if tipo == HSERequest.Tipo.DOTACION else request.user.pk
         empleado = empleados.filter(pk=empleado_id).first()
