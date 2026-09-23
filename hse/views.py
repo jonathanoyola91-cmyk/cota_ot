@@ -227,10 +227,21 @@ def procesar_inventario(request, pk):
     else:
         from compras_oil.models import PurchaseLine, PurchaseRequest
         with transaction.atomic():
-            compra, created = PurchaseRequest.objects.get_or_create(
-                solicitud_hse=sol,
-                defaults={"origen": PurchaseRequest.Origen.HSE, "empresa_destino": PurchaseRequest.EmpresaDestino.IMPETUS, "motivo_stock": f"{sol.codigo} · {sol.nombre_formato} para {sol.empleado.get_full_name() or sol.empleado.username}", "inventario_revisado_en": timezone.now(), "inventario_revisado_por": request.user, "creado_por": request.user, "paw_nombre": sol.codigo},
-            )
+            # La relación con HSE vive en HSERequest.compra.
+            # ``solicitud_hse`` es el related_name inverso y NO un campo
+            # de PurchaseRequest, por lo que no puede usarse en create/get_or_create.
+            if sol.compra_id:
+                compra = sol.compra
+            else:
+                compra = PurchaseRequest.objects.create(
+                    origen=PurchaseRequest.Origen.HSE,
+                    empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS,
+                    motivo_stock=f"{sol.codigo} · {sol.nombre_formato} para {sol.empleado.get_full_name() or sol.empleado.username}",
+                    inventario_revisado_en=timezone.now(),
+                    inventario_revisado_por=request.user,
+                    creado_por=request.user,
+                    paw_nombre=sol.codigo,
+                )
             for linea, faltante in faltantes:
                 PurchaseLine.objects.get_or_create(request=compra, codigo=linea.codigo, defaults={"descripcion": linea.descripcion, "unidad": linea.unidad, "cantidad_requerida": faltante})
             sol.compra = compra
