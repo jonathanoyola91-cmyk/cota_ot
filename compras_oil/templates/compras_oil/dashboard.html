@@ -355,6 +355,9 @@
                             {% if compra.origen == "STOCK" %}
                                 <span class="paw-number">STOCK #{{ compra.pk }}</span>
                                 <span class="paw-label">Reposición de bodega</span>
+                            {% elif compra.origen == "HSE" %}
+                                <span class="paw-number">{{ compra.codigo_hse }}</span>
+                                <span class="paw-label">Solicitud HSE</span>
                             {% else %}
                                 <span class="paw-number">PAW {{ compra.paw_numero }}</span>
                                 <span class="paw-label">Solicitud de compra</span>
@@ -363,7 +366,7 @@
 
                         <td>
                             <div class="nombre-paw">
-                                {% if compra.origen == "STOCK" %}
+                                {% if compra.origen == "STOCK" or compra.origen == "HSE" %}
                                     {{ compra.motivo_stock|default:"Reposición de stock / bodega" }}
                                 {% else %}
                                     {{ compra.paw_nombre }}
@@ -439,18 +442,12 @@
                                     Abrir
                                 </a>
 
-                                {% if compra.total_lineas > 0 and compra.lineas_diligenciadas == compra.total_lineas and compra.lineas_pagadas == compra.total_lineas %}
-                                    <form method="post" action="{% url 'compras_oil:cerrar_solicitud' compra.pk %}"
-                                          onsubmit="return confirm('¿Cerrar esta solicitud de compra?');">
-                                        {% csrf_token %}
-                                        <button class="btn-small btn-close" type="submit">
-                                            Cerrar
-                                        </button>
-                                    </form>
+                                {% if compra.estado == "CERRADA" %}
+                                    <span class="btn-small btn-disabled">Cerrada automáticamente</span>
+                                {% elif compra.origen == "STOCK" or compra.origen == "HSE" %}
+                                    <span class="btn-small btn-disabled">Cierre al recibir Inventario</span>
                                 {% else %}
-                                    <span class="btn-small btn-disabled">
-                                        Incompleta
-                                    </span>
+                                    <span class="btn-small btn-disabled">Cierre al enviar a Facturación</span>
                                 {% endif %}
                             </div>
                         </td>

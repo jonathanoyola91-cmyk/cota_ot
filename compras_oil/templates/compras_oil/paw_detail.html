@@ -1,7 +1,7 @@
 {% extends "dashboard/home.html" %}
 
-{% block title %}PAW #{{ compra.paw_numero }}{% endblock %}
-{% block page_title %}Compras · PAW #{{ compra.paw_numero }}{% endblock %}
+{% block title %}{% if compra.origen == "HSE" %}{{ compra.codigo_hse }}{% else %}PAW #{{ compra.paw_numero }}{% endif %}{% endblock %}
+{% block page_title %}Compras · {% if compra.origen == "HSE" %}{{ compra.codigo_hse }}{% else %}PAW #{{ compra.paw_numero }}{% endif %}{% endblock %}
 
 {% block content %}
 
@@ -222,16 +222,7 @@
     <div class="card">
         <small>Estado</small>
 
-        {% if puede_compras %}
-            <select name="estado" form="purchase-lines-form"
-                    style="margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid #cbd5e1;font-weight:800;">
-                <option value="BORRADOR" {% if compra.estado == "BORRADOR" %}selected{% endif %}>Borrador</option>
-                <option value="EN_REVISION" {% if compra.estado == "EN_REVISION" %}selected{% endif %}>En revisión</option>
-                <option value="CERRADA" {% if compra.estado == "CERRADA" %}selected{% endif %}>Cerrada</option>
-            </select>
-        {% else %}
-            <strong>{{ compra.estado }}</strong>
-        {% endif %}
+        <strong>{{ compra.get_estado_display }}</strong>
     </div>
 
     <div class="card">
@@ -254,7 +245,7 @@
     <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;">
         <div>
             <h2 style="margin-top:0;">Información General</h2>
-            <p><strong>PAW:</strong> {{ compra.paw_numero }}</p>
+            <p><strong>{% if compra.origen == "HSE" %}Solicitud HSE:{% else %}PAW:{% endif %}</strong> {% if compra.origen == "HSE" %}{{ compra.codigo_hse }}{% else %}{{ compra.paw_numero }}{% endif %}</p>
             <p><strong>Nombre:</strong> {{ compra.paw_nombre }}</p>
             <p><strong>BOM:</strong> {{ compra.bom }}</p>
             <p><strong>Actualizado:</strong> {{ compra.actualizado_en|date:"d/m/Y H:i" }}</p>
@@ -275,9 +266,9 @@
             <div class="flow-help-text">
                 1. Cada ítem se aprueba según su tipo de pago: Contado → Finanzas / Crédito → Gerencia ·
                 2. Cada ítem aprobado se envía a Inventario únicamente desde el botón de su misma línea ·
-                3. Registrar recepción ·
-                4. Entregar material ·
-                5. Cerrar compra
+                3. Registrar recepción en Inventario ·
+                4. Inventario entrega todo el material, incluso el disponible en bodega ·
+                5. PAW: Comercial lo envía a Facturación y Compras se cierra automáticamente. Stock/HSE: se cierra al recibido completo de Inventario
             </div>
 
             <div class="approval-summary">
@@ -313,18 +304,6 @@
                 📦 Compras gestiona proveedor, precio y aprobación. Inventario recibe el material y define la entrega física a Taller, Campo o Despacho.
             </div>
 
-            {% if recepcion %}
-                <a class="flow-btn {% if flujo_recepcion_ok %}step-done{% else %}step-active{% endif %}"
-                   href="{% url 'inventario:recepcion_detail' recepcion.pk %}">
-                    {% if flujo_recepcion_ok %}✅{% else %}🔵{% endif %}
-                    3. Registrar recepción
-                </a>
-            {% else %}
-                <button class="flow-btn step-pending" type="button" disabled>
-                    ⚪ 3. Registrar recepción
-                </button>
-            {% endif %}
-
             {% if flujo_entrega_creada %}
                 <a class="flow-btn {% if flujo_entrega_ok %}step-done{% else %}step-active{% endif %}"
                    href="{% url 'inventario:entrega_taller_detail' entrega.pk %}">
@@ -337,15 +316,15 @@
                 </button>
             {% endif %}
 
-            <form method="post" action="{% url 'compras_oil:cerrar_solicitud' compra.pk %}"
-                  {% if puede_cerrar_compra %}onsubmit="return confirm('¿Confirmas que deseas cerrar esta compra?');"{% endif %}>
-                {% csrf_token %}
-                <button class="flow-btn {% if compra.estado == 'CERRADA' %}step-done{% elif puede_cerrar_compra %}step-final{% else %}step-pending{% endif %}"
-                        type="submit" {% if not puede_cerrar_compra %}disabled{% endif %}>
-                    {% if compra.estado == "CERRADA" %}✅{% elif puede_cerrar_compra %}🔒{% else %}⚪{% endif %}
-                    5. Cerrar compra
-                </button>
-            </form>
+            <span class="flow-btn {% if compra.estado == 'CERRADA' %}step-done{% else %}step-pending{% endif %}">
+                {% if compra.estado == "CERRADA" %}
+                    ✅ Compra cerrada automáticamente
+                {% elif compra.origen == "STOCK" or compra.origen == "HSE" %}
+                    ⚪ Cierre automático al confirmar recibido en Inventario
+                {% else %}
+                    ⚪ Cierre automático al enviar PAW a Facturación
+                {% endif %}
+            </span>
         </div>
 
         

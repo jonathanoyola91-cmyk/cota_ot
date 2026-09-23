@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "compras_oil",
     "finanzas",
     "inventario",
+    "hse.apps.HseConfig",
     "item_oil_gas",
     "facturacion",
     "aprobacion",

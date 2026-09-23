@@ -275,6 +275,11 @@ def dashboard(request):
         messages.error(request, "No tienes acceso a Compras.")
         return redirect("/")
 
+    # También cierra solicitudes Stock/HSE recibidas antes de instalar la
+    # automatización; así no quedan visibles como activas por datos históricos.
+    from .signals import sincronizar_cierres_stock_hse
+    sincronizar_cierres_stock_hse()
+
     compras_all = PurchaseRequest.objects.filter(
         inventario_revisado_en__isnull=False,
         lineas__cantidad_a_comprar__gt=0,
@@ -428,44 +433,12 @@ def cerrar_solicitud(request, pk):
         return redirect("/")
 
     compra = get_object_or_404(PurchaseRequest, pk=pk)
-    paw = _get_paw_from_compra(compra)
-
-    if compra.estado == "CERRADA":
-        messages.info(request, "Esta compra ya se encuentra cerrada.")
-        return redirect("compras_oil:paw_detail", pk=compra.pk)
-
-    if not _recepcion_completa(compra):
-        messages.error(request, "No puedes cerrar la compra. Primero debes completar la recepción del material.")
-        return redirect("compras_oil:paw_detail", pk=compra.pk)
-
-    entrega = _get_entrega(compra)
-    if compra.origen != PurchaseRequest.Origen.STOCK and not entrega:
-        messages.error(request, "No puedes cerrar la compra. Primero debes definir y registrar la entrega del material.")
-        return redirect("compras_oil:paw_detail", pk=compra.pk)
-
-    if compra.origen != PurchaseRequest.Origen.STOCK and not _entrega_completa(compra):
-        messages.error(request, "No puedes cerrar la compra. La entrega todavía tiene cantidades pendientes.")
-        return redirect("compras_oil:paw_detail", pk=compra.pk)
-
-    compra.estado = "CERRADA"
-    compra.save(update_fields=["estado", "actualizado_en"])
-
-    # Cerrar la COMPRA no equivale a cerrar todo el PAW.
-    # Solo avanzamos el PAW según el destino y su alcance real.
-    if paw:
-        destino = getattr(entrega, "destino", "TALLER")
-        if destino == "TALLER" and getattr(paw, "aplica_taller", True):
-            paw.estado_operativo = "ENTREGADO_TALLER"
-            paw.save(update_fields=["estado_operativo"])
-        elif destino == "INVENTARIO":
-            if not getattr(paw, "aplica_taller", False) and not getattr(paw, "aplica_campo", False):
-                paw.estado_operativo = "PRODUCTO_OK"
-                paw.save(update_fields=["estado_operativo"])
-        # CAMPO conserva MATERIAL_RECIBIDO: el módulo Campo continúa el flujo.
-
-    etiqueta = "Compra de stock" if compra.origen == PurchaseRequest.Origen.STOCK else f"Compra PAW {compra.paw_numero}"
-    messages.success(request, f"{etiqueta} cerrada correctamente.")
-    return redirect("compras_oil:dashboard")
+    messages.info(
+        request,
+        "El cierre manual fue deshabilitado. La compra se cerrará automáticamente "
+        "cuando Comercial envíe el PAW a Facturación, después de todas las entregas de Inventario.",
+    )
+    return redirect("compras_oil:paw_detail", pk=compra.pk)
 
 @login_required
 def supplier_detail(request, pk):
@@ -725,10 +698,8 @@ def paw_detail(request, pk):
             messages.error(request, "No tienes permiso para editar esta solicitud.")
             return redirect("compras_oil:paw_detail", pk=compra.pk)
 
-        nuevo_estado = request.POST.get("estado")
-        if nuevo_estado in ["BORRADOR", "EN_REVISION"]:
-            compra.estado = nuevo_estado
-            compra.save(update_fields=["estado", "actualizado_en"])
+        # El estado no se puede reiniciar desde Compras; hacerlo después de
+        # una entrega reabría indebidamente el flujo del PAW.
 
         formset = PurchaseLineFormSet(request.POST, queryset=queryset)
         if formset.is_valid():
@@ -795,10 +766,7 @@ def paw_detail(request, pk):
     )
     # La entrega física ya no pertenece a Compras; la genera Inventario.
     puede_generar_entrega = False
-    puede_cerrar_compra = (
-        flujo_recepcion_ok and (compra.origen == PurchaseRequest.Origen.STOCK or flujo_entrega_ok)
-        and compra.estado != "CERRADA"
-    )
+    puede_cerrar_compra = False
 
     if compra.estado == "CERRADA":
         siguiente_paso = "Compra cerrada"
@@ -813,10 +781,10 @@ def paw_detail(request, pk):
         siguiente_paso = "Enviar a inventario"
     elif not flujo_recepcion_ok:
         siguiente_paso = "Registrar recepción de material"
-    elif compra.origen == PurchaseRequest.Origen.STOCK:
-        siguiente_paso = "Material recibido en bodega; puedes cerrar la compra"
+    elif compra.origen in [PurchaseRequest.Origen.STOCK, PurchaseRequest.Origen.HSE]:
+        siguiente_paso = "Inventario debe confirmar el recibido completo; la compra se cerrará automáticamente"
     else:
-        siguiente_paso = "Compra completada; Inventario define y registra la entrega física"
+        siguiente_paso = "Inventario debe completar la entrega física; Compras se cerrará al enviar el PAW a Facturación"
 
     return render(request, "compras_oil/paw_detail.html", {
         "compra": compra,

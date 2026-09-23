@@ -457,7 +457,7 @@ tbody tr:hover{background:#f8fafc;}
 
 <div id="page-loader">
     <div class="loader-box">
-        <img src="{% static 'img/logo_empresa.png' %}" class="loader-logo-img" alt="IMPETUS" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><div style="display:none;font-weight:900;font-size:22px;letter-spacing:1px;color:#f7b928;margin-bottom:14px;">IMPETUS</div>
+        <img src="{% static 'img/logo_empresa.png' %}" class="loader-logo-img" alt="IMPETUS">
         <div class="loader-spinner"></div>
         <p>Cargando centro de control...</p>
     </div>
@@ -466,7 +466,7 @@ tbody tr:hover{background:#f8fafc;}
 <div class="layout">
 <aside class="sidebar">
     <div class="brand-wrap brand-wrap-logo">
-        <img src="{% static 'img/logo_impetus_control_blanco.png' %}" class="sidebar-brand-logo" alt="IMPETUS CONTROL" onerror="this.style.display='none';this.nextElementSibling.style.display='block';"><div style="display:none;font-size:20px;font-weight:900;color:#fff;letter-spacing:.4px;">IMPETUS CONTROL</div>
+        <img src="{% static 'img/logo_impetus_control_blanco.png' %}" class="sidebar-brand-logo" alt="IMPETUS CONTROL">
         <div class="brand-caption">Centro de Control Operacional</div>
     </div>
 
@@ -481,6 +481,12 @@ tbody tr:hover{background:#f8fafc;}
             <span class="menu-icon">💬</span>
             <span>Chat</span>
             <span id="chat-unread-badge" class="chat-menu-badge">0</span>
+        </a>
+        {% endif %}
+
+        {% if request.user.is_authenticated %}
+        <a href="/hse/" class="{% if '/hse/' in request.path %}active{% endif %}">
+            <span class="menu-icon">🦺</span> HSE
         </a>
         {% endif %}
 
@@ -546,12 +552,6 @@ tbody tr:hover{background:#f8fafc;}
         <a href="{% url 'item_oil_gas:item_list' %}" class="{% if '/item-oil-gas/' in request.path and '/impetus/' not in request.path %}active{% endif %}"><span class="menu-icon">◇</span> Items Oil & Gas</a>
         <a href="{% url 'item_oil_gas:item_impetus_list' %}" class="{% if '/item-oil-gas/impetus/' in request.path %}active{% endif %}"><span class="menu-icon">◆</span> Items IMPETUS</a>
         {% endif %}
-        {% if sidebar_roles.es_ingenieria or sidebar_roles.es_gerente or request.user.is_superuser %}
-        <a href="{% url 'auditoria:tablero' %}" class="{% if '/auditoria/' in request.path %}active{% endif %}">
-            <span class="menu-icon">◫</span> Auditoría
-        </a>
-        {% endif %}
-
         {% if request.user.is_superuser %}
         <a href="/admin/" class="{% if '/admin/' in request.path %}active{% endif %}"><span class="menu-icon">⚙</span> Admin Django</a>
         {% endif %}

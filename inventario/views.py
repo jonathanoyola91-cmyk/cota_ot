@@ -805,6 +805,46 @@ def recepcion_detail(request, pk):
 
                 # Solo el incremento nuevo genera entrada física y Kardex.
                 if incremento > 0:
+                    # HSE es una bodega de consumo: se controla cantidad física,
+                    # pero no se genera activo/inventario valorizado ni Kardex contable.
+                    if recepcion.purchase_request.origen == "HSE":
+                        from hse.models import HSEMovement, HSEStock
+                        codigo = (linea.codigo or getattr(linea.purchase_line, "codigo", "") or "").strip()
+                        item_id = None
+                        try:
+                            item_id = recepcion.purchase_request.solicitud_hse.lineas.filter(codigo__iexact=codigo).values_list("catalogo_item_id", flat=True).first()
+                        except Exception:
+                            pass
+                        if not item_id and codigo:
+                            from item_oil_gas.models import ItemImpetus
+                            item_id = ItemImpetus.objects.filter(codigo__iexact=codigo, activo=True).values_list("pk", flat=True).first()
+                        if not item_id:
+                            transaction.set_rollback(True)
+                            messages.error(request, f"No se encontró el ítem HSE para {codigo or '-'}.")
+                            return redirect("inventario:recepcion_detail", pk=recepcion.pk)
+                        stock, _ = HSEStock.objects.get_or_create(
+                            catalogo="IMPETUS", catalogo_item_id=item_id,
+                            defaults={"codigo": codigo, "descripcion": linea.descripcion or "", "unidad": linea.unidad or "UND"},
+                        )
+                        stock = HSEStock.objects.select_for_update().get(pk=stock.pk)
+                        saldo_anterior = Decimal(stock.cantidad_fisica or 0)
+                        stock.cantidad_fisica = saldo_anterior + incremento
+                        stock.save(update_fields=["cantidad_fisica", "actualizado_en"])
+                        HSEMovement.objects.create(stock=stock, tipo=HSEMovement.Tipo.RECEPCION, cantidad=incremento, saldo_anterior=saldo_anterior, saldo_nuevo=stock.cantidad_fisica, referencia=f"HSE-{recepcion.purchase_request.pk}", creado_por=request.user)
+                        try:
+                            solicitud = recepcion.purchase_request.solicitud_hse
+                            if all(Decimal(x.cantidad_recibida or 0) >= Decimal(x.cantidad_esperada or 0) for x in lineas_recepcion):
+                                solicitud.estado = "LISTA"
+                                solicitud.save(update_fields=["estado", "actualizado_en"])
+                        except Exception:
+                            pass
+                        linea.cantidad_recibida = cantidad
+                        linea.fecha_llegada = fecha
+                        linea.observacion_inventario = observacion
+                        linea.estado = "PARCIAL" if cantidad < esperada else "LISTO"
+                        linea.save()
+                        continue
+                    # Flujo ordinario: inventario valorizado y, si corresponde, reserva PAW.
                     codigo = (linea.codigo or getattr(linea.purchase_line, "codigo", "") or "").strip()
                     empresa_compra = getattr(
                         recepcion.purchase_request, "empresa_destino", InventoryStock.Empresa.IMPETUS
@@ -900,6 +940,16 @@ def recepcion_detail(request, pk):
             paw.save(update_fields=["estado_operativo"])
         except Exception:
             pass
+
+        # Una compra HSE completamente recibida queda disponible para que
+        # Inventario confirme la entrega al colaborador.
+        if recepcion.purchase_request.origen == "HSE" and lineas_recepcion.exists() and not lineas_recepcion.exclude(estado="LISTO").exists():
+            try:
+                solicitud = recepcion.purchase_request.solicitud_hse
+                solicitud.estado = "LISTA"
+                solicitud.save(update_fields=["estado", "actualizado_en"])
+            except Exception:
+                pass
 
         # ======================================================
         # ALERTAS EN VIVO DE RECEPCIÓN: 80% Y 100%

@@ -484,6 +484,12 @@ tbody tr:hover{background:#f8fafc;}
         </a>
         {% endif %}
 
+        {% if request.user.is_authenticated %}
+        <a href="/hse/" class="{% if '/hse/' in request.path %}active{% endif %}">
+            <span class="menu-icon">🦺</span> HSE
+        </a>
+        {% endif %}
+
         {% if sidebar_roles.es_comercial %}
         <div class="menu-section">COMERCIAL</div>
         <a href="/quotes/" class="{% if '/quotes/' in request.path and not '/clientes/' in request.path %}active{% endif %}"><span class="menu-icon">▤</span> Cotizaciones</a>

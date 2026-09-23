@@ -42,6 +42,7 @@ class PurchaseRequest(models.Model):
     class Origen(models.TextChoices):
         PAW = "PAW", "PAW / servicio"
         STOCK = "STOCK", "Reposición de stock / bodega"
+        HSE = "HSE", "HSE / dotación y elementos de protección"
 
     class EmpresaDestino(models.TextChoices):
         IMPETUS = "IMPETUS", "IMPETUS HPS"
@@ -110,10 +111,23 @@ class PurchaseRequest(models.Model):
         """
         if self.origen == self.Origen.STOCK:
             return f"STOCK #{self.pk or '-'} - {(self.motivo_stock or 'Reposición de bodega')[:80]}"
+        if self.origen == self.Origen.HSE:
+            return f"{self.codigo_hse} - {(self.motivo_stock or 'Solicitud HSE')[:80]}"
         paw = self.paw_numero or "-"
         nombre = (self.paw_nombre or "").strip()
         nombre = nombre[:80]
         return f"PAW #{paw} - {nombre}"
+
+    @property
+    def codigo_hse(self):
+        """Consecutivo independiente para compras originadas en HSE."""
+        if self.origen != self.Origen.HSE or not self.pk:
+            return "HSE-PENDIENTE"
+        consecutivo = type(self).objects.filter(
+            origen=self.Origen.HSE,
+            pk__lte=self.pk,
+        ).count()
+        return f"HSE{consecutivo:03d}"
 
 
 # ---------------- LINEAS DE COMPRA ----------------

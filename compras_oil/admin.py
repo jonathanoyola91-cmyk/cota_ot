@@ -122,8 +122,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     inlines = [PurchaseLineInline]
 
     actions = [
-        "marcar_en_revision",
-        "cerrar_solicitud",
         "enviar_a_finanzas",
         "enviar_a_aprobacion_compras",
         "enviar_a_inventario",
@@ -133,7 +131,7 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
 
     readonly_fields = (
         "creado_por", "creado_en",
-        "actualizado_en", "paw_numero", "paw_nombre",
+        "actualizado_en", "paw_numero", "paw_nombre", "estado",
     )
 
     # ---------- helpers ----------
@@ -168,16 +166,6 @@ class PurchaseRequestAdmin(admin.ModelAdmin):
     # =========================
     # ACCIONES
     # =========================
-
-    @admin.action(description="Marcar como EN REVISIÓN")
-    def marcar_en_revision(self, request, queryset):
-        queryset.update(estado="EN_REVISION")
-
-    @admin.action(description="Cerrar solicitud")
-    def cerrar_solicitud(self, request, queryset):
-        for pr in queryset:
-            pr.estado = "CERRADA"
-            pr.save(update_fields=["estado", "actualizado_en"])
 
     @admin.action(description="Enviar a Finanzas")
     def enviar_a_finanzas(self, request, queryset):

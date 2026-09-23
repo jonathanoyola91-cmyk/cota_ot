@@ -20,7 +20,7 @@
     </form>
     <div class="table-wrap"><table class="table"><thead><tr><th>PAW</th><th>Nombre</th><th>OT</th><th>Estado</th><th>Ítems</th><th>Proveedores</th><th>Cerrada / actualizada</th><th>Acción</th></tr></thead><tbody>
     {% for compra in compras %}<tr>
-      <td><span class="paw">{{ compra.paw_numero }}</span></td>
+      <td><span class="paw">{% if compra.origen == "HSE" %}{{ compra.codigo_hse }}{% else %}{{ compra.paw_numero }}{% endif %}</span></td>
       <td>{{ compra.paw_nombre|default:"-" }}</td>
       <td><span class="muted">{{ compra.bom.workorder.numero|default:"-" }}</span></td>
       <td><span class="badge">Cerrada</span></td>
