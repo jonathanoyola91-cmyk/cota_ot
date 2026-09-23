@@ -60,7 +60,7 @@ def inventario_dashboard(request):
     recepciones_qs = (
         InventoryReception.objects
         .select_related("purchase_request", "creado_por")
-        .prefetch_related("lineas")
+        .prefetch_related("lineas__purchase_line")
         .order_by("-actualizado_en")
     )
 
@@ -68,7 +68,14 @@ def inventario_dashboard(request):
     recepciones_completas = []
 
     for r in recepciones_qs:
-        lineas = list(r.lineas.all())
+        # Solo cuentan como obligación de recepción las líneas que realmente
+        # quedaron con cantidad a comprar/recibir mayor que cero. Las líneas
+        # históricas en 0 se conservan para trazabilidad, pero no bloquean el flujo.
+        lineas = [
+            linea for linea in r.lineas.all()
+            if Decimal(linea.cantidad_esperada or 0) > 0
+            and Decimal(getattr(linea.purchase_line, "cantidad_a_comprar", 0) or 0) > 0
+        ]
         total = len(lineas)
         listas = 0
         parciales = 0
@@ -220,13 +227,13 @@ def inventario_dashboard(request):
         "total_historial_entregas": len(historial_entregas),
 
         "lineas_pendientes": InventoryReceptionLine.objects.filter(
-            estado="PENDIENTE"
+            estado="PENDIENTE", cantidad_esperada__gt=0, purchase_line__cantidad_a_comprar__gt=0
         ).count(),
         "lineas_parciales": InventoryReceptionLine.objects.filter(
-            estado="PARCIAL"
+            estado="PARCIAL", cantidad_esperada__gt=0, purchase_line__cantidad_a_comprar__gt=0
         ).count(),
         "lineas_listas": InventoryReceptionLine.objects.filter(
-            estado="LISTO"
+            estado="LISTO", cantidad_esperada__gt=0, purchase_line__cantidad_a_comprar__gt=0
         ).count(),
     })
 
