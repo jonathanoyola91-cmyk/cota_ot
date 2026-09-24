@@ -82,6 +82,7 @@ def dashboard(request):
     es_hse = request.user.is_superuser or "HSE" in grupos
 
     pendientes_entrega = HSERequest.objects.none()
+    historial_entregas = HSERequest.objects.none()
     solicitudes_stock = []
     if es_gestor:
         pendientes_entrega = (
@@ -91,6 +92,15 @@ def dashboard(request):
             .select_related("empleado", "solicitado_por", "compra")
             .prefetch_related("lineas")
             .order_by("-creado_en")[:12]
+        )
+        # Historial real de entregas: conserva las solicitudes ya entregadas
+        # para que Inventario/HSE/Gerencia puedan auditar a quién, qué y cuánto
+        # se entregó, aunque el stock ya haya sido descontado de Bodega HSE.
+        historial_entregas = (
+            HSERequest.objects.filter(estado=HSERequest.Estado.ENTREGADA)
+            .select_related("empleado", "solicitado_por", "entregado_por")
+            .prefetch_related("lineas")
+            .order_by("-entregado_en", "-pk")[:20]
         )
         # Seguimiento de las reposiciones de bodega creadas por este usuario.
         try:
@@ -108,6 +118,7 @@ def dashboard(request):
         "es_gerencia": es_gerencia,
         "es_hse": es_hse,
         "pendientes_entrega": pendientes_entrega,
+        "historial_entregas": historial_entregas,
         "solicitudes_stock": solicitudes_stock,
         "stock": HSEStock.objects.order_by("codigo") if es_gestor else HSEStock.objects.none(),
     })
@@ -127,6 +138,41 @@ def entregas_pendientes(request):
         .order_by("-creado_en")
     )
     return render(request, "hse/entregas_pendientes.html", {"solicitudes": solicitudes})
+
+
+
+@login_required
+def historial_entregas(request):
+    """Historial auditable de EPP/dotación entregados a empleados."""
+    if not _hse_manager(request.user):
+        messages.error(request, "No tienes permiso para consultar el historial HSE.")
+        return redirect("hse:dashboard")
+
+    solicitudes = (
+        HSERequest.objects.filter(estado=HSERequest.Estado.ENTREGADA)
+        .select_related("empleado", "solicitado_por", "entregado_por")
+        .prefetch_related("lineas")
+        .order_by("-entregado_en", "-pk")
+    )
+
+    q = (request.GET.get("q") or "").strip()
+    tipo = (request.GET.get("tipo") or "").strip()
+    if q:
+        solicitudes = solicitudes.filter(
+            Q(empleado__first_name__icontains=q)
+            | Q(empleado__last_name__icontains=q)
+            | Q(empleado__username__icontains=q)
+            | Q(lineas__codigo__icontains=q)
+            | Q(lineas__descripcion__icontains=q)
+        ).distinct()
+    if tipo in {HSERequest.Tipo.EPP, HSERequest.Tipo.DOTACION}:
+        solicitudes = solicitudes.filter(tipo=tipo)
+
+    return render(request, "hse/historial_entregas.html", {
+        "solicitudes": solicitudes,
+        "q": q,
+        "tipo": tipo,
+    })
 
 
 @login_required
@@ -258,7 +304,7 @@ def reponer_bodega(request):
         else:
             from compras_oil.models import PurchaseLine, PurchaseRequest
             compra = PurchaseRequest.objects.create(origen=PurchaseRequest.Origen.HSE, empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS, motivo_stock=f"Reposición preventiva Bodega HSE · {item.codigo}", inventario_revisado_en=timezone.now(), inventario_revisado_por=request.user, creado_por=request.user, paw_nombre="Bodega HSE")
-            PurchaseLine.objects.create(request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad)
+            PurchaseLine.objects.create(request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad, cantidad_a_comprar=cantidad)
             messages.success(request, "Reposición HSE enviada a Compras.")
             return redirect("compras_oil:paw_detail", pk=compra.pk)
     return render(request, "hse/reposicion_form.html")
@@ -498,8 +544,12 @@ def editar_solicitud_stock(request, pk):
                 if cantidad <= 0:
                     linea.delete()
                 else:
+                    # Las reposiciones HSE son solicitudes directas de compra.
+                    # Si HSE cambia la cantidad, sincronizamos también la cantidad
+                    # real a comprar para evitar que Compras conserve el valor anterior.
                     linea.cantidad_requerida = cantidad
-                    linea.save(update_fields=["cantidad_requerida"])
+                    linea.cantidad_a_comprar = cantidad
+                    linea.save(update_fields=["cantidad_requerida", "cantidad_a_comprar"])
 
             item = _catalog_item(request.POST.get("item_id"))
             try:
@@ -509,12 +559,15 @@ def editar_solicitud_stock(request, pk):
             if item and cantidad_nueva > 0:
                 existente = PurchaseLine.objects.filter(request=compra, codigo=item.codigo or "").first()
                 if existente:
-                    existente.cantidad_requerida = Decimal(existente.cantidad_requerida or 0) + cantidad_nueva
-                    existente.save(update_fields=["cantidad_requerida"])
+                    nueva_cantidad = Decimal(existente.cantidad_requerida or 0) + cantidad_nueva
+                    existente.cantidad_requerida = nueva_cantidad
+                    existente.cantidad_a_comprar = nueva_cantidad
+                    existente.save(update_fields=["cantidad_requerida", "cantidad_a_comprar"])
                 else:
                     PurchaseLine.objects.create(
                         request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "",
-                        unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad_nueva
+                        unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad_nueva,
+                        cantidad_a_comprar=cantidad_nueva
                     )
         messages.success(request, f"Solicitud de stock #{compra.pk} actualizada. Se conserva la misma solicitud en Compras.")
         return redirect("hse:editar_stock", pk=compra.pk)

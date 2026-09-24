@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-1">Historial de entregas HSE</h2>
+      <div class="text-muted">EPP y dotación entregados a empleados.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'hse:dashboard' %}">Volver a HSE</a>
+  </div>
+
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-7">
+      <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Buscar empleado, P/N o descripción">
+    </div>
+    <div class="col-md-3">
+      <select class="form-select" name="tipo">
+        <option value="">Todos los tipos</option>
+        <option value="EPP" {% if tipo == 'EPP' %}selected{% endif %}>EPP</option>
+        <option value="DOTACION" {% if tipo == 'DOTACION' %}selected{% endif %}>Dotación</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-grid"><button class="btn btn-primary">Buscar</button></div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Detalle entregado</th><th>Entregado por</th><th>Comprobante</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for sol in solicitudes %}
+        <tr>
+          <td class="text-nowrap">{{ sol.entregado_en|date:"d/m/Y H:i" }}</td>
+          <td>{{ sol.empleado.get_full_name|default:sol.empleado.username }}</td>
+          <td>{{ sol.get_tipo_display }}</td>
+          <td>
+            {% for linea in sol.lineas.all %}
+              <div><strong>{{ linea.codigo }}</strong> · {{ linea.descripcion }} · <strong>{{ linea.cantidad_entregada|floatformat:"-3" }} {{ linea.unidad }}</strong></div>
+            {% empty %}<span class="text-muted">Sin líneas</span>{% endfor %}
+          </td>
+          <td>{% if sol.entregado_por %}{{ sol.entregado_por.get_full_name|default:sol.entregado_por.username }}{% else %}—{% endif %}</td>
+          <td class="text-nowrap">
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'hse:pdf' sol.pk %}" target="_blank">Ver PDF</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No hay entregas registradas con estos filtros.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
