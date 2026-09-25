@@ -1,0 +1,23 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Centro de Costos | IMPETUS CONTROL{% endblock %}
+{% block page_title %}Centro de Costos{% endblock %}
+{% block page_subtitle %}Costeo, tarifas y publicación de precios de IMPETUS HPS{% endblock %}
+{% block content %}
+{% include "pricing/_module_nav.html" %}
+<style>
+.cc-head{background:linear-gradient(135deg,#071b3a,#123d79);color:#fff;border-radius:18px;padding:24px;margin-bottom:18px;box-shadow:var(--shadow)}
+.cc-head h2{font-size:22px;margin-bottom:6px}.cc-head p{color:#c8d8ef;font-size:12px;max-width:820px;line-height:1.55}
+.cc-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.cc-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;text-decoration:none;box-shadow:var(--shadow);transition:.18s ease;min-height:145px}.cc-card:hover{transform:translateY(-3px);border-color:#b8cdf4}.cc-icon{width:42px;height:42px;border-radius:12px;background:#eaf2ff;color:#17478c;display:grid;place-items:center;font-size:21px;margin-bottom:13px}.cc-card h3{font-size:15px;margin-bottom:6px}.cc-card p{font-size:11px;color:var(--muted);line-height:1.5}.cc-card strong{display:block;margin-top:13px;color:#1f66e5;font-size:11px}.cc-note{margin-top:18px;background:#fff8e7;border:1px solid #f4d98c;border-radius:13px;padding:13px 15px;font-size:11px;color:#76550b}
+@media(max-width:1000px){.cc-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.cc-grid{grid-template-columns:1fr}}
+</style>
+<div class="cc-head"><h2>Costos y Pricing</h2><p>Un solo centro para construir el costo integral, mantener las tarifas financieras y publicar precios de venta. El acceso es independiente de Finanzas y está restringido al grupo autorizado.</p></div>
+<div class="cc-grid">
+<a class="cc-card" href="{% url 'pricing:lista' %}"><div class="cc-icon">$</div><h3>Pricing por P/N</h3><p>Crear, revisar y publicar cálculos de precio de venta con costo integral y Gross Margin.</p><strong>Abrir cálculos →</strong></a>
+<a class="cc-card" href="{% url 'pricing:tarifas_mod' %}"><div class="cc-icon">♟</div><h3>Tarifas MOD</h3><p>Costo empresa, horas productivas y tarifa por hora de los recursos de mano de obra directa.</p><strong>Configurar MOD →</strong></a>
+<a class="cc-card" href="{% url 'pricing:tarifa_banco' %}"><div class="cc-icon">⚙</div><h3>Banco de prueba / QA-QC</h3><p>Inversión, utilización, energía, mantenimiento y tarifa auditable por hora de banco.</p><strong>Configurar banco →</strong></a>
+<a class="cc-card" href="{% url 'pricing:configuracion_consumibles' %}"><div class="cc-icon">◫</div><h3>Consumibles generales</h3><p>Política para consumibles menores que no se controlan individualmente mediante P/N.</p><strong>Configurar consumibles →</strong></a>
+<a class="cc-card" href="{% url 'pricing:configuracion_cif' %}"><div class="cc-icon">▦</div><h3>CIF / Costos indirectos</h3><p>Pool mensual de costos indirectos, base de distribución y tarifa CIF por hora-hombre.</p><strong>Configurar CIF →</strong></a>
+<div class="cc-card"><div class="cc-icon">⌁</div><h3>Movilización y viáticos</h3><p>Se registran directamente dentro de cada cálculo según el campo, destino y condiciones reales del servicio.</p><strong>Variable por trabajo</strong></div>
+</div>
+<div class="cc-note"><strong>Acceso restringido.</strong> Los superusuarios ingresan automáticamente. Los demás usuarios deben pertenecer al grupo <b>COSTOS Y PRICING</b>, administrado desde Django Admin.</div>
+{% endblock %}

@@ -1,6 +1,8 @@
 {% load static %}
 {% load dashboard_roles %}
+{% load costos_access %}
 {% dashboard_roles request.user as sidebar_roles %}
+{% costos_access request.user as puede_costos %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -526,6 +528,11 @@ tbody tr:hover{background:#f8fafc;}
         <a href="/taller/" class="{% if request.path == '/taller/' %}active{% endif %}"><span class="menu-icon">⚒</span> Taller</a>
         <a href="{% url 'taller:camaras_taller' %}" class="{% if '/taller/camaras/' in request.path %}active{% endif %}"><span class="menu-icon">▥</span> Cámaras en Taller</a>
         <a href="{% url 'taller:horas_dashboard' %}"><span class="menu-icon">◷</span> Horas de Ensamble</a>
+        {% endif %}
+
+        {% if puede_costos %}
+        <div class="menu-section">COSTOS Y PRICING</div>
+        <a href="{% url 'pricing:centro_costos' %}" class="{% if '/pricing/' in request.path %}active{% endif %}"><span class="menu-icon">◈</span> Centro de Costos</a>
         {% endif %}
 
         {% if sidebar_roles.es_finanzas or sidebar_roles.es_gerente or request.user.is_superuser %}

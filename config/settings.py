@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     "workorders",
     "paw_app",
     "quotes",
+    "pricing.apps.PricingConfig",
     "compras_oil",
     "finanzas",
     "inventario",

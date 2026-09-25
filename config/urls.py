@@ -15,6 +15,7 @@ urlpatterns = [
     # módulos    
     path("compras/", include("compras_oil.urls")),
     path("quotes/", include("quotes.urls")),
+    path("pricing/", include("pricing.urls")),
     path("historial/", include("historial.urls")),
     path("item-oil-gas/", include("item_oil_gas.urls")),
     path("paw/", include("paw_app.urls")),

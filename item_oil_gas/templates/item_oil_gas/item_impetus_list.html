@@ -132,7 +132,9 @@ Items IMPETUS
                     <th>Unidad</th>
                     <th>Clasificación</th>
                     <th>Grupo Inventario</th>
+                    <th>Costo cotizado</th>
                     <th>Estado</th>
+                    <th>Acción</th>
                 </tr>
 
             </thead>
@@ -169,6 +171,10 @@ Items IMPETUS
                     </td>
 
                     <td>
+                        {% if item.costo_cotizado %}<strong>{{ item.costo_cotizado_moneda }} {{ item.costo_cotizado }}</strong><br><small>{{ item.costo_cotizado_fecha|date:"d/m/Y" }}</small>{% else %}—{% endif %}
+                    </td>
+
+                    <td>
 
                         {% if item.activo %}
 
@@ -183,6 +189,7 @@ Items IMPETUS
                         {% endif %}
 
                     </td>
+                    <td><a class="btn btn-secondary" href="{% url 'item_oil_gas:item_impetus_costo_cotizado' item.pk %}">Registrar costo</a></td>
 
                 </tr>
 
@@ -191,7 +198,7 @@ Items IMPETUS
 
                 <tr>
 
-                    <td colspan="6">
+                    <td colspan="8">
                         No existen items IMPETUS cargados.
                     </td>
 

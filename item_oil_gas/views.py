@@ -406,3 +406,38 @@ def download_template(request):
 
     wb.save(response)
     return response
+# =========================
+# COSTO COTIZADO IMPETUS
+# =========================
+from decimal import Decimal, InvalidOperation
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+
+@login_required
+def item_impetus_costo_cotizado(request, pk):
+    item = get_object_or_404(ItemImpetus, pk=pk)
+    if request.method == 'POST':
+        try:
+            costo = Decimal((request.POST.get('costo_cotizado') or '0').replace('.', '').replace(',', '.'))
+            if costo <= 0:
+                raise InvalidOperation
+            moneda = request.POST.get('moneda') or 'COP'
+            if moneda not in ('COP', 'USD'):
+                moneda = 'COP'
+            item.costo_cotizado = costo
+            item.costo_cotizado_moneda = moneda
+            item.costo_cotizado_proveedor = (request.POST.get('proveedor') or '').strip()
+            item.costo_cotizado_fecha = parse_date(request.POST.get('fecha') or '') or timezone.localdate()
+            item.costo_cotizado_vigente_hasta = parse_date(request.POST.get('vigente_hasta') or '')
+            item.costo_cotizado_referencia = (request.POST.get('referencia') or '').strip()
+            item.costo_cotizado_observacion = (request.POST.get('observacion') or '').strip()
+            item.costo_cotizado_por = request.user
+            item.costo_cotizado_actualizado_en = timezone.now()
+            item.save()
+            messages.success(request, f'Costo cotizado de {item.codigo} actualizado. Pricing lo usará mientras esté vigente.')
+            return redirect('item_oil_gas:item_impetus_list')
+        except (InvalidOperation, ValueError):
+            messages.error(request, 'Ingrese un costo cotizado válido mayor que cero.')
+    return render(request, 'item_oil_gas/item_impetus_costo_cotizado.html', {'item': item})

@@ -73,4 +73,10 @@ urlpatterns = [
         views.download_template_impetus,
         name="item_impetus_template"
     ),
+
+    path(
+        "impetus/<int:pk>/costo-cotizado/",
+        views.item_impetus_costo_cotizado,
+        name="item_impetus_costo_cotizado"
+    ),
 ]

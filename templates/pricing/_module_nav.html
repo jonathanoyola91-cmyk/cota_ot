@@ -1,0 +1,18 @@
+<style>
+.pricing-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 18px;padding:11px 14px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 4px 14px rgba(15,35,70,.05)}
+.pricing-nav-left,.pricing-nav-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pricing-nav a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:8px 11px;border-radius:9px;font-size:11px;font-weight:850;border:1px solid #dce5f1;background:#f8fafc;color:#233b5d}
+.pricing-nav a:hover{background:#eef5ff;border-color:#bcd2f4;color:#155bd7}
+.pricing-nav .pricing-home{background:#071b3a;color:#fff;border-color:#071b3a}.pricing-nav .pricing-home:hover{background:#123d79;color:#fff}
+.pricing-nav-label{font-size:10px;color:#748399;font-weight:750}
+@media(max-width:700px){.pricing-nav{align-items:flex-start;flex-direction:column}.pricing-nav-right{width:100%}}
+</style>
+<div class="pricing-nav">
+  <div class="pricing-nav-left">
+    {% if request.resolver_match.url_name != 'centro_costos' %}
+      <a href="{% url 'pricing:centro_costos' %}">← Centro de Costos</a>
+    {% endif %}
+    <a class="pricing-home" href="/dashboard/">⌂ Principal</a>
+  </div>
+  <div class="pricing-nav-right"><span class="pricing-nav-label">COSTOS Y PRICING · IMPETUS HPS</span></div>
+</div>

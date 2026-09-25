@@ -1,0 +1,48 @@
+{% extends "dashboard/home.html" %}{% load humanize %}
+{% block title %}Banco de prueba | Pricing{% endblock %}
+{% block page_title %}Configuración · Banco de prueba / QA-QC{% endblock %}
+{% block page_subtitle %}Finanzas mantiene esta matriz. La mano de obra se calcula por separado para evitar duplicarla con MOD.{% endblock %}
+{% block content %}
+{% include "pricing/_module_nav.html" %}
+<style>
+.bank-wrap{max-width:1500px}.card{background:#fff;border:1px solid #e3e9f2;border-radius:14px;padding:18px;margin-bottom:14px}.status{padding:12px 14px;border-radius:10px;font-weight:850;margin-bottom:14px}.status.ok{background:#eaf8ef;color:#166534;border:1px solid #b9e6c8}.status.warn{background:#fff7dd;color:#7c5800;border:1px solid #f2d77b}.help{background:#f7f9fc;border:1px solid #e3e9f2;border-radius:12px;padding:14px;line-height:1.55;font-size:11px}.help strong{font-size:12px}.sections{display:grid;grid-template-columns:1fr 1fr;gap:14px}.section-title{font-size:13px;font-weight:900;margin-bottom:4px}.section-sub{font-size:10px;color:#66758d;margin-bottom:12px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field label{display:block;font-size:9px;font-weight:900;color:#66758d;text-transform:uppercase;margin-bottom:4px}.field input{width:100%;box-sizing:border-box;padding:9px;border:1px solid #d7dfeb;border-radius:7px}.hint{font-size:9px;color:#718096;line-height:1.35;margin-top:4px}.result{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.kpi{background:#f7f9fc;border-radius:10px;padding:12px}.kpi small{display:block;color:#66758d;font-weight:800;font-size:9px;text-transform:uppercase}.kpi strong{font-size:18px}.total{background:#eef6ff;border:1px solid #cfe1ff}.total strong{font-size:25px;color:#0f4fa8}.formula{font-size:10px;color:#66758d;margin-top:10px}.btn{border:0;background:#155bd7;color:#fff;padding:9px 13px;border-radius:8px;font-weight:850;cursor:pointer}.muted{background:#eef2f7;color:#314158;text-decoration:none;display:inline-block}.actions{display:flex;gap:8px;margin-top:14px}.checkline{margin-top:10px;font-size:11px}.history{font-size:10px;color:#66758d;margin-top:8px}@media(max-width:1000px){.sections,.fields,.result{grid-template-columns:1fr}}
+</style>
+<div class="bank-wrap">
+{% if banco.configuracion_completa %}<div class="status ok">🟢 TARIFA COMPLETA · Los datos esenciales están diligenciados.</div>{% else %}<div class="status warn">🟡 TARIFA PROVISIONAL · Faltan datos esenciales. Puede guardar avances, pero la tarifa aún no debe considerarse definitiva.</div>{% endif %}
+<div class="card help"><strong>¿Qué información debe conseguir Finanzas?</strong><br>
+Valor del banco/equipos: costo de construcción o reposición del banco, VFD, instrumentación y equipos dedicados. · Valor residual: valor estimado al final de la vida útil. · Vida útil: años esperados de utilización. · Horas de uso/mes: horas reales o presupuestadas de ensayo. · Potencia promedio: consumo promedio durante una prueba, no la potencia nominal total instalada. · Tarifa energía: valor real $/kWh de la factura. · Mantenimiento/calibración: presupuesto anual. · Otros: seguros, licencias o repuestos propios del banco.
+</div>
+<form method="post" action="{% url 'pricing:guardar_tarifa_banco' %}">{% csrf_token %}
+<div class="sections">
+<div class="card"><div class="section-title">1. Inversión del banco</div><div class="section-sub">Permite calcular cuánto cuesta recuperar la infraestructura por cada hora de prueba.</div><div class="fields">
+<div class="field"><label>Nombre</label>{{ form.nombre }}</div>
+<div class="field"><label>Valor banco / equipos</label>{{ form.valor_banco_equipos }}<div class="hint">Construcción o reposición del banco, VFD, instrumentación y equipos dedicados.</div></div>
+<div class="field"><label>Valor residual</label>{{ form.valor_residual }}<div class="hint">Valor que se espera conservar al final de la vida útil. Si no se conoce, puede dejarse en 0 provisionalmente.</div></div>
+<div class="field"><label>Vida útil (años)</label>{{ form.vida_util_anios }}<div class="hint">Años durante los cuales se espera utilizar económicamente el banco.</div></div>
+</div></div>
+<div class="card"><div class="section-title">2. Utilización y energía</div><div class="section-sub">Define cuántas horas absorberán los costos y cuánto cuesta energizar una hora de ensayo.</div><div class="fields">
+<div class="field"><label>Horas de uso / mes</label>{{ form.horas_uso_mes }}<div class="hint">Promedio de horas efectivas de prueba al mes. No use las horas laborales del personal.</div></div>
+<div class="field"><label>Potencia promedio (kW)</label>{{ form.potencia_promedio_kw }}<div class="hint">Consumo promedio durante la prueba; no sumar simplemente la potencia nominal de todos los motores.</div></div>
+<div class="field"><label>Tarifa energía ($/kWh)</label>{{ form.tarifa_energia_kwh }}<div class="hint">Costo efectivo por kWh según la factura de energía.</div></div>
+</div></div>
+<div class="card"><div class="section-title">3. Costos anuales propios del banco</div><div class="section-sub">No incluya salarios de técnicos: esa mano de obra ya se carga como MOD.</div><div class="fields">
+<div class="field"><label>Mantenimiento anual</label>{{ form.mantenimiento_anual }}<div class="hint">Preventivos, correctivos y repuestos propios del banco presupuestados para un año.</div></div>
+<div class="field"><label>Calibración anual</label>{{ form.calibracion_anual }}<div class="hint">Calibración y metrología de instrumentos dedicados al banco.</div></div>
+<div class="field"><label>Otros costos anuales</label>{{ form.otros_costos_anuales }}<div class="hint">Seguros, licencias u otros costos exclusivos del banco.</div></div>
+<div class="field"><label>Contingencia (%)</label>{{ form.contingencia_pct }}<div class="hint">Opcional. Margen técnico para imprevistos del banco; no corresponde al Gross Margin comercial.</div></div>
+</div></div>
+<div class="card"><div class="section-title">4. Resultado auditable</div><div class="section-sub">Así se forma la tarifa que Pricing utilizará cuando registre horas de Banco de prueba / QA-QC.</div><div class="result">
+<div class="kpi"><small>Infraestructura / h</small><strong>${{ banco.costo_infraestructura_hora|floatformat:0|intcomma }}</strong></div>
+<div class="kpi"><small>Energía / h</small><strong>${{ banco.costo_energia_hora|floatformat:0|intcomma }}</strong></div>
+<div class="kpi"><small>Mantenimiento / h</small><strong>${{ banco.costo_mantenimiento_hora|floatformat:0|intcomma }}</strong></div>
+<div class="kpi"><small>Calibración / h</small><strong>${{ banco.costo_calibracion_hora|floatformat:0|intcomma }}</strong></div>
+<div class="kpi"><small>Otros / h</small><strong>${{ banco.costo_otros_hora|floatformat:0|intcomma }}</strong></div>
+<div class="kpi total"><small>Tarifa banco / h</small><strong>${{ banco.costo_hora|floatformat:0|intcomma }}</strong></div>
+</div><div class="formula">Tarifa/h = Infraestructura/h + Energía/h + Mantenimiento/h + Calibración/h + Otros/h; al subtotal se aplica la contingencia configurada. MOD se calcula aparte.</div>
+<div class="checkline">{{ form.activo }} <strong>Configuración activa</strong></div>
+{% if banco.pk %}<div class="history">Última actualización: {{ banco.actualizado_en|date:"d/m/Y H:i" }}{% if banco.actualizado_por %} · {{ banco.actualizado_por }}{% endif %}</div>{% endif %}
+</div>
+</div>
+<div class="actions"><button class="btn">Guardar configuración y nueva vigencia</button><a class="btn muted" href="{% url 'pricing:centro_costos' %}">Volver al Centro de Costos</a></div>
+</form></div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "dashboard/home.html" %}{% load humanize %}
+{% block page_title %}Registrar costo cotizado{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:900px"><h2>{{ item.codigo }}</h2><p style="color:#64748b">{{ item.descripcion }}</p>
+<div style="padding:12px;background:#f8fafc;border-radius:10px;margin:15px 0">Precio de venta maestro: <strong>${{ item.precio_venta|floatformat:0|intcomma }}</strong><br>Último costo cotizado: <strong>{{ item.costo_cotizado_moneda }} {{ item.costo_cotizado|floatformat:2|intcomma }}</strong></div>
+<form method="post">{% csrf_token %}<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+<div><label>Costo cotizado *</label><input class="form-control" name="costo_cotizado" required value="{{ item.costo_cotizado|default:'' }}"></div>
+<div><label>Moneda</label><select class="form-control" name="moneda"><option value="COP" {% if item.costo_cotizado_moneda == 'COP' %}selected{% endif %}>COP</option><option value="USD" {% if item.costo_cotizado_moneda == 'USD' %}selected{% endif %}>USD</option></select></div>
+<div><label>Proveedor</label><input class="form-control" name="proveedor" value="{{ item.costo_cotizado_proveedor }}"></div>
+<div><label>Referencia / cotización</label><input class="form-control" name="referencia" value="{{ item.costo_cotizado_referencia }}"></div>
+<div><label>Fecha cotización</label><input class="form-control" type="date" name="fecha" value="{{ item.costo_cotizado_fecha|date:'Y-m-d' }}"></div>
+<div><label>Vigente hasta</label><input class="form-control" type="date" name="vigente_hasta" value="{{ item.costo_cotizado_vigente_hasta|date:'Y-m-d' }}"></div>
+<div style="grid-column:1/-1"><label>Observación</label><input class="form-control" name="observacion" value="{{ item.costo_cotizado_observacion }}" placeholder="Ej. Cotización recibida por correo, incluye flete..."></div></div>
+<div style="margin-top:18px"><button class="btn">Guardar costo cotizado</button> <a class="btn btn-secondary" href="{% url 'item_oil_gas:item_impetus_list' %}">Volver</a></div></form></div>
+{% endblock %}

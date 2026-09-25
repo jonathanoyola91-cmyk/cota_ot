@@ -1,0 +1,23 @@
+{% extends "dashboard/home.html" %}{% load humanize %}
+{% block title %}Tarifas MOD | Centro de Costos{% endblock %}
+{% block page_title %}Tarifas de mano de obra{% endblock %}
+{% block page_subtitle %}Costo empresa, capacidad productiva y costo por hora de la MOD directa{% endblock %}
+{% block content %}
+{% include "pricing/_module_nav.html" %}
+<style>
+.mod-wrap{max-width:1450px}.mod-intro{background:#eef6ff;border:1px solid #cfe1ff;border-radius:13px;padding:13px 15px;margin-bottom:18px;font-size:11px;line-height:1.55;color:#334b6b}
+.mod-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:20px;box-shadow:0 5px 18px rgba(15,35,70,.05)}
+.mod-card h3{font-size:14px;margin:0 0 5px}.mod-card-sub{font-size:10px;color:var(--muted);margin-bottom:17px}.mod-grid{display:grid;grid-template-columns:2fr 1.3fr 1.1fr .55fr;gap:14px;align-items:end}.mod-field label{display:block;font-size:9px;font-weight:900;text-transform:uppercase;color:#607089;margin-bottom:5px}.mod-field input{width:100%;padding:10px 11px;border:1px solid #d6e0ec;border-radius:9px;background:#fff}.mod-check{min-height:39px;display:flex;align-items:center;gap:7px}.mod-btn{display:inline-flex;align-items:center;justify-content:center;border:0;background:#155bd7;color:#fff;border-radius:9px;padding:9px 13px;font-size:11px;font-weight:850;cursor:pointer}.mod-btn:hover{background:#0f4fbf}.mod-table-wrap{overflow-x:auto}.mod-table{width:100%;border-collapse:separate;border-spacing:0}.mod-table th{background:#f6f8fb;color:#607089;text-transform:uppercase;font-size:9px;letter-spacing:.25px;padding:11px;border-bottom:1px solid #e4eaf2}.mod-table td{padding:11px;border-bottom:1px solid #edf1f6;vertical-align:middle}.mod-table input{width:100%;padding:9px 10px;border:1px solid #d6e0ec;border-radius:8px}.mod-rate{font-size:16px;font-weight:900;color:#0d1b35;white-space:nowrap}.mod-empty{text-align:center;color:#7b8798;padding:24px!important}@media(max-width:900px){.mod-grid{grid-template-columns:1fr 1fr}}@media(max-width:650px){.mod-grid{grid-template-columns:1fr}}
+</style>
+<div class="mod-wrap">
+  <div class="mod-intro"><strong>¿Cómo se calcula?</strong> Finanzas registra el costo empresa mensual y las horas productivas. IMPETUS calcula <strong>Costo/hora = Costo empresa mes ÷ Horas productivas</strong>. Estas horas también alimentan automáticamente la base de distribución CIF cuando el modo CIF está en Automático.</div>
+  <div class="mod-card">
+    <h3>Nueva tarifa / recurso</h3><div class="mod-card-sub">Cree únicamente recursos que puedan cargar horas directas a un trabajo.</div>
+    <form method="post" action="{% url 'pricing:crear_tarifa_mod' %}">{% csrf_token %}
+      <div class="mod-grid"><div class="mod-field"><label>Recurso / cargo</label>{{ form.nombre }}</div><div class="mod-field"><label>Costo empresa mes</label>{{ form.costo_empresa_mes }}</div><div class="mod-field"><label>Horas productivas / mes</label>{{ form.horas_productivas_mes }}</div><div class="mod-field"><label>Estado</label><div class="mod-check">{{ form.activo }} <span>Activo</span></div></div></div>
+      <button class="mod-btn" style="margin-top:16px">+ Crear tarifa</button>
+    </form>
+  </div>
+  <div class="mod-card"><h3>Recursos configurados</h3><div class="mod-card-sub">Actualice solo cuando cambie el costo empresa o la capacidad productiva mensual.</div><div class="mod-table-wrap"><table class="mod-table"><thead><tr><th>Recurso</th><th>Costo empresa / mes</th><th>Horas productivas</th><th>Costo / h</th><th>Acción</th></tr></thead><tbody>{% for r in tarifas %}<tr><form method="post" action="{% url 'pricing:guardar_tarifa_mod' r.pk %}">{% csrf_token %}<td><input name="nombre" value="{{ r.nombre }}"></td><td><input name="costo_empresa_mes" value="{{ r.costo_empresa_mes }}"></td><td><input name="horas_productivas_mes" value="{{ r.horas_productivas_mes }}"></td><td class="mod-rate">${{ r.costo_hora|floatformat:0|intcomma }}/h<input type="hidden" name="activo" value="{% if r.activo %}on{% endif %}"></td><td><button class="mod-btn">Guardar</button></td></form></tr>{% empty %}<tr><td class="mod-empty" colspan="5">Aún no hay tarifas configuradas.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

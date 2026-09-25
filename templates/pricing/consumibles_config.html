@@ -1,0 +1,113 @@
+{% extends 'dashboard/home.html' %}{% load humanize %}
+{% block title %}Consumibles generales | Centro de Costos{% endblock %}
+{% block page_title %}Consumibles generales{% endblock %}
+{% block page_subtitle %}Política financiera para costos menores de taller que no se controlan por P/N{% endblock %}
+{% block content %}
+{% include "pricing/_module_nav.html" %}
+<style>
+.consumibles-page{width:100%;max-width:none}
+.consumibles-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.75fr);gap:18px;align-items:start}
+.cc-card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 22px rgba(15,35,70,.055);overflow:hidden}
+.cc-card-head{padding:18px 20px 14px;border-bottom:1px solid #edf1f6}
+.cc-card-head h3{margin:0 0 4px;font-size:16px;color:#10213e}.cc-card-head p{margin:0;color:#718096;font-size:11px;line-height:1.5}
+.cc-card-body{padding:20px}
+.cc-form-grid{display:grid;grid-template-columns:minmax(220px,1.15fr) minmax(230px,1fr) minmax(150px,.55fr);gap:18px;align-items:start}
+.cc-field label{display:block;margin:0 0 7px;font-size:10px;font-weight:900;color:#52647d;text-transform:uppercase;letter-spacing:.45px}
+.cc-field input[type=text],.cc-field input[type=number],.cc-field select{width:100%;height:42px;border:1px solid #cfd9e7;border-radius:10px;background:#fff;padding:0 12px;font-size:13px;color:#17263d;outline:none}
+.cc-field input:focus,.cc-field select:focus{border-color:#4f8be8;box-shadow:0 0 0 3px rgba(31,102,229,.10)}
+.cc-help{display:block;margin-top:6px;color:#7b899d;font-size:10px;line-height:1.4}
+.cc-active{height:42px;display:flex;align-items:center;gap:9px;padding:0 12px;border:1px solid #dbe3ee;border-radius:10px;background:#f8fafc;font-size:12px;font-weight:750;color:#34455f}
+.cc-active input{width:16px;height:16px}
+.cc-dynamic{grid-column:1/-1;display:grid;grid-template-columns:minmax(220px,360px) 1fr;gap:18px;padding-top:2px}
+.cc-value-box{padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e5ebf3}
+.cc-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;padding-top:17px;border-top:1px solid #edf1f6}
+.cc-actions-note{font-size:10px;color:#7b899d}.cc-save{min-width:145px;height:38px}
+.cc-info{padding:17px 18px;border-radius:14px;border:1px solid #c8dcfb;background:#f1f7ff;margin-bottom:18px}
+.cc-info strong{display:block;font-size:13px;color:#183b70;margin-bottom:5px}.cc-info p{margin:0;font-size:11px;line-height:1.55;color:#50657f}
+.cc-side-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 6px 22px rgba(15,35,70,.045)}
+.cc-side-card h4{margin:0 0 12px;font-size:13px;color:#152945}.cc-step{display:flex;gap:10px;padding:11px 0;border-top:1px solid #eef2f6}.cc-step:first-of-type{border-top:0;padding-top:0}
+.cc-step-num{flex:0 0 25px;width:25px;height:25px;border-radius:8px;background:#eaf2ff;color:#1f66e5;display:grid;place-items:center;font-size:10px;font-weight:900}
+.cc-step strong{display:block;font-size:11px;color:#34455f;margin-bottom:2px}.cc-step span{display:block;font-size:10px;line-height:1.45;color:#7b899d}
+.cc-rule{margin-top:18px;padding:14px 16px;border-radius:13px;background:#fff9e9;border:1px solid #f5df9b}.cc-rule strong{display:block;font-size:11px;color:#755711;margin-bottom:4px}.cc-rule span{font-size:10px;line-height:1.45;color:#806b39}
+@media(max-width:1050px){.consumibles-grid{grid-template-columns:1fr}.cc-form-grid{grid-template-columns:1fr 1fr}.cc-dynamic{grid-column:1/-1}.cc-field-active{grid-column:1/-1}}
+@media(max-width:650px){.cc-form-grid,.cc-dynamic{grid-template-columns:1fr}.cc-card-body,.cc-card-head{padding:16px}.cc-actions{align-items:stretch;flex-direction:column}.cc-save{width:100%}}
+</style>
+
+<div class="consumibles-page">
+  <div class="cc-info">
+    <strong>¿Qué se considera consumible general?</strong>
+    <p>Trapos, pequeñas cantidades de limpiador, lijas, discos y otros consumibles menores de taller. Aceites, grasas, Loctite, repuestos u otros elementos relevantes que tengan P/N deben cargarse como componente para evitar duplicar costos.</p>
+  </div>
+
+  <div class="consumibles-grid">
+    <form method="post" action="{% url 'pricing:guardar_configuracion_consumibles' %}" class="cc-card">{% csrf_token %}
+      <div class="cc-card-head">
+        <h3>Política de consumibles</h3>
+        <p>Define cómo se incorporará este costo en cada cálculo de Pricing.</p>
+      </div>
+      <div class="cc-card-body">
+        <div class="cc-form-grid">
+          <div class="cc-field">
+            <label>Nombre de la política</label>
+            {{ form.nombre }}
+            <span class="cc-help">Nombre visible dentro del cálculo y el histórico.</span>
+          </div>
+          <div class="cc-field">
+            <label>Método de cálculo</label>
+            {{ form.metodo }}
+            <span class="cc-help">Puede ser valor fijo, porcentaje sobre MOD directa o valor manual por trabajo.</span>
+          </div>
+          <div class="cc-field cc-field-active">
+            <label>Estado</label>
+            <div class="cc-active">{{ form.activo }} <span>Política activa</span></div>
+            <span class="cc-help">Solo la política activa se aplica a nuevos cálculos.</span>
+          </div>
+
+          <div class="cc-dynamic">
+            <div id="fixed-wrap" class="cc-field cc-value-box">
+              <label>Valor fijo por trabajo</label>
+              {{ form.valor_fijo }}
+              <span class="cc-help">Valor automático que se cargará en cada trabajo.</span>
+            </div>
+            <div id="pct-wrap" class="cc-field cc-value-box">
+              <label>% sobre MOD directa</label>
+              {{ form.porcentaje_mod }}
+              <span class="cc-help">Porcentaje aplicado al costo de mano de obra directa del trabajo.</span>
+            </div>
+            <div id="manual-note" class="cc-value-box">
+              <strong style="display:block;font-size:12px;color:#334155;margin-bottom:4px">Valor definido por trabajo</strong>
+              <span style="font-size:10px;line-height:1.5;color:#718096">Con el método Manual no se configura un valor aquí. Comercial/Finanzas registrará el importe correspondiente al preparar cada cálculo.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cc-actions">
+          <span class="cc-actions-note">Los cambios aplican a cálculos nuevos; el valor utilizado queda conservado en el histórico.</span>
+          <button class="btn cc-save" type="submit">Guardar política</button>
+        </div>
+      </div>
+    </form>
+
+    <aside class="cc-side-card">
+      <h4>Aplicación en el costeo</h4>
+      <div class="cc-step"><div class="cc-step-num">1</div><div><strong>Valor fijo</strong><span>Pricing incorpora automáticamente el valor configurado a cada trabajo.</span></div></div>
+      <div class="cc-step"><div class="cc-step-num">2</div><div><strong>% sobre MOD</strong><span>Calcula el porcentaje sobre la mano de obra directa ya cargada.</span></div></div>
+      <div class="cc-step"><div class="cc-step-num">3</div><div><strong>Manual por trabajo</strong><span>Permite registrar un valor específico cuando el consumo cambia según el servicio.</span></div></div>
+      <div class="cc-rule"><strong>Regla para evitar doble costo</strong><span>Si el elemento tiene P/N y un costo relevante, debe ir como componente y no como consumible general.</span></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function(){
+  const m=document.getElementById('id_metodo'), f=document.getElementById('fixed-wrap'), p=document.getElementById('pct-wrap'), n=document.getElementById('manual-note');
+  function sync(){
+    if(!m)return;
+    f.style.display=m.value==='FIJO'?'block':'none';
+    p.style.display=m.value==='PCT_MOD'?'block':'none';
+    n.style.display=m.value==='MANUAL'?'block':'none';
+  }
+  if(m)m.addEventListener('change',sync); sync();
+})();
+</script>
+{% endblock %}
