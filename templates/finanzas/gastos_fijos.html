@@ -1,0 +1,65 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Gastos fijos<script>
+(function(){
+ const form=document.getElementById('periodo-form');
+ const month=document.getElementById('month');
+ const year=document.getElementById('year');
+ if(form && month && year){
+   month.addEventListener('change', function(){ form.submit(); });
+   year.addEventListener('change', function(){ form.submit(); });
+ }
+})();
+</script>
+{% endblock %}
+{% block page_title %}Finanzas · Gastos fijos<script>
+(function(){
+ const form=document.getElementById('periodo-form');
+ const month=document.getElementById('month');
+ const year=document.getElementById('year');
+ if(form && month && year){
+   month.addEventListener('change', function(){ form.submit(); });
+   year.addEventListener('change', function(){ form.submit(); });
+ }
+})();
+</script>
+{% endblock %}
+{% block content %}
+<style>
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;margin-bottom:18px}.kpi{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px}.kpi small{color:#64748b}.kpi strong{display:block;font-size:22px;margin-top:6px}.danger{color:#b91c1c}.ok{color:#15803d}.grid2{display:grid;grid-template-columns:1fr 360px;gap:18px}.status{padding:4px 9px;border-radius:999px;font-size:12px;font-weight:700}.status-pagado{background:#dcfce7;color:#166534}.status-vencido{background:#fee2e2;color:#991b1b}.status-pendiente{background:#fef3c7;color:#92400e}.periodo-bar{display:flex;align-items:end;gap:10px;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:16px}.periodo-bar label{display:block;font-size:12px;font-weight:700;color:#64748b;margin-bottom:4px}.periodo-bar select{min-width:135px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}.periodo-nav{display:flex;gap:6px;flex-wrap:wrap}@media(max-width:900px){.kpis{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}}
+</style>
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+ <div><h2 style="margin:0">Control mensual · {{ periodo|date:"F Y" }}</h2><div style="color:#64748b">Obligaciones recurrentes y servicios de la empresa.</div></div>
+ <div style="display:flex;gap:8px"><a class="btn" href="{% url 'finanzas:dashboard' %}">← Finanzas</a><a class="btn" href="{% url 'finanzas:inversionistas' %}">Inversionistas</a></div>
+</div>
+<div class="periodo-bar">
+ <form method="get" id="periodo-form" style="display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:0">
+  <div><label for="month">Mes</label><select name="month" id="month">{% for numero,nombre in meses %}<option value="{{ numero }}" {% if numero == periodo.month %}selected{% endif %}>{{ nombre }}</option>{% endfor %}</select></div>
+  <div><label for="year">Año</label><select name="year" id="year">{% for anio in anios %}<option value="{{ anio }}" {% if anio == periodo.year %}selected{% endif %}>{{ anio }}</option>{% endfor %}</select></div>
+  <button class="btn" type="submit">Ver mes</button>
+ </form>
+ <div class="periodo-nav">
+  <a class="btn" href="?year={{ anterior.year }}&month={{ anterior.month }}">‹ Mes anterior</a>
+  <a class="btn" href="?year={{ hoy.year }}&month={{ hoy.month }}">Mes actual</a>
+  <a class="btn" href="?year={{ siguiente.year }}&month={{ siguiente.month }}">Mes siguiente ›</a>
+ </div>
+</div>
+<div class="kpis"><div class="kpi"><small>Total mes</small><strong>${{ resumen.total|floatformat:0 }}</strong></div><div class="kpi"><small>Pagado</small><strong class="ok">${{ resumen.pagado|floatformat:0 }}</strong></div><div class="kpi"><small>Pendiente</small><strong>${{ resumen.pendiente|floatformat:0 }}</strong></div><div class="kpi"><small>Vencido</small><strong class="danger">${{ resumen.vencido|floatformat:0 }}</strong></div></div>
+<div class="grid2"><div class="panel">
+ <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3>Gastos de {{ periodo_nombre }} {{ periodo.year }}</h3><form method="post" action="{% url 'finanzas:copiar_gastos_mes_anterior' %}" onsubmit="return confirm('¿Desea copiar los gastos de {{ anterior_nombre }} {{ anterior.year }} a {{ periodo_nombre }} {{ periodo.year }}? Los conceptos que ya existan no se duplicarán.');">{% csrf_token %}<input type="hidden" name="year" value="{{ periodo.year }}"><input type="hidden" name="month" value="{{ periodo.month }}"><button class="btn" type="submit">Copiar gastos de {{ anterior_nombre }} {{ anterior.year }}</button></form></div>
+ <table><thead><tr><th>Concepto</th><th>Vence</th><th>Valor</th><th>Promedio</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+ {% for g in gastos %}<tr><td><strong>{{ g.concepto }}</strong><br><small>{{ g.get_categoria_display }}</small></td><td>{{ g.fecha_vencimiento|date:"d/m/Y"|default:"-" }}</td><td>${{ g.valor|floatformat:0 }}</td><td>{% if g.promedio_historico %}${{ g.promedio_historico|floatformat:0 }}{% else %}-{% endif %}</td><td>{% if g.pagado %}<span class="status status-pagado">Pagado</span>{% elif g.vencido %}<span class="status status-vencido">Vencido</span>{% else %}<span class="status status-pendiente">Pendiente</span>{% endif %}</td><td><a class="btn" href="{% url 'finanzas:editar_gasto_fijo' g.id %}">Editar</a>{% if not g.pagado %}<form method="post" action="{% url 'finanzas:pagar_gasto_fijo' g.id %}" style="display:inline">{% csrf_token %}<button class="btn" type="submit">Pagar</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="6" style="text-align:center;padding:24px">Aún no hay gastos cargados para este mes.</td></tr>{% endfor %}
+ </tbody></table></div>
+ <div class="panel"><h3>Agregar gasto</h3><form method="post">{% csrf_token %}<input type="hidden" name="accion" value="crear">{{ form.as_p }}<button class="btn" type="submit">Guardar gasto</button></form></div>
+</div>
+<script>
+(function(){
+ const form=document.getElementById('periodo-form');
+ const month=document.getElementById('month');
+ const year=document.getElementById('year');
+ if(form && month && year){
+   month.addEventListener('change', function(){ form.submit(); });
+   year.addEventListener('change', function(){ form.submit(); });
+ }
+})();
+</script>
+{% endblock %}

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -17,17 +18,21 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.roles import tiene_rol
 from compras_oil.models import PurchaseLine, Supplier
-from .forms import SupplierInvoiceForm, SupplierPaymentForm
+from .forms import (SupplierInvoiceForm, SupplierPaymentForm, FixedExpenseForm, InvestorLoanForm, InvestorPaymentForm)
 from .models import (
     FinanceApproval,
     FinanceApprovalLine,
     SupplierInvoice,
     SupplierPayment,
+    FixedExpense,
+    InvestorLoan,
+    InvestorPayment,
 )
 
 
@@ -348,6 +353,20 @@ def dashboard_finanzas(request):
         else:
             historial.append(item)
 
+    today = timezone.localdate()
+    periodo = today.replace(day=1)
+    gastos_mes = list(FixedExpense.objects.filter(periodo=periodo).order_by("fecha_vencimiento", "concepto"))
+    total_gastos = sum((g.valor for g in gastos_mes), Decimal("0"))
+    pagado_gastos = sum((g.valor for g in gastos_mes if g.pagado), Decimal("0"))
+    pendiente_gastos = total_gastos - pagado_gastos
+    vencido_gastos = sum((g.valor for g in gastos_mes if g.vencido), Decimal("0"))
+
+    prestamos = list(InvestorLoan.objects.filter(activo=True).prefetch_related("pagos"))
+    cuotas = list(InvestorPayment.objects.filter(prestamo__activo=True).select_related("prestamo"))
+    total_prestado = sum((p.valor_prestado for p in prestamos), Decimal("0"))
+    total_cuotas_pendientes = sum((c.valor for c in cuotas if not c.pagado), Decimal("0"))
+    total_cuotas_vencidas = sum((c.valor for c in cuotas if c.vencido), Decimal("0"))
+
     return render(request, "finanzas/dashboard.html", {
         # Se conserva items para no romper el template actual mientras se actualiza.
         "items": items,
@@ -355,6 +374,11 @@ def dashboard_finanzas(request):
         "historial": historial,
         "total_pendientes": len(pendientes),
         "total_historial": len(historial),
+        "periodo_actual": periodo,
+        "gastos_mes": gastos_mes,
+        "gastos_resumen": {"total": total_gastos, "pagado": pagado_gastos, "pendiente": pendiente_gastos, "vencido": vencido_gastos},
+        "prestamos": prestamos,
+        "inversionistas_resumen": {"prestado": total_prestado, "pendiente": total_cuotas_pendientes, "vencido": total_cuotas_vencidas},
     })
 
 
@@ -720,3 +744,234 @@ def cuenta_proveedor_detalle(request, pk):
         "invoice_form": invoice_form,
         "payment_form": payment_form,
     })
+
+@login_required
+def gastos_fijos(request):
+    if not _puede_ver_finanzas(request.user):
+        messages.error(request, "No tienes acceso a Finanzas.")
+        return redirect("/")
+
+    today = timezone.localdate()
+    try:
+        year = int(request.GET.get("year", today.year))
+        month = int(request.GET.get("month", today.month))
+        if month < 1 or month > 12 or year < 2000 or year > 2100:
+            raise ValueError("Periodo inválido")
+        periodo = today.replace(year=year, month=month, day=1)
+    except (TypeError, ValueError):
+        periodo = today.replace(day=1)
+
+    anterior = (periodo - timedelta(days=1)).replace(day=1)
+    if periodo.month == 12:
+        siguiente = periodo.replace(year=periodo.year + 1, month=1)
+    else:
+        siguiente = periodo.replace(month=periodo.month + 1)
+    meses = [
+        (1, "Enero"), (2, "Febrero"), (3, "Marzo"), (4, "Abril"),
+        (5, "Mayo"), (6, "Junio"), (7, "Julio"), (8, "Agosto"),
+        (9, "Septiembre"), (10, "Octubre"), (11, "Noviembre"), (12, "Diciembre"),
+    ]
+    anios = range(today.year - 5, today.year + 3)
+
+    if request.method == "POST" and request.POST.get("accion") == "crear":
+        form = FixedExpenseForm(request.POST)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.periodo = periodo
+            obj.creado_por = request.user
+            obj.save()
+            messages.success(request, "Gasto fijo agregado.")
+            return redirect(f"{request.path}?year={periodo.year}&month={periodo.month}")
+    else:
+        form = FixedExpenseForm()
+
+    gastos = list(FixedExpense.objects.filter(periodo=periodo).order_by("fecha_vencimiento", "concepto"))
+    total = sum((g.valor for g in gastos), Decimal("0"))
+    pagado = sum((g.valor for g in gastos if g.pagado), Decimal("0"))
+    vencido = sum((g.valor for g in gastos if g.vencido), Decimal("0"))
+
+    # Promedio por concepto/categoría de hasta los 3 meses anteriores.
+    historico = FixedExpense.objects.filter(periodo__lt=periodo).order_by("-periodo")
+    promedios = {}
+    for gasto in gastos:
+        vals = list(historico.filter(categoria=gasto.categoria, concepto__iexact=gasto.concepto).values_list("valor", flat=True)[:3])
+        gasto.promedio_historico = (sum(vals, Decimal("0")) / len(vals)) if vals else None
+
+    return render(request, "finanzas/gastos_fijos.html", {
+        "periodo": periodo, "gastos": gastos, "form": form,
+        "meses": meses, "anios": anios, "anterior": anterior, "siguiente": siguiente, "hoy": today,
+        "anterior_nombre": dict(meses)[anterior.month],
+        "periodo_nombre": dict(meses)[periodo.month],
+        "resumen": {"total": total, "pagado": pagado, "pendiente": total - pagado, "vencido": vencido},
+    })
+
+
+@login_required
+@require_POST
+def copiar_gastos_mes_anterior(request):
+    if not _puede_ver_finanzas(request.user):
+        return redirect("/")
+    today = timezone.localdate()
+    year = int(request.POST.get("year", today.year))
+    month = int(request.POST.get("month", today.month))
+    periodo = today.replace(year=year, month=month, day=1)
+    anterior = (periodo - timedelta(days=1)).replace(day=1)
+    existentes = set(FixedExpense.objects.filter(periodo=periodo).values_list("categoria", "concepto"))
+    creados = 0
+    for g in FixedExpense.objects.filter(periodo=anterior):
+        if (g.categoria, g.concepto) in existentes:
+            continue
+        vencimiento = None
+        if g.fecha_vencimiento:
+            import calendar
+            dia = min(g.fecha_vencimiento.day, calendar.monthrange(periodo.year, periodo.month)[1])
+            vencimiento = periodo.replace(day=dia)
+        FixedExpense.objects.create(periodo=periodo, categoria=g.categoria, concepto=g.concepto, valor=g.valor,
+                                    fecha_vencimiento=vencimiento, observacion=g.observacion, creado_por=request.user)
+        creados += 1
+    if creados:
+        messages.success(request, f"Se copiaron {creados} gastos de {dict([(1, 'enero'), (2, 'febrero'), (3, 'marzo'), (4, 'abril'), (5, 'mayo'), (6, 'junio'), (7, 'julio'), (8, 'agosto'), (9, 'septiembre'), (10, 'octubre'), (11, 'noviembre'), (12, 'diciembre')])[anterior.month]} {anterior.year} a {dict([(1, 'enero'), (2, 'febrero'), (3, 'marzo'), (4, 'abril'), (5, 'mayo'), (6, 'junio'), (7, 'julio'), (8, 'agosto'), (9, 'septiembre'), (10, 'octubre'), (11, 'noviembre'), (12, 'diciembre')])[periodo.month]} {periodo.year}.")
+    else:
+        if FixedExpense.objects.filter(periodo=anterior).exists():
+            messages.info(request, "No se copiaron gastos porque los conceptos del mes anterior ya existen en el mes seleccionado.")
+        else:
+            messages.warning(request, "El mes anterior no tiene gastos para copiar.")
+    return redirect(f"/finanzas/gastos-fijos/?year={periodo.year}&month={periodo.month}")
+
+
+@login_required
+def editar_gasto_fijo(request, pk):
+    if not _puede_ver_finanzas(request.user):
+        return redirect("/")
+    gasto = get_object_or_404(FixedExpense, pk=pk)
+    if request.method == "POST":
+        form = FixedExpenseForm(request.POST, instance=gasto)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Gasto actualizado.")
+            return redirect(f"/finanzas/gastos-fijos/?year={gasto.periodo.year}&month={gasto.periodo.month}")
+    else:
+        form = FixedExpenseForm(instance=gasto)
+    return render(request, "finanzas/gasto_form.html", {"form": form, "gasto": gasto})
+
+
+@login_required
+@require_POST
+def pagar_gasto_fijo(request, pk):
+    if not _puede_ver_finanzas(request.user):
+        return redirect("/")
+    gasto = get_object_or_404(FixedExpense, pk=pk)
+    gasto.pagado = True
+    gasto.fecha_pago = timezone.localdate()
+    gasto.referencia_pago = request.POST.get("referencia_pago", "").strip()
+    gasto.pagado_por = request.user
+    gasto.save(update_fields=["pagado", "fecha_pago", "referencia_pago", "pagado_por", "actualizado_en"])
+    messages.success(request, f"{gasto.concepto} marcado como pagado.")
+    return redirect(request.META.get("HTTP_REFERER", "/finanzas/gastos-fijos/"))
+
+
+@login_required
+def inversionistas(request):
+    if not _puede_ver_finanzas(request.user):
+        messages.error(request, "No tienes acceso a Finanzas.")
+        return redirect("/")
+
+    hoy = timezone.localdate()
+    try:
+        year = int(request.GET.get("year", hoy.year))
+        month = int(request.GET.get("month", hoy.month))
+        if month < 1 or month > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        year, month = hoy.year, hoy.month
+
+    if request.method == "POST" and request.POST.get("accion") == "crear_prestamo":
+        form = InvestorLoanForm(request.POST)
+        if form.is_valid():
+            prestamo = form.save(commit=False)
+            prestamo.creado_por = request.user
+            prestamo.save()
+            messages.success(request, f"Inversionista registrado. Interés mensual calculado: ${prestamo.cuota_programada:,.0f}.")
+            return redirect(f"{reverse('finanzas:inversionistas')}?year={year}&month={month}")
+    else:
+        form = InvestorLoanForm()
+
+    prestamos = list(InvestorLoan.objects.prefetch_related("pagos").all())
+    cuotas = list(InvestorPayment.objects.select_related("prestamo").filter(
+        prestamo__activo=True, fecha_programada__year=year, fecha_programada__month=month
+    ))
+    total_prestado = sum((p.valor_prestado for p in prestamos if p.activo), Decimal("0"))
+    interes_estimado = sum((p.interes_mensual_valor for p in prestamos if p.activo), Decimal("0"))
+    pagado = sum((c.valor for c in cuotas if c.pagado), Decimal("0"))
+    pendiente = sum((c.valor for c in cuotas if not c.pagado), Decimal("0"))
+    vencido = sum((c.valor for c in cuotas if c.vencido), Decimal("0"))
+
+    meses = [(i, n) for i, n in enumerate(["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]) if i]
+    return render(request, "finanzas/inversionistas.html", {
+        "form": form, "prestamos": prestamos, "cuotas": cuotas, "year": year, "month": month,
+        "meses": meses, "years": range(hoy.year - 5, hoy.year + 3),
+        "resumen": {"prestado": total_prestado, "interes_mes": interes_estimado, "pagado": pagado, "pendiente": pendiente, "vencido": vencido},
+    })
+
+
+@login_required
+def editar_inversionista(request, pk):
+    if not _puede_ver_finanzas(request.user):
+        messages.error(request, "No tienes acceso a Finanzas.")
+        return redirect("/")
+
+    prestamo = get_object_or_404(InvestorLoan, pk=pk)
+    if request.method == "POST":
+        form = InvestorLoanForm(request.POST, instance=prestamo)
+        if form.is_valid():
+            prestamo = form.save()
+            messages.success(
+                request,
+                f"Inversionista actualizado. Nuevo interés mensual: ${prestamo.interes_mensual_valor:,.0f}. "
+                "Los intereses ya programados o pagados conservan su valor histórico."
+            )
+            year = request.POST.get("year", timezone.localdate().year)
+            month = request.POST.get("month", timezone.localdate().month)
+            return redirect(f"{reverse('finanzas:inversionistas')}?year={year}&month={month}")
+    else:
+        form = InvestorLoanForm(instance=prestamo)
+
+    return render(request, "finanzas/inversionista_form.html", {
+        "form": form,
+        "prestamo": prestamo,
+        "year": request.GET.get("year", timezone.localdate().year),
+        "month": request.GET.get("month", timezone.localdate().month),
+    })
+
+
+@login_required
+def agregar_cuota_inversionista(request, prestamo_id):
+    if not _puede_ver_finanzas(request.user):
+        return redirect("/")
+    prestamo = get_object_or_404(InvestorLoan, pk=prestamo_id)
+    if request.method == "POST":
+        form = InvestorPaymentForm(request.POST)
+        if form.is_valid():
+            cuota = form.save(commit=False)
+            cuota.prestamo = prestamo
+            cuota.save()
+            messages.success(request, "Pago de interés programado.")
+            return redirect("finanzas:inversionistas")
+    else:
+        form = InvestorPaymentForm(initial={"valor": prestamo.interes_mensual_valor, "fecha_programada": prestamo.fecha_primera_cuota})
+    return render(request, "finanzas/cuota_inversionista_form.html", {"form": form, "prestamo": prestamo})
+
+
+@login_required
+@require_POST
+def pagar_cuota_inversionista(request, pk):
+    if not _puede_ver_finanzas(request.user):
+        return redirect("/")
+    cuota = get_object_or_404(InvestorPayment, pk=pk)
+    cuota.pagado = True
+    cuota.fecha_pago = timezone.localdate()
+    cuota.referencia_pago = request.POST.get("referencia_pago", "").strip()
+    cuota.pagado_por = request.user
+    cuota.save(update_fields=["pagado", "fecha_pago", "referencia_pago", "pagado_por", "actualizado_en"])
+    messages.success(request, "Interés mensual marcado como pagado. El capital no fue modificado.")
+    return redirect("finanzas:inversionistas")

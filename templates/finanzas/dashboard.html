@@ -4,6 +4,10 @@
 {% block page_title %}Finanzas · Solicitudes{% endblock %}
 
 {% block content %}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:22px;">
+  <div class="panel"><h3 style="margin-top:0">Gastos fijos</h3><p style="color:#64748b">Arriendo, servicios, parafiscales y obligaciones mensuales.</p><div><strong>Pendiente:</strong> ${{ gastos_resumen.pendiente|floatformat:0 }} · <strong>Vencido:</strong> ${{ gastos_resumen.vencido|floatformat:0 }}</div><br><a class="btn" href="{% url 'finanzas:gastos_fijos' %}">Abrir control mensual</a></div>
+  <div class="panel"><h3 style="margin-top:0">Inversionistas</h3><p style="color:#64748b">Préstamos, interés mensual y calendario de cuotas.</p><div><strong>Capital:</strong> ${{ inversionistas_resumen.prestado|floatformat:0 }} · <strong>Vencido:</strong> ${{ inversionistas_resumen.vencido|floatformat:0 }}</div><br><a class="btn" href="{% url 'finanzas:inversionistas' %}">Abrir inversionistas</a></div>
+</div>
 
 <div class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">

@@ -1,0 +1,1 @@
+{% extends "dashboard/home.html" %}{% block page_title %}Editar gasto fijo{% endblock %}{% block content %}<div class="panel" style="max-width:720px"><h2>{{ gasto.concepto }}</h2><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn">Guardar cambios</button> <a class="btn" href="{% url 'finanzas:gastos_fijos' %}">Cancelar</a></form></div>{% endblock %}

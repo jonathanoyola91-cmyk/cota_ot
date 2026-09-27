@@ -302,3 +302,24 @@ class FinanceApprovalAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+from .models import FixedExpense, InvestorLoan, InvestorPayment
+
+@admin.register(FixedExpense)
+class FixedExpenseAdmin(admin.ModelAdmin):
+    list_display = ("periodo", "concepto", "categoria", "valor", "fecha_vencimiento", "pagado", "fecha_pago")
+    list_filter = ("periodo", "categoria", "pagado")
+    search_fields = ("concepto", "observacion", "referencia_pago")
+
+
+class InvestorPaymentInline(admin.TabularInline):
+    model = InvestorPayment
+    extra = 0
+
+
+@admin.register(InvestorLoan)
+class InvestorLoanAdmin(admin.ModelAdmin):
+    list_display = ("inversionista", "valor_prestado", "interes_mensual", "cuota_programada", "activo")
+    list_filter = ("activo",)
+    search_fields = ("inversionista",)
+    inlines = [InvestorPaymentInline]

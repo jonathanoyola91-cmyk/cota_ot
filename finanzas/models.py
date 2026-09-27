@@ -403,3 +403,129 @@ class SupplierPayment(models.Model):
 
     def __str__(self):
         return f"Abono {self.valor} - {self.supplier_invoice}"
+
+
+# =======================================
+# CONTROL MENSUAL - GASTOS FIJOS EMPRESA
+# =======================================
+
+class FixedExpense(models.Model):
+    class Categoria(models.TextChoices):
+        ARRIENDO = "ARRIENDO", "Arriendo"
+        ENERGIA = "ENERGIA", "Energía"
+        AGUA = "AGUA", "Agua"
+        GAS = "GAS", "Gas"
+        INTERNET = "INTERNET", "Internet / telefonía"
+        NOMINA = "NOMINA", "Nómina"
+        PARAFISCALES = "PARAFISCALES", "Parafiscales / seguridad social"
+        IMPUESTOS = "IMPUESTOS", "Impuestos"
+        SEGUROS = "SEGUROS", "Seguros"
+        SOFTWARE = "SOFTWARE", "Software / suscripciones"
+        OTRO = "OTRO", "Otro"
+
+    periodo = models.DateField("Mes", help_text="Usar el primer día del mes")
+    categoria = models.CharField(max_length=20, choices=Categoria.choices, default=Categoria.OTRO)
+    concepto = models.CharField(max_length=160)
+    valor = models.DecimalField(max_digits=14, decimal_places=2)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    observacion = models.TextField(blank=True)
+    pagado = models.BooleanField(default=False)
+    fecha_pago = models.DateField(null=True, blank=True)
+    referencia_pago = models.CharField(max_length=120, blank=True)
+    pagado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="fixed_expenses_paid"
+    )
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="fixed_expenses_created"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fecha_vencimiento", "concepto"]
+        indexes = [models.Index(fields=["periodo", "pagado"]), models.Index(fields=["fecha_vencimiento"])]
+
+    def __str__(self):
+        return f"{self.periodo:%Y-%m} - {self.concepto}"
+
+    @property
+    def vencido(self):
+        return bool(not self.pagado and self.fecha_vencimiento and self.fecha_vencimiento < timezone.localdate())
+
+
+# =======================================
+# INVERSIONISTAS / PRESTAMOS A LA EMPRESA
+# =======================================
+
+class InvestorLoan(models.Model):
+    inversionista = models.CharField(max_length=160)
+    valor_prestado = models.DecimalField(max_digits=14, decimal_places=2)
+    interes_mensual = models.DecimalField(
+        max_digits=7, decimal_places=4, default=Decimal("0"),
+        help_text="Porcentaje mensual. Ejemplo: 2.5 para 2,5%."
+    )
+    cuota_programada = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))
+    fecha_prestamo = models.DateField(default=timezone.localdate)
+    fecha_primera_cuota = models.DateField(null=True, blank=True)
+    activo = models.BooleanField(default=True)
+    observacion = models.TextField(blank=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="investor_loans_created"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-activo", "inversionista"]
+
+    def __str__(self):
+        return f"{self.inversionista} - {self.valor_prestado}"
+
+    @property
+    def interes_mensual_valor(self):
+        """Valor mensual de intereses. Los pagos de intereses no amortizan capital."""
+        capital = self.valor_prestado or Decimal("0")
+        tasa = self.interes_mensual or Decimal("0")
+        return (capital * tasa / Decimal("100")).quantize(Decimal("0.01"))
+
+    def save(self, *args, **kwargs):
+        # Se conserva cuota_programada por compatibilidad, pero siempre representa
+        # exclusivamente el interés mensual calculado sobre el capital registrado.
+        capital = self.valor_prestado or Decimal("0")
+        tasa = self.interes_mensual or Decimal("0")
+        self.cuota_programada = (capital * tasa / Decimal("100")).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)
+
+    @property
+    def total_pagado(self):
+        return sum((p.valor for p in self.pagos.all()), Decimal("0"))
+
+
+class InvestorPayment(models.Model):
+    prestamo = models.ForeignKey(InvestorLoan, on_delete=models.CASCADE, related_name="pagos")
+    fecha_programada = models.DateField()
+    valor = models.DecimalField(max_digits=14, decimal_places=2)
+    pagado = models.BooleanField(default=False)
+    fecha_pago = models.DateField(null=True, blank=True)
+    referencia_pago = models.CharField(max_length=120, blank=True)
+    observacion = models.TextField(blank=True)
+    pagado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="investor_payments_paid"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fecha_programada", "id"]
+        indexes = [models.Index(fields=["fecha_programada", "pagado"])]
+
+    def __str__(self):
+        return f"{self.prestamo.inversionista} - {self.fecha_programada} - {self.valor}"
+
+    @property
+    def vencido(self):
+        return not self.pagado and self.fecha_programada < timezone.localdate()

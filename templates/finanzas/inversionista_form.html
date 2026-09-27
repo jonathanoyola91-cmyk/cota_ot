@@ -1,0 +1,27 @@
+{% extends "dashboard/home.html" %}
+{% block title %}Editar inversionista{% endblock %}
+{% block page_title %}Finanzas · Editar inversionista{% endblock %}
+{% block content %}
+<style>
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;max-width:760px}.btn{display:inline-block;background:#2563eb;color:#fff!important;border:0;border-radius:9px;padding:10px 15px;text-decoration:none;font-weight:700;cursor:pointer}.btn-secondary{background:#64748b}.calc{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px;margin:16px 0}.calc strong{font-size:24px}form p label{font-weight:700;display:block;margin-bottom:5px}.form-control{width:100%;box-sizing:border-box;padding:9px;border:1px solid #cbd5e1;border-radius:8px}
+</style>
+<div class="card">
+  <h2 style="margin-top:0">Editar {{ prestamo.inversionista }}</h2>
+  <p style="color:#64748b">Puede corregir el capital, la tasa mensual, las fechas y las observaciones. Al guardar se recalcula el interés mensual. Los intereses ya programados o pagados no se modifican.</p>
+  <form method="post" id="editInvestorForm">
+    {% csrf_token %}
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    {{ form.as_p }}
+    <div class="calc">Interés mensual calculado<br><strong id="interesCalculado">${{ prestamo.interes_mensual_valor|floatformat:0 }}</strong><div style="font-size:12px;color:#64748b">Capital × porcentaje mensual ÷ 100. El pago del interés no disminuye el capital.</div></div>
+    <div style="display:flex;gap:10px"><button class="btn" type="submit">Guardar cambios</button><a class="btn btn-secondary" href="{% url 'finanzas:inversionistas' %}?year={{ year }}&month={{ month }}">Cancelar</a></div>
+  </form>
+</div>
+<script>
+(function(){
+ const capital=document.getElementById('id_valor_prestado'); const tasa=document.getElementById('id_interes_mensual'); const out=document.getElementById('interesCalculado');
+ function calc(){const c=parseFloat(capital?.value||0), t=parseFloat(tasa?.value||0); const v=c*t/100; out.textContent=new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(v||0);}
+ capital?.addEventListener('input',calc); tasa?.addEventListener('input',calc); calc();
+})();
+</script>
+{% endblock %}

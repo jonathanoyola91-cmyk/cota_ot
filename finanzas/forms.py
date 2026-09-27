@@ -56,3 +56,44 @@ class SupplierPaymentForm(forms.ModelForm):
                 "placeholder": "Observación del abono",
             }),
         }
+
+
+from .models import FixedExpense, InvestorLoan, InvestorPayment
+
+
+class FixedExpenseForm(forms.ModelForm):
+    class Meta:
+        model = FixedExpense
+        fields = ["categoria", "concepto", "valor", "fecha_vencimiento", "observacion"]
+        widgets = {
+            "categoria": forms.Select(attrs={"class": "form-control"}),
+            "concepto": forms.TextInput(attrs={"class": "form-control"}),
+            "valor": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+            "fecha_vencimiento": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "observacion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+
+
+class InvestorLoanForm(forms.ModelForm):
+    class Meta:
+        model = InvestorLoan
+        fields = ["inversionista", "valor_prestado", "interes_mensual", "fecha_prestamo", "fecha_primera_cuota", "observacion"]
+        widgets = {
+            "inversionista": forms.TextInput(attrs={"class": "form-control"}),
+            "valor_prestado": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+            "interes_mensual": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001", "min": "0"}),
+            "fecha_prestamo": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "fecha_primera_cuota": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "observacion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+
+
+class InvestorPaymentForm(forms.ModelForm):
+    class Meta:
+        model = InvestorPayment
+        fields = ["fecha_programada", "valor", "observacion"]
+        widgets = {
+            "fecha_programada": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "valor": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
+            "observacion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
