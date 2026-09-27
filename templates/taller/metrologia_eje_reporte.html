@@ -1,0 +1,76 @@
+{% extends "dashboard/home.html" %}{% load static l10n %}
+{% block page_title %}Reporte Calidad PAW {{ inspeccion.paw_id }} - Eje{% endblock %}
+{% block content %}
+<style>
+@page{size:A4;margin:10mm}
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .no-print,.sidebar,.topbar{display:none!important}
+  .panel{box-shadow:none!important;border:1px solid #bbb!important;break-inside:avoid}
+  body{background:white!important}
+  .drawing-map{max-height:235px}
+  .drawing-map img{max-height:235px;object-fit:contain}
+  /* Mantener los marcadores proporcionados al plano al imprimir. */
+  .drawing-marker span{width:20px!important;height:20px!important;font-size:10px!important;border-width:2px!important;box-shadow:none!important;color:#fff!important}
+  .drawing-marker i{width:1.5px!important;height:28px!important}
+  .drawing-marker span{background:#2563eb!important}
+  .drawing-marker i{background:#2563eb!important}
+  .drawing-marker.marker-ok span{background:#16a34a!important}
+  .drawing-marker.marker-ok i{background:#16a34a!important}
+  .drawing-marker.marker-bad span{background:#dc2626!important}
+  .drawing-marker.marker-bad i{background:#dc2626!important}
+  .evidence-card{break-inside:avoid}
+}
+.report-title{text-align:center;margin:0 0 4px;font-size:22px}.report-subtitle{text-align:center;margin:0 0 16px;font-size:17px}
+.ok{font-weight:700;color:#166534}.bad{font-weight:700;color:#991b1b}.pending{font-weight:700;color:#92400e}
+.drawing-wrap{overflow:hidden;padding:8px 0}.drawing-map{position:relative;width:100%;margin:auto;background:#fff;border:1px solid #dbe3ec;border-radius:8px;overflow:hidden}.drawing-map img{display:block;width:100%;height:auto}.drawing-marker{position:absolute;transform:translate(-50%,-100%);z-index:3}.drawing-marker span{width:28px;height:28px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;border:2px solid #fff;box-shadow:0 1px 5px rgba(15,23,42,.35)}.drawing-marker i{display:block;width:2px;height:34px;background:#2563eb;margin:auto}.drawing-marker.marker-ok span{background:#16a34a}.drawing-marker.marker-ok i{background:#16a34a}.drawing-marker.marker-bad span{background:#dc2626}.drawing-marker.marker-bad i{background:#dc2626}
+.report-table{width:100%;border-collapse:collapse}.report-table th,.report-table td{border:1px solid #d1d5db;padding:6px;font-size:12px;vertical-align:top}.report-table th{background:#f3f4f6}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.evidence-card{border:1px solid #d1d5db;border-radius:8px;padding:10px}.evidence-card img{display:block;max-width:100%;max-height:280px;margin:8px auto;object-fit:contain}.evidence-meta{font-size:12px;line-height:1.45}.muted{color:#64748b;font-size:12px}
+</style>
+<div class="no-print"><button class="btn" onclick="imprimirReporte()">🖨 Imprimir / Guardar PDF</button> <a class="btn" href="{% url 'taller:metrologia_eje_detalle' inspeccion.id %}">Volver</a></div>
+<div class="panel">
+  <h1 class="report-title">REPORTE DE CALIDAD</h1>
+  <h2 class="report-subtitle">INSPECCIÓN DIMENSIONAL DE EJE</h2>
+  <table class="report-table">
+    <tr><th>PAW</th><td>{{ inspeccion.paw }}</td><th>Fecha</th><td>{{ inspeccion.creado_en|date:"d/m/Y" }}</td></tr>
+    <tr><th>Pieza</th><td>{{ inspeccion.plantilla.nombre }}</td><th>Serial pieza</th><td>{{ inspeccion.serial_eje|default:"—" }}</td></tr>
+    <tr><th>Serial equipo / cámara</th><td>{{ inspeccion.serial_equipo|default:"—" }}</td><th>PAW</th><td>{{ inspeccion.paw }}</td></tr>
+    <tr><th>Plano</th><td>{{ inspeccion.plantilla.codigo_plano }}</td><th>Revisión</th><td>{{ inspeccion.plantilla.revision }}</td></tr>
+    <tr><th>Material</th><td>{{ inspeccion.plantilla.material|default:"—" }}</td><th>Tipo de trabajo</th><td><strong>{{ inspeccion.get_tipo_trabajo_display }}</strong></td></tr><tr><th>Resultado</th><td><strong>{{ inspeccion.get_resultado_dimensional_display }}</strong></td>{% if inspeccion.tipo_trabajo == "REPARACION" %}<th>Condición reparación</th><td><strong>{{ inspeccion.condicion_reparacion|default:"PENDIENTE" }}</strong></td>{% else %}<th></th><td></td>{% endif %}</tr>
+  </table>
+</div>
+
+{% if inspeccion.plantilla.imagen_archivo or inspeccion.plantilla.imagen_mapa %}
+<div class="panel">
+  <h3>Mapa de puntos de inspección</h3>
+  <p class="muted">Los marcadores corresponden a los códigos de la tabla de mediciones.</p>
+  <div class="drawing-wrap"><div class="drawing-map">
+    <img src="{% if inspeccion.plantilla.imagen_archivo %}{{ inspeccion.plantilla.imagen_archivo.url }}{% else %}{% static 'taller/metrologia/ejes/' %}{{ inspeccion.plantilla.imagen_mapa }}{% endif %}" alt="Mapa del {{ inspeccion.plantilla.nombre }}">
+    {% for m in mediciones %}<div class="drawing-marker {% if m.valor != None %}{% if m.conforme %}marker-ok{% else %}marker-bad{% endif %}{% endif %}" style="left:{{ m.punto.posicion_x|default:50|unlocalize }}%; top:{{ m.punto.posicion_y|default:50|unlocalize }}%;" title="{{ m.punto.codigo }} - {{ m.punto.descripcion }}"><span>{{ m.punto.codigo }}</span><i></i></div>{% endfor %}
+  </div></div>
+</div>
+{% endif %}
+
+<div class="panel"><table class="report-table"><thead><tr><th>Punto</th><th>Característica</th><th>Nominal</th><th>Rango permitido</th><th>Medido</th><th>Instrumento</th><th>Resultado</th></tr></thead><tbody>
+{% for m in mediciones %}<tr><td><strong>{{ m.punto.codigo }}</strong></td><td>{{ m.punto.descripcion }}</td><td>{{ m.punto.nominal|default:"—" }} {{ m.punto.unidad }}</td><td>{% if m.punto.minimo != None and m.punto.maximo != None %}{{ m.punto.minimo }} a {{ m.punto.maximo }} {{ m.punto.unidad }}{% elif m.punto.maximo != None %}≤ {{ m.punto.maximo }} {{ m.punto.unidad }}{% elif m.punto.minimo != None %}≥ {{ m.punto.minimo }} {{ m.punto.unidad }}{% else %}—{% endif %}</td><td>{{ m.valor|default:"—" }} {{ m.punto.unidad }}</td><td>{{ m.instrumento|default:m.instrumento_texto|default:"—" }}</td><td>{% if m.valor == None %}<span class="pending">PENDIENTE</span>{% elif m.conforme %}<span class="ok">CONFORME</span>{% else %}<span class="bad">NO CONFORME</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+
+{% if instrumentos_usados %}
+<div class="panel"><h3>Instrumentos utilizados / trazabilidad metrológica</h3><table class="report-table"><thead><tr><th>Código</th><th>Instrumento</th><th>Marca / modelo</th><th>Serial</th><th>Rango / resolución</th><th>Certificado</th><th>Vigencia</th></tr></thead><tbody>{% for ins in instrumentos_usados %}<tr><td><strong>{{ ins.codigo }}</strong></td><td>{{ ins.nombre }}</td><td>{{ ins.marca|default:"—" }} {{ ins.modelo|default:"" }}</td><td>{{ ins.serial|default:"—" }}</td><td>{{ ins.rango|default:"—" }} / {{ ins.resolucion|default:"—" }}</td><td>{{ ins.numero_certificado|default:"—" }}</td><td>{{ ins.fecha_vencimiento|date:"d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
+{% if hay_evidencias %}
+<div class="panel"><h3>Evidencias fotográficas</h3><div class="evidence-grid">
+{% for m in mediciones %}{% if m.evidencia %}<div class="evidence-card"><strong>Punto {{ m.punto.codigo }} — {{ m.punto.descripcion }}</strong><img src="{{ m.evidencia.url }}" alt="Evidencia punto {{ m.punto.codigo }}"><div class="evidence-meta"><strong>Medición:</strong> {{ m.valor|default:"—" }} {{ m.punto.unidad }}<br><strong>Resultado:</strong> {% if m.valor == None %}PENDIENTE{% elif m.conforme %}CONFORME{% else %}NO CONFORME{% endif %}<br><strong>Observación:</strong> {{ m.observacion|default:"Sin observación." }}</div></div>{% endif %}{% endfor %}
+</div></div>
+{% endif %}
+
+<div class="panel"><h3>Dictamen de Calidad: {{ inspeccion.get_dictamen_display }}</h3><p>{{ inspeccion.observaciones|default:"Sin observaciones." }}</p><br><table style="width:100%"><tr><td style="width:50%;text-align:center">_____________________________<br>Realizó: {{ inspeccion.realizado_por.get_full_name|default:inspeccion.realizado_por.username }}</td><td style="width:50%;text-align:center">_____________________________<br>Revisó/Calidad: {% if inspeccion.revisado_por %}{{ inspeccion.revisado_por.get_full_name|default:inspeccion.revisado_por.username }}{% endif %}</td></tr></table></div>
+<script>
+function imprimirReporte(){
+  const tituloOriginal=document.title;
+  document.title='Reporte Calidad PAW {{ inspeccion.paw_id }} - Eje';
+  window.print();
+  setTimeout(function(){document.title=tituloOriginal;},500);
+}
+</script>
+{% endblock %}

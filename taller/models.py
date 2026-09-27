@@ -382,3 +382,308 @@ class JornadaTaller(models.Model):
 
     def __str__(self):
         return f"{self.fecha} - {self.tecnico.tecnico} - {self.horas_totales} h"
+
+# =========================
+# METROLOGIA / CALIDAD
+# =========================
+
+
+class TipoPiezaMetrologia(models.Model):
+    nombre = models.CharField(max_length=100, unique=True)
+    activo = models.BooleanField(default=True)
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["orden", "nombre"]
+        verbose_name = "Tipo de pieza metrológica"
+        verbose_name_plural = "Tipos de pieza metrológica"
+
+    def __str__(self):
+        return self.nombre
+
+class PlantillaEje(models.Model):
+    class TipoPieza(models.TextChoices):
+        EJE = "EJE", "Eje"
+        HOUSING = "HOUSING", "Housing"
+        SLEEVE = "SLEEVE", "Sleeve / camisa"
+        CAMARA = "CAMARA", "Cámara"
+        BOMBA = "BOMBA", "Bomba"
+        OTRO = "OTRO", "Otra pieza"
+
+    nombre = models.CharField(max_length=180, unique=True)
+    tipo_pieza = models.CharField(max_length=20, choices=TipoPieza.choices, default=TipoPieza.EJE)
+    tipo_pieza_ref = models.ForeignKey("TipoPiezaMetrologia", on_delete=models.PROTECT, null=True, blank=True, related_name="plantillas")
+    codigo_plano = models.CharField(max_length=120, blank=True)
+    revision = models.CharField(max_length=30, blank=True)
+    material = models.CharField(max_length=100, blank=True)
+    imagen_mapa = models.CharField(max_length=160, blank=True, help_text="Imagen técnica histórica incluida con el sistema")
+    imagen_archivo = models.ImageField(upload_to="taller/metrologia/plantillas/%Y/%m/", null=True, blank=True, help_text="Plano o imagen técnica cargada para configurar los puntos")
+    activo = models.BooleanField(default=True)
+    observaciones = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Plantilla metrológica de eje"
+        verbose_name_plural = "Plantillas metrológicas de ejes"
+        permissions = [("gestionar_plantillas_metrologicas", "Puede crear y editar plantillas metrológicas")]
+
+    def __str__(self):
+        rev = f" Rev. {self.revision}" if self.revision else ""
+        return f"{self.nombre}{rev}"
+
+
+class PuntoMedicionEje(models.Model):
+    class Tipo(models.TextChoices):
+        DIAMETRO = "DIAMETRO", "Diámetro"
+        LONGITUD = "LONGITUD", "Longitud"
+        RUNOUT = "RUNOUT", "Runout"
+        ANCHO = "ANCHO", "Ancho"
+        PROFUNDIDAD = "PROFUNDIDAD", "Profundidad"
+        OTRO = "OTRO", "Otro"
+
+    plantilla = models.ForeignKey(PlantillaEje, on_delete=models.CASCADE, related_name="puntos")
+    codigo = models.CharField(max_length=20)
+    descripcion = models.CharField(max_length=220)
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.DIAMETRO)
+    nominal = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    minimo = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    maximo = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    minimo_reutilizable = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, help_text="Límite mínimo para reutilización en reparaciones")
+    permite_mecanizado = models.BooleanField(default=True, help_text="Permite recuperar este punto mediante mecanizado autorizado")
+    unidad = models.CharField(max_length=20, default="mm")
+    instrumento_sugerido = models.CharField(max_length=120, blank=True)
+    critico = models.BooleanField(default=True)
+    obligatorio = models.BooleanField(default=True)
+    orden = models.PositiveIntegerField(default=0)
+    nota = models.CharField(max_length=250, blank=True)
+    posicion_x = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Posición horizontal del marcador sobre el plano (0-100%)")
+    posicion_y = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Posición vertical del marcador sobre el plano (0-100%)")
+
+    class Meta:
+        ordering = ["orden", "id"]
+        constraints = [models.UniqueConstraint(fields=["plantilla", "codigo"], name="uniq_punto_eje_plantilla")]
+
+    def __str__(self):
+        return f"{self.plantilla.nombre} - {self.codigo}: {self.descripcion}"
+
+
+class InstrumentoMetrologico(models.Model):
+    class Estado(models.TextChoices):
+        ACTIVO = "ACTIVO", "Activo"
+        FUERA_SERVICIO = "FUERA_SERVICIO", "Fuera de servicio"
+        BAJA = "BAJA", "Dado de baja"
+
+    nombre = models.CharField(max_length=120, help_text="Tipo de instrumento: Micrómetro, Comparador, Calibrador, etc.")
+    codigo = models.CharField(max_length=60, unique=True)
+    marca = models.CharField(max_length=100, blank=True)
+    modelo = models.CharField(max_length=100, blank=True)
+    serial = models.CharField(max_length=100, blank=True)
+    rango = models.CharField(max_length=100, blank=True)
+    resolucion = models.CharField(max_length=60, blank=True)
+    unidad = models.CharField(max_length=30, blank=True)
+    ubicacion = models.CharField(max_length=120, blank=True)
+    responsable = models.CharField(max_length=120, blank=True)
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.ACTIVO)
+    fecha_calibracion = models.DateField(null=True, blank=True)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    laboratorio = models.CharField(max_length=150, blank=True)
+    numero_certificado = models.CharField(max_length=100, blank=True)
+    certificado = models.FileField(upload_to="taller/metrologia/certificados/%Y/%m/", null=True, blank=True)
+    activo = models.BooleanField(default=True)
+    observaciones = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["codigo"]
+
+    @property
+    def calibracion_vigente(self):
+        return bool(self.fecha_vencimiento and self.fecha_vencimiento >= timezone.localdate())
+
+    @property
+    def estado_calibracion(self):
+        if self.estado != self.Estado.ACTIVO or not self.activo:
+            return "FUERA_SERVICIO"
+        if not self.fecha_vencimiento:
+            return "SIN_CALIBRACION"
+        dias = (self.fecha_vencimiento - timezone.localdate()).days
+        if dias < 0:
+            return "VENCIDO"
+        if dias <= 30:
+            return "PROXIMO"
+        return "VIGENTE"
+
+    @property
+    def dias_para_vencer(self):
+        if not self.fecha_vencimiento:
+            return None
+        return (self.fecha_vencimiento - timezone.localdate()).days
+
+    @property
+    def disponible_para_medicion(self):
+        return self.activo and self.estado == self.Estado.ACTIVO and self.calibracion_vigente
+
+    def __str__(self):
+        partes = [self.codigo, self.nombre]
+        if self.marca:
+            partes.append(self.marca)
+        if self.rango:
+            partes.append(self.rango)
+        if self.serial:
+            partes.append(f"S/N {self.serial}")
+        return " | ".join(partes)
+
+
+class CalibracionInstrumento(models.Model):
+    instrumento = models.ForeignKey(InstrumentoMetrologico, on_delete=models.CASCADE, related_name="historial_calibraciones")
+    fecha_calibracion = models.DateField()
+    fecha_vencimiento = models.DateField()
+    laboratorio = models.CharField(max_length=150, blank=True)
+    numero_certificado = models.CharField(max_length=100, blank=True)
+    certificado = models.FileField(upload_to="taller/metrologia/certificados/%Y/%m/", null=True, blank=True)
+    observaciones = models.TextField(blank=True)
+    registrado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="calibraciones_metrologia_registradas")
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_calibracion", "-id"]
+
+    def __str__(self):
+        return f"{self.instrumento.codigo} - {self.fecha_calibracion:%d/%m/%Y}"
+
+
+class InspeccionEje(models.Model):
+    class TipoTrabajo(models.TextChoices):
+        REPARACION = "REPARACION", "Reparación"
+        FABRICACION = "FABRICACION", "Fabricación"
+
+    class Estado(models.TextChoices):
+        BORRADOR = "BORRADOR", "En medición"
+        REVISADA = "REVISADA", "Mediciones revisadas"
+        CERRADA = "CERRADA", "Dictamen emitido"
+
+    class Resultado(models.TextChoices):
+        PENDIENTE = "PENDIENTE", "Pendiente"
+        CONFORME = "CONFORME", "Conforme"
+        NO_CONFORME = "NO_CONFORME", "No conforme"
+
+    class Dictamen(models.TextChoices):
+        PENDIENTE = "PENDIENTE", "Pendiente"
+        APROBADO = "APROBADO", "Aprobado"
+        CONCESION = "CONCESION", "Aprobado bajo concesión"
+        MECANIZADO = "MECANIZADO", "Requiere mecanizado"
+        RECHAZADO = "RECHAZADO", "Rechazado"
+
+    paw = models.ForeignKey("paw_app.Paw", on_delete=models.PROTECT, related_name="inspecciones_eje")
+    tipo_trabajo = models.CharField(max_length=20, choices=TipoTrabajo.choices, default=TipoTrabajo.REPARACION)
+    plantilla = models.ForeignKey(PlantillaEje, on_delete=models.PROTECT, related_name="inspecciones")
+    camara = models.ForeignKey(CamaraTaller, on_delete=models.SET_NULL, null=True, blank=True, related_name="inspecciones_eje")
+    serial_equipo = models.CharField(max_length=100, blank=True, verbose_name="Serial equipo / cámara")
+    serial_eje = models.CharField(max_length=100, blank=True, verbose_name="Serial de la pieza")
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.BORRADOR)
+    resultado_dimensional = models.CharField(max_length=20, choices=Resultado.choices, default=Resultado.PENDIENTE)
+    dictamen = models.CharField(max_length=20, choices=Dictamen.choices, default=Dictamen.PENDIENTE)
+    observaciones = models.TextField(blank=True)
+    realizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="inspecciones_eje_realizadas")
+    revisado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="inspecciones_eje_revisadas")
+    fecha_revision = models.DateTimeField(null=True, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    inspeccion_origen = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="reinspecciones")
+    numero_inspeccion = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ["-creado_en"]
+
+    @property
+    def es_reinspeccion(self):
+        return bool(self.inspeccion_origen_id)
+
+    @property
+    def condicion_reparacion(self):
+        if self.tipo_trabajo != self.TipoTrabajo.REPARACION:
+            return None
+        estados = [m.condicion_reparacion for m in self.mediciones.select_related("punto") if m.valor is not None]
+        if not estados:
+            return "PENDIENTE"
+        if "NO_REUTILIZABLE" in estados:
+            return "NO_REUTILIZABLE"
+        if "REQUIERE_MECANIZADO" in estados:
+            return "REQUIERE_MECANIZADO"
+        return "REUTILIZABLE"
+
+    def recalcular_resultado(self):
+        mediciones = list(self.mediciones.select_related("punto"))
+        obligatorias = [m for m in mediciones if m.punto.obligatorio]
+        if not obligatorias or any(m.valor is None for m in obligatorias):
+            self.resultado_dimensional = self.Resultado.PENDIENTE
+        elif any(not m.conforme for m in obligatorias):
+            self.resultado_dimensional = self.Resultado.NO_CONFORME
+        else:
+            self.resultado_dimensional = self.Resultado.CONFORME
+        self.save(update_fields=["resultado_dimensional", "actualizado_en"])
+
+    def __str__(self):
+        return f"Inspección eje PAW {self.paw} - {self.plantilla.nombre}"
+
+
+class MedicionEje(models.Model):
+    inspeccion = models.ForeignKey(InspeccionEje, on_delete=models.CASCADE, related_name="mediciones")
+    punto = models.ForeignKey(PuntoMedicionEje, on_delete=models.PROTECT, related_name="mediciones")
+    valor = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    instrumento = models.ForeignKey(InstrumentoMetrologico, on_delete=models.SET_NULL, null=True, blank=True, related_name="mediciones")
+    instrumento_texto = models.CharField(max_length=120, blank=True)
+    observacion = models.CharField(max_length=250, blank=True)
+    evidencia = models.ImageField(upload_to="taller/metrologia/ejes/%Y/%m/", null=True, blank=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["punto__orden", "id"]
+        constraints = [models.UniqueConstraint(fields=["inspeccion", "punto"], name="uniq_medicion_punto_inspeccion_eje")]
+
+    @property
+    def condicion_reparacion(self):
+        if self.valor is None:
+            return "PENDIENTE"
+        if self.punto.minimo_reutilizable is not None and self.valor < self.punto.minimo_reutilizable:
+            return "NO_REUTILIZABLE"
+        if self.conforme:
+            return "REUTILIZABLE"
+        if self.punto.permite_mecanizado:
+            return "REQUIERE_MECANIZADO"
+        return "NO_REUTILIZABLE"
+
+    @property
+    def conforme(self):
+        if self.valor is None:
+            return None
+        if self.punto.minimo is not None and self.valor < self.punto.minimo:
+            return False
+        if self.punto.maximo is not None and self.valor > self.punto.maximo:
+            return False
+        return True
+
+    def __str__(self):
+        return f"{self.inspeccion_id} - {self.punto.codigo}: {self.valor}"
+
+class OrdenMecanizadoEje(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = "PENDIENTE", "Pendiente"
+        EN_PROCESO = "EN_PROCESO", "En proceso"
+        TERMINADO = "TERMINADO", "Terminado / listo para reinspección"
+        REINSPECCIONADO = "REINSPECCIONADO", "Reinspeccionado"
+
+    inspeccion_origen = models.OneToOneField(InspeccionEje, on_delete=models.PROTECT, related_name="orden_mecanizado")
+    trabajo_requerido = models.TextField()
+    medida_objetivo = models.CharField(max_length=250, blank=True)
+    responsable = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="mecanizados_eje_asignados")
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
+    observaciones_taller = models.TextField(blank=True)
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="mecanizados_eje_creados")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    terminado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-creado_en"]
+
+    def __str__(self):
+        return f"Mecanizado eje PAW {self.inspeccion_origen.paw} - inspección {self.inspeccion_origen_id}"

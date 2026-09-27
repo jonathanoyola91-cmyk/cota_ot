@@ -1,0 +1,113 @@
+{% extends "dashboard/home.html" %}{% load static l10n %}{% block page_title %}Inspección de eje<script>
+(function(){
+  function norm(v){
+    return (v || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+  function compatible(tipo,sugerido){
+    tipo=norm(tipo); sugerido=norm(sugerido);
+    if(!sugerido) return true;
+    return tipo.includes(sugerido) || sugerido.includes(tipo);
+  }
+  document.querySelectorAll('.instrument-select').forEach(function(sel){
+    const sug=sel.dataset.sugerido;
+    Array.from(sel.options).forEach(function(op,i){
+      if(i===0) return;
+      const isSelected=op.selected;
+      op.hidden=!isSelected && !compatible(op.dataset.tipo,sug);
+    });
+  });
+  document.querySelectorAll('.apply-instrument').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      const source=btn.parentElement.querySelector('.instrument-select');
+      if(!source || !source.value){alert('Seleccione primero el instrumento que desea aplicar.');return;}
+      const sug=norm(source.dataset.sugerido); let n=0;
+      document.querySelectorAll('.instrument-select').forEach(function(target){
+        if(target!==source && norm(target.dataset.sugerido)===sug){
+          const opt=Array.from(target.options).find(o=>o.value===source.value);
+          if(opt && !opt.hidden){target.value=source.value;n++;}
+        }
+      });
+      alert(n ? 'Instrumento aplicado a '+n+' punto(s) compatible(s).' : 'No hay otros puntos compatibles para aplicar.');
+    });
+  });
+})();
+</script>
+{% endblock %}{% block content %}
+<style>
+.ok{background:#dcfce7;color:#166534;padding:4px 8px;border-radius:999px;font-weight:700}.bad{background:#fee2e2;color:#991b1b;padding:4px 8px;border-radius:999px;font-weight:700}.pending{background:#fef3c7;color:#92400e;padding:4px 8px;border-radius:999px;font-weight:700}.critical{font-weight:800}.measure{width:110px}.shaft-wrap{overflow-x:auto;padding:18px 8px 8px}.shaft{min-width:760px;height:150px;position:relative;margin:0 20px}.shaft-body{position:absolute;left:3%;right:3%;top:66px;height:34px;background:#dbe3ec;border:2px solid #64748b;border-radius:4px}.shaft-body:before,.shaft-body:after{content:"";position:absolute;top:-10px;width:16%;height:50px;background:#e8eef5;border:2px solid #64748b}.shaft-body:before{left:13%}.shaft-body:after{right:12%}.marker-row{position:absolute;left:2%;right:2%;top:20px;display:flex;justify-content:space-between}.marker{text-align:center;min-width:42px}.dot{width:30px;height:30px;border-radius:50%;background:#2563eb;color:white;display:flex;align-items:center;justify-content:center;font-weight:800;margin:auto;box-shadow:0 2px 5px #94a3b8}.marker:after{content:"";display:block;width:1px;height:38px;background:#94a3b8;margin:auto}.metro-table{width:100%;min-width:1050px}.metro-table input,.metro-table select{max-width:170px}.suggest{color:#64748b;font-size:12px}.empty{padding:22px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412}
+
+.drawing-wrap{overflow-x:auto;padding:10px 0 4px}.drawing-map{position:relative;min-width:900px;max-width:1500px;margin:auto;background:#fff;border:1px solid #dbe3ec;border-radius:10px;overflow:hidden}.drawing-map img{display:block;width:100%;height:auto}.drawing-marker{position:absolute;top:48%;transform:translate(-50%,-100%);text-decoration:none;z-index:3}.drawing-marker span{width:34px;height:34px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;border:3px solid #fff;box-shadow:0 2px 7px rgba(15,23,42,.35)}.drawing-marker i{display:block;width:2px;height:48px;background:#2563eb;margin:auto}.drawing-marker:hover span{transform:scale(1.12)}.drawing-marker.marker-ok span{background:#16a34a}.drawing-marker.marker-ok i{background:#16a34a}.drawing-marker.marker-bad span{background:#dc2626}.drawing-marker.marker-bad i{background:#dc2626}.map-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#64748b}.map-legend span{display:flex;align-items:center;gap:5px}.legend-dot{width:10px;height:10px;border-radius:50%;display:inline-block}.legend-dot.blue{background:#2563eb}.legend-dot.green{background:#16a34a}.legend-dot.red{background:#dc2626}tr[id^="medicion-"]{scroll-margin-top:100px}tr[id^="medicion-"]:target{outline:3px solid #93c5fd;background:#eff6ff}
+.instrument-select{min-width:245px;max-width:310px}.apply-instrument{border:1px solid #cbd5e1;background:#f8fafc;border-radius:5px;padding:3px 7px;cursor:pointer}.apply-instrument:hover{background:#e2e8f0}
+</style>
+<div class="panel"><h2>📏 Inspección dimensional de eje</h2><p><strong>PAW:</strong> {{ inspeccion.paw }} &nbsp; <strong>Pieza:</strong> {{ inspeccion.plantilla.nombre }} &nbsp; <strong>Plano:</strong> {{ inspeccion.plantilla.codigo_plano }} Rev. {{ inspeccion.plantilla.revision }}</p><p><strong>Tipo de trabajo:</strong> {{ inspeccion.get_tipo_trabajo_display }} &nbsp; <strong>Material:</strong> {{ inspeccion.plantilla.material|default:"No especificado en plantilla" }} &nbsp; <strong>Serial equipo / cámara:</strong> {{ inspeccion.serial_equipo|default:"—" }} &nbsp; <strong>Serial pieza:</strong> {{ inspeccion.serial_eje|default:"—" }} &nbsp; <strong>Estado:</strong> {{ inspeccion.get_estado_display }}</p><p><strong>Resultado dimensional:</strong> {% if inspeccion.resultado_dimensional == 'CONFORME' %}<span class="ok">CONFORME</span>{% elif inspeccion.resultado_dimensional == 'NO_CONFORME' %}<span class="bad">NO CONFORME</span>{% else %}<span class="pending">PENDIENTE</span>{% endif %}</p>{% if inspeccion.tipo_trabajo == 'REPARACION' %}<p><strong>Condición para reparación:</strong> {% if inspeccion.condicion_reparacion == 'REUTILIZABLE' %}<span class="ok">REUTILIZABLE</span>{% elif inspeccion.condicion_reparacion == 'REQUIERE_MECANIZADO' %}<span class="pending">REQUIERE MECANIZADO</span>{% elif inspeccion.condicion_reparacion == 'NO_REUTILIZABLE' %}<span class="bad">NO REUTILIZABLE / REEMPLAZAR</span>{% else %}<span class="pending">PENDIENTE</span>{% endif %}</p>{% endif %}</div>
+{% if mediciones %}<div class="panel"><h3>Mapa real de puntos de medición</h3><p class="suggest">Vista tomada del plano correspondiente a este modelo. Toque un punto para ir directamente a su medición. El plano aprobado continúa siendo la referencia dimensional.</p>{% if inspeccion.plantilla.imagen_archivo or inspeccion.plantilla.imagen_mapa %}<div class="drawing-wrap"><div class="drawing-map"><img src="{% if inspeccion.plantilla.imagen_archivo %}{{ inspeccion.plantilla.imagen_archivo.url }}{% else %}{% static 'taller/metrologia/ejes/' %}{{ inspeccion.plantilla.imagen_mapa }}{% endif %}" alt="Plano del {{ inspeccion.plantilla.nombre }}">{% for m in mediciones %}<a class="drawing-marker {% if m.valor != None %}{% if m.conforme %}marker-ok{% else %}marker-bad{% endif %}{% endif %}" href="#medicion-{{ m.id }}" style="left:{{ m.punto.posicion_x|default:50|unlocalize }}%; top:{{ m.punto.posicion_y|default:50|unlocalize }}%;" title="{{ m.punto.codigo }} - {{ m.punto.descripcion }}"><span>{{ m.punto.codigo }}</span><i></i></a>{% endfor %}</div></div><div class="map-legend"><span><b class="legend-dot blue"></b>Pendiente</span><span><b class="legend-dot green"></b>Conforme</span><span><b class="legend-dot red"></b>No conforme</span></div>{% else %}<div class="empty">Esta plantilla todavía no tiene imagen técnica asociada.</div>{% endif %}</div>{% endif %}
+<form method="post" enctype="multipart/form-data">{% csrf_token %}<div class="panel" style="overflow-x:auto">{% if mediciones %}<table class="metro-table"><thead><tr><th>Punto</th><th>Característica</th><th>Nominal</th><th>Permitido</th><th>Medida real</th><th>Instrumento</th><th>Evidencia / observación</th><th>Resultado</th>{% if inspeccion.tipo_trabajo == 'REPARACION' %}<th>Reutilización</th>{% endif %}</tr></thead><tbody>
+{% for m in mediciones %}<tr id="medicion-{{ m.id }}"><td class="{% if m.punto.critico %}critical{% endif %}">{{ m.punto.codigo }}{% if m.punto.critico %} ⚠{% endif %}</td><td>{{ m.punto.descripcion }}<br><small>{{ m.punto.get_tipo_display }}</small></td><td>{% if m.punto.nominal != None %}{{ m.punto.nominal }} {{ m.punto.unidad }}{% else %}—{% endif %}</td><td>{% if m.punto.minimo != None and m.punto.maximo != None %}{{ m.punto.minimo }} a {{ m.punto.maximo }} {{ m.punto.unidad }}{% elif m.punto.maximo != None %}≤ {{ m.punto.maximo }} {{ m.punto.unidad }}{% elif m.punto.minimo != None %}≥ {{ m.punto.minimo }} {{ m.punto.unidad }}{% else %}—{% endif %}</td><td>{% if inspeccion.estado == 'BORRADOR' %}<input class="measure" type="number" step="0.0001" name="m_{{ m.id }}_valor" value="{{ m.valor|default_if_none:''|unlocalize }}">{% else %}{{ m.valor|default:"—" }} {{ m.punto.unidad }}{% endif %}</td><td>{% if inspeccion.estado == 'BORRADOR' %}<select class="instrument-select" name="m_{{ m.id }}_instrumento" data-sugerido="{{ m.punto.instrumento_sugerido|default:''|lower }}"><option value="">-- Seleccionar --</option>{% for ins in instrumentos %}<option value="{{ ins.id }}" data-tipo="{{ ins.nombre|lower }}" {% if m.instrumento_id == ins.id %}selected{% endif %}>{{ ins }} · Vigente hasta {{ ins.fecha_vencimiento|date:"d/m/Y" }}</option>{% endfor %}</select><div class="suggest">Sugerido: {{ m.punto.instrumento_sugerido|default:"—" }} · Solo aparecen equipos vigentes compatibles.</div><button type="button" class="apply-instrument" style="font-size:11px;margin:4px 0" title="Copia este equipo a los puntos con el mismo instrumento sugerido">Aplicar a compatibles</button><details><summary class="suggest">Instrumento no registrado (excepción)</summary><input name="m_{{ m.id }}_instrumento_texto" value="{{ m.instrumento_texto }}" placeholder="Otro instrumento"></details>{% else %}{{ m.instrumento|default:m.instrumento_texto|default:"—" }}{% endif %}</td><td>{% if inspeccion.estado == 'BORRADOR' %}<input type="file" accept="image/*" name="m_{{ m.id }}_evidencia"><br><input name="m_{{ m.id }}_observacion" value="{{ m.observacion }}" placeholder="Observación">{% else %}{{ m.observacion|default:"—" }}{% endif %}{% if m.evidencia %}<br><a href="{{ m.evidencia.url }}" target="_blank">📷 Ver foto</a>{% endif %}</td><td>{% if m.valor == None %}<span class="pending">PENDIENTE</span>{% elif m.conforme %}<span class="ok">CONFORME</span>{% else %}<span class="bad">NO CONFORME</span>{% endif %}</td>{% if inspeccion.tipo_trabajo == 'REPARACION' %}<td>{% if m.valor == None %}<span class="pending">PENDIENTE</span>{% elif m.condicion_reparacion == 'REUTILIZABLE' %}<span class="ok">REUTILIZABLE</span>{% elif m.condicion_reparacion == 'REQUIERE_MECANIZADO' %}<span class="pending">REQUIERE MECANIZADO</span>{% else %}<span class="bad">NO REUTILIZABLE</span>{% endif %}{% if m.punto.minimo_reutilizable != None %}<br><small>Mín. reutilizable: {{ m.punto.minimo_reutilizable }} {{ m.punto.unidad }}</small>{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table>{% if inspeccion.estado == 'BORRADOR' %}<p><button class="btn" name="guardar" type="submit">Guardar mediciones</button> <button class="btn" name="revisar" type="submit">Revisar mediciones</button></p>{% endif %}{% else %}<div class="empty"><strong>Esta inspección no tiene puntos de medición.</strong> Ejecute las migraciones de Metrología y vuelva a abrir la inspección.</div>{% endif %}</div></form>
+<div class="panel">
+<h3>🔧 Mecanizado / Reinspección</h3>
+{% if inspeccion.es_reinspeccion %}<p><strong>Reinspección {{ inspeccion.numero_inspeccion|stringformat:"02d" }}</strong> · Proviene de la <a href="{% url 'taller:metrologia_eje_detalle' inspeccion.inspeccion_origen.id %}">inspección {{ inspeccion.inspeccion_origen.numero_inspeccion|stringformat:"02d" }}</a>. Las mediciones anteriores permanecen bloqueadas.</p>{% endif %}
+{% if inspeccion.estado == 'CERRADA' and inspeccion.dictamen == 'MECANIZADO' %}
+  {% if not orden_mecanizado %}
+  <p>El dictamen requiere mecanizado. Describa el trabajo antes de enviar la pieza a Taller.</p>
+  <form method="post" action="{% url 'taller:metrologia_mecanizado_crear' inspeccion.id %}">{% csrf_token %}
+    <p><label><strong>Trabajo requerido</strong></label><br><textarea name="trabajo_requerido" rows="3" style="width:100%" required placeholder="Ej.: Rectificar apoyo de rodamiento punto J"></textarea></p>
+    <p><label><strong>Medida objetivo</strong></label><br><input name="medida_objetivo" style="width:100%" placeholder="Ej.: 39.950 a 40.050 mm"></p>
+    <button class="btn" type="submit">Crear orden de mecanizado</button>
+  </form>
+  {% else %}
+  <p><strong>Estado:</strong> {{ orden_mecanizado.get_estado_display }}<br><strong>Trabajo:</strong> {{ orden_mecanizado.trabajo_requerido }}{% if orden_mecanizado.medida_objetivo %}<br><strong>Objetivo:</strong> {{ orden_mecanizado.medida_objetivo }}{% endif %}</p>
+    {% if orden_mecanizado.estado == 'PENDIENTE' or orden_mecanizado.estado == 'EN_PROCESO' %}
+    <form method="post" action="{% url 'taller:metrologia_mecanizado_terminar' inspeccion.id %}">{% csrf_token %}<p><textarea name="observaciones_taller" rows="2" style="width:100%" placeholder="Trabajo realizado / observaciones de Taller"></textarea></p><button class="btn" type="submit">Mecanizado terminado</button></form>
+    {% elif orden_mecanizado.estado == 'TERMINADO' %}
+    <form method="post" action="{% url 'taller:metrologia_reinspeccion_crear' inspeccion.id %}">{% csrf_token %}<button class="btn" type="submit">Crear reinspección</button></form>
+    {% endif %}
+  {% endif %}
+{% endif %}
+{% if reinspecciones %}<p><strong>Historial:</strong> {% for r in reinspecciones %}<a href="{% url 'taller:metrologia_eje_detalle' r.id %}">Inspección {{ r.numero_inspeccion|stringformat:"02d" }}</a>{% if not forloop.last %} → {% endif %}{% endfor %}</p>{% endif %}
+</div>
+<div class="panel">{% if inspeccion.estado == 'REVISADA' %}<a class="btn" href="{% url 'taller:metrologia_eje_dictamen' inspeccion.id %}">Emitir dictamen de Calidad</a>{% elif inspeccion.estado == 'CERRADA' %}<p><strong>Dictamen:</strong> {{ inspeccion.get_dictamen_display }}</p>{% if not orden_mecanizado and not reinspecciones %}<a class="btn" href="{% url 'taller:metrologia_eje_dictamen' inspeccion.id %}">Cambiar dictamen</a> {% endif %}<a class="btn" href="{% url 'taller:metrologia_eje_reporte' inspeccion.id %}">Ver reporte de aceptación / inspección</a>{% endif %} <a class="btn" href="{% url 'taller:metrologia_ejes' %}">Volver</a></div><script>
+(function(){
+  function norm(v){
+    return (v || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+  function compatible(tipo,sugerido){
+    tipo=norm(tipo); sugerido=norm(sugerido);
+    if(!sugerido) return true;
+    return tipo.includes(sugerido) || sugerido.includes(tipo);
+  }
+  document.querySelectorAll('.instrument-select').forEach(function(sel){
+    const sug=sel.dataset.sugerido;
+    Array.from(sel.options).forEach(function(op,i){
+      if(i===0) return;
+      const isSelected=op.selected;
+      op.hidden=!isSelected && !compatible(op.dataset.tipo,sug);
+    });
+  });
+  document.querySelectorAll('.apply-instrument').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      const source=btn.parentElement.querySelector('.instrument-select');
+      if(!source || !source.value){alert('Seleccione primero el instrumento que desea aplicar.');return;}
+      const sug=norm(source.dataset.sugerido); let n=0;
+      document.querySelectorAll('.instrument-select').forEach(function(target){
+        if(target!==source && norm(target.dataset.sugerido)===sug){
+          const opt=Array.from(target.options).find(o=>o.value===source.value);
+          if(opt && !opt.hidden){target.value=source.value;n++;}
+        }
+      });
+      alert(n ? 'Instrumento aplicado a '+n+' punto(s) compatible(s).' : 'No hay otros puntos compatibles para aplicar.');
+    });
+  });
+})();
+</script>
+{% endblock %}

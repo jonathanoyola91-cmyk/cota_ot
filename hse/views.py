@@ -21,8 +21,21 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 from .models import HSEMovement, HSERequest, HSERequestLine, HSEStock
 
 
+def _perm(user, codename):
+    return user.is_superuser or user.has_perm(f"hse.{codename}")
+
+def _puede_dotacion(user):
+    return _perm(user, "gestionar_dotacion")
+
+def _puede_entregar(user):
+    return _perm(user, "entregar_dotacion")
+
+def _puede_stock(user):
+    return _perm(user, "gestionar_stock_hse")
+
 def _hse_manager(user):
-    return user.is_superuser or user.groups.filter(name__in=["INVENTARIO", "GERENCIA", "HSE"]).exists()
+    # Compatibilidad para vistas de consulta: cualquier permiso operativo HSE.
+    return _puede_dotacion(user) or _puede_entregar(user) or _puede_stock(user)
 
 
 def _empleados_impetus():
@@ -76,10 +89,12 @@ def dashboard(request):
         .order_by("-creado_en")
     )
     es_gestor = _hse_manager(request.user)
-    grupos = set(request.user.groups.values_list("name", flat=True))
-    es_inventario = request.user.is_superuser or "INVENTARIO" in grupos
-    es_gerencia = request.user.is_superuser or "GERENCIA" in grupos
-    es_hse = request.user.is_superuser or "HSE" in grupos
+    es_inventario = _puede_entregar(request.user) or _puede_stock(request.user)
+    es_gerencia = _puede_dotacion(request.user)
+    es_hse = False
+    puede_dotacion = _puede_dotacion(request.user)
+    puede_entregar = _puede_entregar(request.user)
+    puede_stock = _puede_stock(request.user)
 
     pendientes_entrega = HSERequest.objects.none()
     historial_entregas = HSERequest.objects.none()
@@ -117,17 +132,20 @@ def dashboard(request):
         "es_inventario": es_inventario,
         "es_gerencia": es_gerencia,
         "es_hse": es_hse,
+        "puede_dotacion": puede_dotacion,
+        "puede_entregar": puede_entregar,
+        "puede_stock": puede_stock,
         "pendientes_entrega": pendientes_entrega,
         "historial_entregas": historial_entregas,
         "solicitudes_stock": solicitudes_stock,
-        "stock": HSEStock.objects.order_by("codigo") if es_gestor else HSEStock.objects.none(),
+        "stock": HSEStock.objects.order_by("codigo") if puede_stock else HSEStock.objects.none(),
     })
 
 
 @login_required
 def entregas_pendientes(request):
-    """Ruta operativa para Inventario/HSE: revisar y entregar EPP/dotación."""
-    if not _hse_manager(request.user):
+    """Ruta operativa para Inventario: revisar y entregar EPP/dotación."""
+    if not _puede_entregar(request.user):
         messages.error(request, "No tienes permiso para gestionar entregas HSE.")
         return redirect("hse:dashboard")
     solicitudes = (
@@ -196,8 +214,8 @@ def solicitar(request, tipo):
     if tipo not in HSERequest.Tipo.values:
         return redirect("hse:dashboard")
     # Dotación sólo puede ser solicitada por Gerencia/HSE; EPP lo solicita cualquier colaborador.
-    if tipo == HSERequest.Tipo.DOTACION and not _hse_manager(request.user):
-        messages.error(request, "La solicitud de dotación semestral debe ser creada por Gerencia o HSE.")
+    if tipo == HSERequest.Tipo.DOTACION and not _puede_dotacion(request.user):
+        messages.error(request, "No tiene permiso para gestionar dotación semestral.")
         return redirect("hse:dashboard")
     empleados = _empleados_impetus()
     if request.method == "POST":
@@ -292,8 +310,8 @@ def editar_solicitud(request, pk):
 @login_required
 def reponer_bodega(request):
     """Compra preventiva de EPP: no requiere asignarlo aún a un colaborador."""
-    if not _hse_manager(request.user):
-        messages.error(request, "Sólo Inventario, HSE o Gerencia pueden reponer Bodega HSE.")
+    if not _puede_stock(request.user):
+        messages.error(request, "No tiene permiso para solicitar stock HSE.")
         return redirect("hse:dashboard")
     if request.method == "POST":
         item = _catalog_item(request.POST.get("item_id"))
@@ -313,8 +331,8 @@ def reponer_bodega(request):
 @login_required
 def carga_inicial(request):
     """Ingreso de existencias físicas actuales a Bodega HSE, sin contabilidad."""
-    if not _hse_manager(request.user):
-        messages.error(request, "Sólo Inventario, HSE o Gerencia pueden cargar Bodega HSE.")
+    if not _puede_stock(request.user):
+        messages.error(request, "No tiene permiso para gestionar Bodega HSE.")
         return redirect("hse:dashboard")
     if request.method == "POST":
         ids, cantidades = request.POST.getlist("item_id"), request.POST.getlist("cantidad")
@@ -357,7 +375,7 @@ def detalle(request, pk):
 
 @login_required
 def procesar_inventario(request, pk):
-    if not _hse_manager(request.user) or request.method != "POST":
+    if not _puede_stock(request.user) or request.method != "POST":
         return redirect("hse:dashboard")
     sol = get_object_or_404(HSERequest.objects.prefetch_related("lineas"), pk=pk)
     if sol.estado not in [HSERequest.Estado.PENDIENTE, HSERequest.Estado.EN_COMPRAS]:
@@ -403,7 +421,7 @@ def procesar_inventario(request, pk):
 
 @login_required
 def entregar(request, pk):
-    if not _hse_manager(request.user) or request.method != "POST":
+    if not _puede_entregar(request.user) or request.method != "POST":
         return redirect("hse:dashboard")
     sol = get_object_or_404(HSERequest.objects.prefetch_related("lineas"), pk=pk)
     if sol.estado != HSERequest.Estado.LISTA:
@@ -517,7 +535,7 @@ def comprobante_pdf(request, pk):
 @login_required
 def editar_solicitud_stock(request, pk):
     """Edita una reposición HSE ya enviada a Compras sin crear otra solicitud."""
-    if not _hse_manager(request.user):
+    if not _puede_stock(request.user):
         messages.error(request, "No tienes permiso para editar solicitudes de stock HSE.")
         return redirect("hse:dashboard")
 

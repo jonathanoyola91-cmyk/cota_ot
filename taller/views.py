@@ -1,8 +1,13 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta, time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from io import BytesIO
+from pathlib import Path
+
+from PIL import Image, ImageOps
 
 from django.contrib import messages
+from django.core.files.base import ContentFile
 from django.db.models import Q
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
@@ -15,7 +20,50 @@ from compras_oil.models import PurchaseRequest
 from inventario.models import WorkshopDelivery
 from paw_app.models import Paw
 from .forms_horas import AsignarTecnicosTallerForm, IniciarEnsambleForm, JornadaTallerForm
-from .models import CamaraTaller, EnsambleTaller, JornadaTaller
+from .models import CamaraTaller, EnsambleTaller, JornadaTaller, OrdenMecanizadoEje
+
+
+def optimizar_foto_metrologia(archivo, max_lado=1920, calidad=82):
+    """Reduce fotografías de evidencia antes de almacenarlas.
+
+    Corrige la orientación EXIF, limita el lado mayor y convierte a JPEG
+    optimizado. Si Pillow no puede procesar el archivo, lanza ValueError para
+    que la vista informe al usuario sin perder las mediciones ya diligenciadas.
+    """
+    try:
+        archivo.seek(0)
+        with Image.open(archivo) as img:
+            img = ImageOps.exif_transpose(img)
+
+            if img.mode not in ("RGB", "L"):
+                # Las evidencias son fotografías; un fondo blanco evita fondos
+                # negros si excepcionalmente llega una imagen con transparencia.
+                if "A" in img.getbands():
+                    fondo = Image.new("RGB", img.size, "white")
+                    alpha = img.getchannel("A")
+                    fondo.paste(img.convert("RGB"), mask=alpha)
+                    img = fondo
+                else:
+                    img = img.convert("RGB")
+            elif img.mode == "L":
+                img = img.convert("RGB")
+
+            img.thumbnail((max_lado, max_lado), Image.Resampling.LANCZOS)
+
+            salida = BytesIO()
+            img.save(
+                salida,
+                format="JPEG",
+                quality=calidad,
+                optimize=True,
+                progressive=True,
+            )
+    except Exception as exc:
+        raise ValueError("No fue posible procesar la fotografía seleccionada.") from exc
+
+    nombre_base = Path(getattr(archivo, "name", "evidencia")).stem
+    nombre = f"{nombre_base[:80] or 'evidencia'}.jpg"
+    return ContentFile(salida.getvalue(), name=nombre)
 
 
 def obtener_bom_seguro(ot):
@@ -174,6 +222,7 @@ def dashboard(request):
         "total_historial_ensamble": historial_ensamble.count(),
 
         "puede_editar_taller": puede_editar_taller(request.user),
+        "puede_configurar_metrologia": (request.user.is_superuser or request.user.is_staff or tiene_rol(request.user, ["ADMIN"])),
     })
 
 
@@ -1035,3 +1084,568 @@ def _periodo_corte_27(fecha_base):
             )
 
     return fecha_inicio, fecha_fin
+
+
+# =========================
+# METROLOGIA / INSPECCION DE EJES
+# =========================
+from django.db import transaction
+from .forms_metrologia import NuevaInspeccionEjeForm, DictamenInspeccionEjeForm
+from .models import InspeccionEje, MedicionEje, InstrumentoMetrologico, CalibracionInstrumento, PlantillaEje, PuntoMedicionEje, TipoPiezaMetrologia
+
+
+
+@login_required
+@transaction.atomic
+def metrologia_plantilla_configurar(request, plantilla_id):
+    # La configuración dimensional queda restringida a administración.
+    if not _puede_gestionar_metrologia(request.user):
+        messages.error(request, "No tiene permisos para configurar plantillas metrológicas.")
+        return redirect("taller:metrologia_ejes")
+
+    plantilla = get_object_or_404(PlantillaEje, pk=plantilla_id)
+    puntos = list(plantilla.puntos.all())
+
+    if request.method == "POST":
+        accion = request.POST.get("accion", "guardar")
+        if accion == "nuevo":
+            codigo = request.POST.get("codigo", "").strip().upper()
+            descripcion = request.POST.get("descripcion", "").strip()
+            if not codigo or not descripcion:
+                messages.error(request, "Indique código y característica para el nuevo punto.")
+            elif plantilla.puntos.filter(codigo=codigo).exists():
+                messages.error(request, f"El punto {codigo} ya existe en esta plantilla.")
+            else:
+                def dec(name):
+                    v = (request.POST.get(name) or "").strip().replace(",", ".")
+                    if not v:
+                        return None
+                    try:
+                        return Decimal(v)
+                    except (InvalidOperation, ValueError, TypeError):
+                        raise ValueError(f"El campo {name} debe contener solo un número (ej. 0,003 o 0.003).")
+                try:
+                    nominal_nuevo = dec("nominal")
+                    minimo_nuevo = dec("minimo")
+                    maximo_nuevo = dec("maximo")
+                    minimo_reutilizable_nuevo = dec("minimo_reutilizable")
+                    x_nuevo = dec("posicion_x") or Decimal("50")
+                    y_nuevo = dec("posicion_y") or Decimal("50")
+                except ValueError as exc:
+                    messages.error(request, str(exc))
+                    return redirect("taller:metrologia_plantilla_configurar", plantilla_id=plantilla.id)
+                PuntoMedicionEje.objects.create(
+                    plantilla=plantilla, codigo=codigo, descripcion=descripcion,
+                    tipo=request.POST.get("tipo") or PuntoMedicionEje.Tipo.DIAMETRO,
+                    nominal=nominal_nuevo, minimo=minimo_nuevo, maximo=maximo_nuevo,
+                    minimo_reutilizable=minimo_reutilizable_nuevo, permite_mecanizado=bool(request.POST.get("permite_mecanizado")),
+                    unidad=request.POST.get("unidad", "mm").strip() or "mm",
+                    instrumento_sugerido=request.POST.get("instrumento_sugerido", "").strip(),
+                    critico=bool(request.POST.get("critico")), obligatorio=bool(request.POST.get("obligatorio")),
+                    orden=(plantilla.puntos.order_by("-orden").values_list("orden", flat=True).first() or 0)+1,
+                    posicion_x=x_nuevo, posicion_y=y_nuevo,
+                )
+                messages.success(request, f"Punto {codigo} creado.")
+            return redirect("taller:metrologia_plantilla_configurar", plantilla_id=plantilla.id)
+
+        for punto in puntos:
+            pref=f"p_{punto.id}_"
+            if request.POST.get(pref+"delete"):
+                punto.delete()
+                continue
+            def decp(name, actual=None):
+                v = (request.POST.get(pref+name) or "").strip().replace(",", ".")
+                if not v:
+                    return None
+                try:
+                    return Decimal(v)
+                except (InvalidOperation, ValueError, TypeError):
+                    raise ValueError(f"El campo {name} del punto {punto.codigo} debe contener solo un número (ej. 0,003 o 0.003).")
+            punto.descripcion=request.POST.get(pref+"descripcion", punto.descripcion).strip()
+            try:
+                punto.nominal=decp("nominal")
+                punto.minimo=decp("minimo")
+                punto.maximo=decp("maximo")
+                punto.minimo_reutilizable=decp("minimo_reutilizable")
+                punto.posicion_x=decp("x") or Decimal("50")
+                punto.posicion_y=decp("y") or Decimal("50")
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect("taller:metrologia_plantilla_configurar", plantilla_id=plantilla.id)
+            punto.unidad=request.POST.get(pref+"unidad", punto.unidad).strip() or "mm"
+            punto.instrumento_sugerido=request.POST.get(pref+"instrumento", punto.instrumento_sugerido).strip()
+            punto.critico=bool(request.POST.get(pref+"critico"))
+            punto.obligatorio=bool(request.POST.get(pref+"obligatorio"))
+            punto.permite_mecanizado=bool(request.POST.get(pref+"permite_mecanizado"))
+            punto.save()
+        messages.success(request, "Configuración de puntos guardada.")
+        return redirect("taller:metrologia_plantilla_configurar", plantilla_id=plantilla.id)
+
+    return render(request, "taller/metrologia_plantilla_configurar.html", {
+        "plantilla": plantilla, "puntos": puntos, "tipos": PuntoMedicionEje.Tipo.choices,
+    })
+
+
+def _puede_gestionar_metrologia(user):
+    """Permiso administrable desde Django Admin; is_staff por sí solo NO concede acceso."""
+    return user.is_superuser or user.has_perm("taller.gestionar_plantillas_metrologicas")
+
+
+def _fecha_post(valor):
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+@login_required
+def metrologia_instrumentos(request):
+    instrumentos = list(InstrumentoMetrologico.objects.all().order_by("nombre", "codigo"))
+    resumen = {"total": len(instrumentos), "vigentes": 0, "proximos": 0, "vencidos": 0, "sin_calibracion": 0, "fuera_servicio": 0}
+    for i in instrumentos:
+        estado = i.estado_calibracion
+        if estado == "VIGENTE": resumen["vigentes"] += 1
+        elif estado == "PROXIMO": resumen["proximos"] += 1
+        elif estado == "VENCIDO": resumen["vencidos"] += 1
+        elif estado == "SIN_CALIBRACION": resumen["sin_calibracion"] += 1
+        else: resumen["fuera_servicio"] += 1
+    return render(request, "taller/metrologia_instrumentos.html", {
+        "instrumentos": instrumentos, "resumen": resumen,
+        "puede_gestionar": _puede_gestionar_metrologia(request.user),
+    })
+
+
+@login_required
+@transaction.atomic
+def metrologia_instrumento_form(request, instrumento_id=None):
+    if not _puede_gestionar_metrologia(request.user):
+        messages.error(request, "No tiene permisos para administrar instrumentos de metrología.")
+        return redirect("taller:metrologia_instrumentos")
+    instrumento = get_object_or_404(InstrumentoMetrologico, pk=instrumento_id) if instrumento_id else InstrumentoMetrologico()
+    if request.method == "POST":
+        codigo = request.POST.get("codigo", "").strip()
+        nombre = request.POST.get("nombre", "").strip()
+        if not codigo or not nombre:
+            messages.error(request, "Código interno y tipo de instrumento son obligatorios.")
+        elif InstrumentoMetrologico.objects.exclude(pk=instrumento.pk).filter(codigo__iexact=codigo).exists():
+            messages.error(request, "Ya existe un instrumento con ese código interno.")
+        else:
+            instrumento.codigo = codigo
+            instrumento.nombre = nombre
+            for campo in ["marca", "modelo", "serial", "rango", "resolucion", "unidad", "ubicacion", "responsable", "observaciones"]:
+                setattr(instrumento, campo, request.POST.get(campo, "").strip())
+            instrumento.estado = request.POST.get("estado") or InstrumentoMetrologico.Estado.ACTIVO
+            instrumento.activo = instrumento.estado == InstrumentoMetrologico.Estado.ACTIVO
+            instrumento.save()
+            messages.success(request, "Instrumento guardado. Ahora registre su calibración vigente.")
+            return redirect("taller:metrologia_instrumento_detalle", instrumento_id=instrumento.id)
+    return render(request, "taller/metrologia_instrumento_form.html", {"instrumento": instrumento, "estados": InstrumentoMetrologico.Estado.choices})
+
+
+@login_required
+@transaction.atomic
+def metrologia_instrumento_detalle(request, instrumento_id):
+    instrumento = get_object_or_404(InstrumentoMetrologico, pk=instrumento_id)
+    historial = instrumento.historial_calibraciones.all()
+    if request.method == "POST":
+        if not _puede_gestionar_metrologia(request.user):
+            messages.error(request, "No tiene permisos para registrar calibraciones.")
+            return redirect("taller:metrologia_instrumento_detalle", instrumento_id=instrumento.id)
+        fecha_cal = _fecha_post(request.POST.get("fecha_calibracion"))
+        fecha_ven = _fecha_post(request.POST.get("fecha_vencimiento"))
+        if not fecha_cal or not fecha_ven:
+            messages.error(request, "Fecha de calibración y fecha de vencimiento son obligatorias.")
+        elif fecha_ven < fecha_cal:
+            messages.error(request, "La fecha de vencimiento no puede ser anterior a la calibración.")
+        else:
+            certificado = request.FILES.get("certificado")
+            cal = CalibracionInstrumento.objects.create(
+                instrumento=instrumento, fecha_calibracion=fecha_cal, fecha_vencimiento=fecha_ven,
+                laboratorio=request.POST.get("laboratorio", "").strip(),
+                numero_certificado=request.POST.get("numero_certificado", "").strip(),
+                certificado=certificado,
+                observaciones=request.POST.get("observaciones", "").strip(), registrado_por=request.user,
+            )
+            instrumento.fecha_calibracion = cal.fecha_calibracion
+            instrumento.fecha_vencimiento = cal.fecha_vencimiento
+            instrumento.laboratorio = cal.laboratorio
+            instrumento.numero_certificado = cal.numero_certificado
+            if cal.certificado:
+                instrumento.certificado = cal.certificado
+            instrumento.save(update_fields=["fecha_calibracion", "fecha_vencimiento", "laboratorio", "numero_certificado", "certificado"])
+            messages.success(request, "Calibración registrada y vigencia del instrumento actualizada.")
+            return redirect("taller:metrologia_instrumento_detalle", instrumento_id=instrumento.id)
+    return render(request, "taller/metrologia_instrumento_detalle.html", {
+        "instrumento": instrumento, "historial": historial,
+        "puede_gestionar": _puede_gestionar_metrologia(request.user),
+    })
+
+
+
+@login_required
+@transaction.atomic
+def metrologia_tipos_pieza(request):
+    if not _puede_gestionar_metrologia(request.user):
+        messages.error(request, "No tiene permisos para administrar tipos de pieza.")
+        return redirect("taller:metrologia_ejes")
+    if request.method == "POST":
+        nombre = (request.POST.get("nombre") or "").strip()
+        if not nombre:
+            messages.error(request, "Indique el nombre del tipo de pieza.")
+        elif TipoPiezaMetrologia.objects.filter(nombre__iexact=nombre).exists():
+            messages.error(request, "Ese tipo de pieza ya existe.")
+        else:
+            TipoPiezaMetrologia.objects.create(nombre=nombre)
+            messages.success(request, f"Tipo de pieza {nombre} creado.")
+        return redirect("taller:metrologia_tipos_pieza")
+    return render(request, "taller/metrologia_tipos_pieza.html", {"tipos": TipoPiezaMetrologia.objects.all()})
+
+
+@login_required
+def metrologia_plantillas(request):
+    if not _puede_gestionar_metrologia(request.user):
+        messages.error(request, "No tiene permisos para gestionar plantillas metrológicas.")
+        return redirect("taller:metrologia_ejes")
+    q = (request.GET.get("q") or "").strip()
+    plantillas = PlantillaEje.objects.all().prefetch_related("puntos").order_by("tipo_pieza", "nombre", "revision")
+    if q:
+        plantillas = plantillas.filter(Q(nombre__icontains=q) | Q(codigo_plano__icontains=q) | Q(material__icontains=q))
+    return render(request, "taller/metrologia_plantillas.html", {"plantillas": plantillas, "q": q})
+
+
+@login_required
+@transaction.atomic
+def metrologia_plantilla_form(request, plantilla_id=None):
+    if not _puede_gestionar_metrologia(request.user):
+        messages.error(request, "No tiene permisos para gestionar plantillas metrológicas.")
+        return redirect("taller:metrologia_ejes")
+    plantilla = get_object_or_404(PlantillaEje, pk=plantilla_id) if plantilla_id else None
+    if request.method == "POST":
+        nombre = (request.POST.get("nombre") or "").strip()
+        if not nombre:
+            messages.error(request, "El nombre/modelo de la plantilla es obligatorio.")
+        elif PlantillaEje.objects.exclude(pk=getattr(plantilla, "pk", None)).filter(nombre__iexact=nombre).exists():
+            messages.error(request, "Ya existe una plantilla con ese nombre.")
+        else:
+            obj = plantilla or PlantillaEje()
+            obj.nombre = nombre
+            tipo_id = request.POST.get("tipo_pieza_ref")
+            obj.tipo_pieza_ref = TipoPiezaMetrologia.objects.filter(pk=tipo_id, activo=True).first() if tipo_id else None
+            obj.tipo_pieza = PlantillaEje.TipoPieza.OTRO if obj.tipo_pieza_ref else (request.POST.get("tipo_pieza") or PlantillaEje.TipoPieza.EJE)
+            obj.codigo_plano = (request.POST.get("codigo_plano") or "").strip()
+            obj.revision = (request.POST.get("revision") or "").strip()
+            obj.material = (request.POST.get("material") or "").strip()
+            obj.observaciones = (request.POST.get("observaciones") or "").strip()
+            obj.activo = bool(request.POST.get("activo"))
+            if request.FILES.get("imagen_archivo"):
+                obj.imagen_archivo = request.FILES["imagen_archivo"]
+            obj.save()
+            messages.success(request, "Plantilla guardada. Ahora puede ubicar y configurar sus puntos metrológicos.")
+            return redirect("taller:metrologia_plantilla_configurar", plantilla_id=obj.id)
+    return render(request, "taller/metrologia_plantilla_form.html", {"plantilla": plantilla, "tipos_pieza": TipoPiezaMetrologia.objects.filter(activo=True)})
+
+
+@login_required
+def metrologia_paw_detalle(request, paw_id):
+    paw = get_object_or_404(Paw, pk=paw_id)
+    inspecciones = list(InspeccionEje.objects.filter(paw=paw).select_related("plantilla", "inspeccion_origen").order_by("serial_eje", "plantilla__nombre", "numero_inspeccion", "creado_en"))
+    grupos = {}
+    for i in inspecciones:
+        raiz = i.inspeccion_origen_id or i.id
+        clave = (i.plantilla_id, i.serial_eje or "SIN-SERIAL", raiz)
+        g = grupos.setdefault(clave, {"plantilla": i.plantilla, "serial": i.serial_eje or "—", "inspecciones": [], "ultima": i})
+        g["inspecciones"].append(i)
+        g["ultima"] = i
+    return render(request, "taller/metrologia_paw_detalle.html", {"paw": paw, "grupos": list(grupos.values())})
+
+
+@login_required
+def metrologia_ejes(request):
+    inspecciones = list(
+        InspeccionEje.objects.select_related("paw", "plantilla", "realizado_por", "revisado_por").all()
+    )
+    por_paw = {}
+    for i in inspecciones:
+        g = por_paw.setdefault(i.paw_id, {"paw": i.paw, "tipo_trabajo": i.get_tipo_trabajo_display(), "inspecciones": 0, "piezas": set(), "reinspecciones": 0, "estado": "Pendiente"})
+        g["inspecciones"] += 1
+        raiz = i.inspeccion_origen_id or i.id
+        g["piezas"].add((i.plantilla_id, i.serial_eje or "SIN-SERIAL", raiz))
+        if i.inspeccion_origen_id:
+            g["reinspecciones"] += 1
+        if i.dictamen == InspeccionEje.Dictamen.MECANIZADO:
+            g["estado"] = "Requiere mecanizado"
+        elif i.resultado_dimensional == InspeccionEje.Resultado.NO_CONFORME and g["estado"] == "Pendiente":
+            g["estado"] = "No conforme"
+        elif i.dictamen == InspeccionEje.Dictamen.APROBADO and g["estado"] == "Pendiente":
+            g["estado"] = "Con inspecciones aprobadas"
+    grupos_paw = []
+    for g in por_paw.values():
+        g["cantidad_piezas"] = len(g.pop("piezas"))
+        grupos_paw.append(g)
+    grupos_paw.sort(key=lambda x: max([i.creado_en for i in inspecciones if i.paw_id == x["paw"].id], default=timezone.now()), reverse=True)
+    puede_configurar = _puede_gestionar_metrologia(request.user)
+    return render(request, "taller/metrologia_ejes.html", {"grupos_paw": grupos_paw, "puede_configurar_metrologia": puede_configurar})
+
+
+@login_required
+@transaction.atomic
+def metrologia_eje_nueva(request):
+    if request.method == "POST":
+        form = NuevaInspeccionEjeForm(request.POST)
+        if form.is_valid():
+            inspeccion = form.save(commit=False)
+            inspeccion.realizado_por = request.user
+            inspeccion.save()
+            puntos = inspeccion.plantilla.puntos.all()
+            MedicionEje.objects.bulk_create([
+                MedicionEje(inspeccion=inspeccion, punto=punto) for punto in puntos
+            ])
+            messages.success(request, "Inspección creada. Ya puede registrar las medidas del eje.")
+            return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+    else:
+        initial = {}
+        paw_id = request.GET.get("paw")
+        if paw_id:
+            initial["paw"] = paw_id
+            anterior = InspeccionEje.objects.filter(paw_id=paw_id).exclude(serial_equipo="").order_by("creado_en").first()
+            if anterior:
+                initial["serial_equipo"] = anterior.serial_equipo
+                initial["tipo_trabajo"] = anterior.tipo_trabajo
+        form = NuevaInspeccionEjeForm(initial=initial)
+    return render(request, "taller/metrologia_eje_nueva.html", {"form": form})
+
+
+@login_required
+@transaction.atomic
+def metrologia_eje_detalle(request, inspeccion_id):
+    inspeccion = get_object_or_404(
+        InspeccionEje.objects.select_related("paw", "plantilla", "camara", "realizado_por", "revisado_por"),
+        pk=inspeccion_id,
+    )
+    mediciones = list(inspeccion.mediciones.select_related("punto", "instrumento").all())
+    instrumentos = [i for i in InstrumentoMetrologico.objects.filter(activo=True, estado=InstrumentoMetrologico.Estado.ACTIVO).order_by("nombre", "codigo") if i.calibracion_vigente]
+
+    if request.method == "POST" and inspeccion.estado == InspeccionEje.Estado.BORRADOR:
+        hubo_error = False
+        for medicion in mediciones:
+            pref = f"m_{medicion.id}_"
+
+            # Guardado incremental: un campo vacío o ausente NO borra una
+            # medición que ya estaba almacenada. También aceptamos coma decimal.
+            clave_valor = pref + "valor"
+            if clave_valor in request.POST:
+                valor_raw = request.POST.get(clave_valor, "").strip()
+                if valor_raw:
+                    valor_normalizado = valor_raw.replace(",", ".")
+                    try:
+                        medicion.valor = Decimal(valor_normalizado)
+                    except (InvalidOperation, ValueError, TypeError):
+                        messages.error(
+                            request,
+                            f"El valor del punto {medicion.punto.codigo} no es válido. "
+                            "Use solo números, por ejemplo 0,003 o 0.003.",
+                        )
+                        hubo_error = True
+                        continue
+
+            clave_instrumento = pref + "instrumento"
+            if clave_instrumento in request.POST:
+                instrumento_id = request.POST.get(clave_instrumento, "").strip()
+                if instrumento_id:
+                    instrumento = InstrumentoMetrologico.objects.filter(pk=instrumento_id).first()
+                    if not instrumento or not instrumento.disponible_para_medicion:
+                        messages.error(request, f"El instrumento seleccionado para el punto {medicion.punto.codigo} no está disponible o tiene la calibración vencida.")
+                        hubo_error = True
+                        continue
+                    medicion.instrumento = instrumento
+
+            clave_instrumento_texto = pref + "instrumento_texto"
+            if clave_instrumento_texto in request.POST:
+                instrumento_texto = request.POST.get(clave_instrumento_texto, "").strip()
+                if instrumento_texto:
+                    medicion.instrumento_texto = instrumento_texto
+
+            clave_observacion = pref + "observacion"
+            if clave_observacion in request.POST:
+                observacion = request.POST.get(clave_observacion, "").strip()
+                if observacion:
+                    medicion.observacion = observacion
+
+            archivo = request.FILES.get(pref + "evidencia")
+            if archivo:
+                # El técnico puede tomar la foto directamente con el celular.
+                # Guardamos una copia optimizada para no llenar el almacenamiento
+                # con fotografías de varios MB y mantener buena lectura en PDF.
+                if archivo.size > 20 * 1024 * 1024:
+                    messages.error(
+                        request,
+                        f"La foto del punto {medicion.punto.codigo} supera 20 MB. "
+                        "Seleccione una imagen más liviana.",
+                    )
+                    hubo_error = True
+                else:
+                    try:
+                        medicion.evidencia = optimizar_foto_metrologia(archivo)
+                    except ValueError:
+                        messages.error(
+                            request,
+                            f"No fue posible procesar la foto del punto {medicion.punto.codigo}. "
+                            "Use una imagen JPG, PNG o una foto tomada desde el navegador.",
+                        )
+                        hubo_error = True
+            medicion.save()
+
+        if hubo_error:
+            # Conservamos lo válido que sí se alcanzó a guardar y regresamos al
+            # formulario sin permitir que una revisión cierre datos incompletos.
+            inspeccion.recalcular_resultado()
+            return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+
+        inspeccion.recalcular_resultado()
+        if "revisar" in request.POST:
+            faltantes = [m for m in inspeccion.mediciones.select_related("punto") if m.punto.obligatorio and m.valor is None]
+            if faltantes:
+                messages.error(request, "Faltan mediciones obligatorias. Complete los puntos antes de revisar.")
+            else:
+                inspeccion.estado = InspeccionEje.Estado.REVISADA
+                inspeccion.revisado_por = request.user
+                inspeccion.fecha_revision = timezone.now()
+                inspeccion.save(update_fields=["estado", "revisado_por", "fecha_revision", "actualizado_en"])
+                messages.success(request, "Mediciones revisadas. Ya puede emitir el dictamen de Calidad.")
+        else:
+            messages.success(request, "Mediciones guardadas.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+
+    orden_mecanizado = OrdenMecanizadoEje.objects.filter(inspeccion_origen=inspeccion).first()
+    return render(request, "taller/metrologia_eje_detalle.html", {
+        "inspeccion": inspeccion,
+        "mediciones": mediciones,
+        "instrumentos": instrumentos,
+        "orden_mecanizado": orden_mecanizado,
+        "reinspecciones": inspeccion.reinspecciones.order_by("numero_inspeccion"),
+    })
+
+
+@login_required
+@transaction.atomic
+def metrologia_eje_dictamen(request, inspeccion_id):
+    inspeccion = get_object_or_404(InspeccionEje, pk=inspeccion_id)
+    if inspeccion.estado == InspeccionEje.Estado.BORRADOR:
+        messages.error(request, "Primero debe revisar las mediciones.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+
+    # Un dictamen cerrado puede corregirse mientras no haya iniciado el flujo
+    # de mecanizado/reinspección. Después se conserva bloqueado como evidencia.
+    if inspeccion.estado == InspeccionEje.Estado.CERRADA:
+        tiene_orden = OrdenMecanizadoEje.objects.filter(inspeccion_origen=inspeccion).exists()
+        tiene_reinspeccion = inspeccion.reinspecciones.exists()
+        if tiene_orden or tiene_reinspeccion:
+            messages.error(request, "El dictamen ya no puede cambiarse porque existe una orden de mecanizado o una reinspección asociada.")
+            return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+
+    if request.method == "POST":
+        form = DictamenInspeccionEjeForm(request.POST, instance=inspeccion)
+        if form.is_valid() and form.cleaned_data["dictamen"] != InspeccionEje.Dictamen.PENDIENTE:
+            obj = form.save(commit=False)
+            obj.estado = InspeccionEje.Estado.CERRADA
+            obj.revisado_por = request.user
+            obj.fecha_revision = timezone.now()
+            obj.save()
+            messages.success(request, "Dictamen de Calidad actualizado.")
+            if obj.dictamen == InspeccionEje.Dictamen.MECANIZADO:
+                messages.info(request, "La pieza requiere mecanizado. Ya puede crear la orden de mecanizado.")
+                return redirect("taller:metrologia_eje_detalle", inspeccion_id=obj.id)
+            return redirect("taller:metrologia_eje_reporte", inspeccion_id=obj.id)
+    else:
+        form = DictamenInspeccionEjeForm(instance=inspeccion)
+    return render(request, "taller/metrologia_eje_dictamen.html", {"form": form, "inspeccion": inspeccion})
+
+
+@login_required
+def metrologia_eje_reporte(request, inspeccion_id):
+    inspeccion = get_object_or_404(
+        InspeccionEje.objects.select_related("paw", "plantilla", "realizado_por", "revisado_por"),
+        pk=inspeccion_id,
+    )
+    mediciones = list(inspeccion.mediciones.select_related("punto", "instrumento").all())
+    hay_evidencias = any(bool(m.evidencia) for m in mediciones)
+    # Resumen único de los equipos físicos utilizados para trazabilidad metrológica.
+    instrumentos_usados = []
+    vistos = set()
+    for m in mediciones:
+        if m.instrumento_id and m.instrumento_id not in vistos:
+            vistos.add(m.instrumento_id)
+            instrumentos_usados.append(m.instrumento)
+    return render(request, "taller/metrologia_eje_reporte.html", {
+        "inspeccion": inspeccion,
+        "mediciones": mediciones,
+        "hay_evidencias": hay_evidencias,
+        "instrumentos_usados": instrumentos_usados,
+    })
+
+@login_required
+@require_POST
+@transaction.atomic
+def metrologia_mecanizado_crear(request, inspeccion_id):
+    inspeccion = get_object_or_404(InspeccionEje, pk=inspeccion_id)
+    if inspeccion.estado != InspeccionEje.Estado.CERRADA or inspeccion.dictamen != InspeccionEje.Dictamen.MECANIZADO:
+        messages.error(request, "La orden de mecanizado solo puede crearse desde una inspección cerrada con dictamen Requiere mecanizado.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+    if hasattr(inspeccion, "orden_mecanizado"):
+        messages.info(request, "Esta inspección ya tiene una orden de mecanizado.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+    trabajo = request.POST.get("trabajo_requerido", "").strip()
+    if not trabajo:
+        messages.error(request, "Describa el trabajo de mecanizado requerido.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+    OrdenMecanizadoEje.objects.create(
+        inspeccion_origen=inspeccion,
+        trabajo_requerido=trabajo,
+        medida_objetivo=request.POST.get("medida_objetivo", "").strip(),
+        responsable=request.user,
+        creado_por=request.user,
+    )
+    messages.success(request, "Orden de mecanizado creada. La inspección original permanece bloqueada como evidencia.")
+    return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def metrologia_mecanizado_terminar(request, inspeccion_id):
+    inspeccion = get_object_or_404(InspeccionEje, pk=inspeccion_id)
+    orden = get_object_or_404(OrdenMecanizadoEje, inspeccion_origen=inspeccion)
+    orden.observaciones_taller = request.POST.get("observaciones_taller", "").strip()
+    orden.estado = OrdenMecanizadoEje.Estado.TERMINADO
+    orden.terminado_en = timezone.now()
+    orden.save(update_fields=["observaciones_taller", "estado", "terminado_en"])
+    messages.success(request, "Mecanizado marcado como terminado. Ya puede crear la reinspección.")
+    return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def metrologia_reinspeccion_crear(request, inspeccion_id):
+    origen = get_object_or_404(InspeccionEje, pk=inspeccion_id)
+    orden = get_object_or_404(OrdenMecanizadoEje, inspeccion_origen=origen)
+    if orden.estado != OrdenMecanizadoEje.Estado.TERMINADO:
+        messages.error(request, "Primero marque el mecanizado como terminado.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=origen.id)
+    existente = origen.reinspecciones.order_by("-numero_inspeccion").first()
+    if existente:
+        messages.info(request, "Ya existe una reinspección creada para esta inspección.")
+        return redirect("taller:metrologia_eje_detalle", inspeccion_id=existente.id)
+    nueva = InspeccionEje.objects.create(
+        paw=origen.paw, plantilla=origen.plantilla, camara=origen.camara,
+        serial_equipo=origen.serial_equipo, serial_eje=origen.serial_eje, realizado_por=request.user,
+        inspeccion_origen=origen, numero_inspeccion=origen.numero_inspeccion + 1,
+    )
+    for punto in origen.plantilla.puntos.all():
+        MedicionEje.objects.create(inspeccion=nueva, punto=punto)
+    orden.estado = OrdenMecanizadoEje.Estado.REINSPECCIONADO
+    orden.save(update_fields=["estado"])
+    messages.success(request, "Reinspección creada. Las mediciones originales se conservaron sin cambios.")
+    return redirect("taller:metrologia_eje_detalle", inspeccion_id=nueva.id)

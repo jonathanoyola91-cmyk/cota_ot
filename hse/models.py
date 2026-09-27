@@ -17,6 +17,11 @@ class HSEStock(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["catalogo", "catalogo_item_id"], name="hse_stock_catalogo_item")]
         ordering = ["codigo"]
+        permissions = [
+            ("gestionar_dotacion", "Puede gestionar dotación"),
+            ("entregar_dotacion", "Puede entregar EPP y dotación"),
+            ("gestionar_stock_hse", "Puede gestionar bodega y stock HSE"),
+        ]
 
     def __str__(self):
         return f"Bodega HSE · {self.codigo}"

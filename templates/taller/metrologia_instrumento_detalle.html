@@ -1,0 +1,36 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Ficha de instrumento{% endblock %}
+{% block content %}
+<style>
+.inst-card{padding:22px 24px}.inst-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;border-bottom:1px solid #e5e7eb;padding-bottom:15px;margin-bottom:16px}.inst-title{margin:0;font-size:24px;line-height:1.2}.inst-sub{margin-top:6px;color:#64748b;font-size:14px}.badge{display:inline-flex;align-items:center;padding:6px 11px;border-radius:999px;font-weight:800;font-size:13px;white-space:nowrap}.vig{background:#dcfce7;color:#166534}.prox{background:#fef3c7;color:#92400e}.ven{background:#fee2e2;color:#991b1b}.sin{background:#e5e7eb;color:#374151}.info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 22px}.info-item{min-width:0}.info-label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.025em;color:#64748b;margin-bottom:4px}.info-value{font-size:15px;font-weight:600;color:#0f172a;overflow-wrap:anywhere}.cal-box{margin-top:18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.cal-dates{display:flex;gap:28px;flex-wrap:wrap}.cal-date strong{display:block;font-size:12px;color:#64748b;margin-bottom:3px}.date-expired{color:#b91c1c;font-weight:800}.inst-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.calgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.calgrid input,.calgrid textarea{width:100%;box-sizing:border-box;padding:8px}.history-wrap{overflow-x:auto}.history-table{width:100%;border-collapse:collapse}.history-table th,.history-table td{padding:10px 12px;text-align:left;border-bottom:1px solid #e5e7eb}.history-table th{font-size:12px;color:#64748b;text-transform:uppercase}.history-status{font-size:12px;font-weight:700}.status-old{color:#64748b}.status-current{color:#166534}.status-expired{color:#991b1b}@media(max-width:1000px){.info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.inst-head{flex-direction:column}.info-grid,.calgrid{grid-template-columns:1fr}.cal-box{align-items:flex-start}.cal-dates{gap:14px}}
+</style>
+<div class="panel inst-card">
+  <div class="inst-head">
+    <div>
+      <h2 class="inst-title">🧰 {{ instrumento.codigo }} — {{ instrumento.nombre }}</h2>
+      <div class="inst-sub">Hoja de vida y control metrológico del instrumento</div>
+    </div>
+    <div>{% if instrumento.estado_calibracion == 'VIGENTE' %}<span class="badge vig">VIGENTE</span>{% elif instrumento.estado_calibracion == 'PROXIMO' %}<span class="badge prox">PRÓXIMO A VENCER</span>{% elif instrumento.estado_calibracion == 'VENCIDO' %}<span class="badge ven">VENCIDO</span>{% else %}<span class="badge sin">{{ instrumento.estado_calibracion }}</span>{% endif %}</div>
+  </div>
+  <div class="info-grid">
+    <div class="info-item"><span class="info-label">Marca / modelo</span><span class="info-value">{{ instrumento.marca|default:"—" }}{% if instrumento.modelo %} {{ instrumento.modelo }}{% endif %}</span></div>
+    <div class="info-item"><span class="info-label">Serial</span><span class="info-value">{{ instrumento.serial|default:"—" }}</span></div>
+    <div class="info-item"><span class="info-label">Rango</span><span class="info-value">{{ instrumento.rango|default:"—" }}</span></div>
+    <div class="info-item"><span class="info-label">Resolución</span><span class="info-value">{{ instrumento.resolucion|default:"—" }}</span></div>
+    <div class="info-item"><span class="info-label">Ubicación</span><span class="info-value">{{ instrumento.ubicacion|default:"—" }}</span></div>
+    <div class="info-item"><span class="info-label">Responsable</span><span class="info-value">{{ instrumento.responsable|default:"—" }}</span></div>
+    <div class="info-item"><span class="info-label">Tipo</span><span class="info-value">{{ instrumento.tipo|default:"—" }}</span></div>
+    <div class="info-item"><span class="info-label">Unidad</span><span class="info-value">{{ instrumento.unidad|default:"—" }}</span></div>
+  </div>
+  <div class="cal-box">
+    <div class="cal-dates">
+      <div class="cal-date"><strong>Última calibración</strong>{{ instrumento.fecha_calibracion|date:"d/m/Y"|default:"—" }}</div>
+      <div class="cal-date"><strong>Vencimiento</strong><span{% if instrumento.estado_calibracion == 'VENCIDO' %} class="date-expired"{% endif %}>{{ instrumento.fecha_vencimiento|date:"d/m/Y"|default:"—" }}</span></div>
+      <div class="cal-date"><strong>Certificado</strong>{{ instrumento.numero_certificado|default:"—" }}{% if instrumento.certificado %} · <a href="{{ instrumento.certificado.url }}" target="_blank">Ver PDF</a>{% endif %}</div>
+    </div>
+  </div>
+  <div class="inst-actions"><a class="btn" href="{% url 'taller:metrologia_instrumentos' %}">← Instrumentos</a>{% if puede_gestionar %}<a class="btn" href="{% url 'taller:metrologia_instrumento_editar' instrumento.id %}">Editar ficha</a><a class="btn" href="#nueva-calibracion">Registrar calibración</a>{% endif %}</div>
+</div>
+{% if puede_gestionar %}<div class="panel" id="nueva-calibracion"><h3>+ Registrar nueva calibración</h3><p>La calibración anterior no se reemplaza: queda en el historial.</p><form method="post" enctype="multipart/form-data">{% csrf_token %}<div class="calgrid"><label>Fecha calibración *<input type="date" name="fecha_calibracion" required></label><label>Fecha vencimiento *<input type="date" name="fecha_vencimiento" required></label><label>Laboratorio<input name="laboratorio"></label><label>N.º certificado<input name="numero_certificado"></label><label>Certificado PDF<input type="file" name="certificado" accept="application/pdf"></label><label>Observaciones<textarea name="observaciones" rows="2"></textarea></label></div><br><button class="btn">Registrar calibración</button></form></div>{% endif %}
+<div class="panel"><h3>Historial de calibraciones</h3><div class="history-wrap"><table class="history-table"><thead><tr><th>Calibración</th><th>Vencimiento</th><th>Laboratorio</th><th>Certificado</th><th>Registró</th><th>Estado</th></tr></thead><tbody>{% for c in historial %}<tr><td>{{ c.fecha_calibracion|date:"d/m/Y" }}</td><td>{{ c.fecha_vencimiento|date:"d/m/Y" }}</td><td>{{ c.laboratorio|default:"—" }}</td><td>{{ c.numero_certificado|default:"—" }} {% if c.certificado %}<a href="{{ c.certificado.url }}" target="_blank">PDF</a>{% endif %}</td><td>{{ c.registrado_por|default:"—" }}</td><td>{% if forloop.first %}{% if instrumento.estado_calibracion == 'VENCIDO' %}<span class="history-status status-expired">Vencida</span>{% else %}<span class="history-status status-current">Actual</span>{% endif %}{% else %}<span class="history-status status-old">Histórica</span>{% endif %}</td></tr>{% empty %}<tr><td colspan="6">No hay calibraciones registradas.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
