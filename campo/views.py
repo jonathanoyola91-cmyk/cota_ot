@@ -3,13 +3,14 @@ from decimal import Decimal
 from datetime import date
 
 from django.contrib import messages
+from django.db import models
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from core.roles import tiene_rol
-from .forms import AsignarTecnicosForm, FieldServiceDailyExpenseForm
+from .forms import AsignarTecnicosForm, FieldServiceDailyExpenseForm, FieldServiceBonusClaimForm
 from .models import (
     BONO_APOYO,
     BONO_LIDER,
@@ -17,6 +18,7 @@ from .models import (
     FieldService,
     FieldServiceDailyExpense,
     FieldServicePersonExpense,
+    FieldServiceBonusClaim,
 )
 
 
@@ -482,6 +484,12 @@ def dashboard_campo(request):
         .order_by("-fecha_fin", "-actualizado_en")
     )
 
+    nombre_usuario = (request.user.get_full_name() or request.user.username or "").strip()
+    mis_servicios_bono = servicios_abiertos.filter(
+        models.Q(especialista_lider__iexact=nombre_usuario)
+        | models.Q(especialista_apoyo__iexact=nombre_usuario)
+    ).count() if nombre_usuario else 0
+
     return render(request, "campo/dashboard.html", {
         "servicios": servicios_base,
         "servicios_abiertos": servicios_abiertos,
@@ -489,6 +497,8 @@ def dashboard_campo(request):
         "total_servicios": servicios_base.count(),
         "total_abiertos": servicios_abiertos.count(),
         "total_finalizados": servicios_finalizados.count(),
+        "mis_servicios_bono": mis_servicios_bono,
+        "puede_validar_bonos": _puede_ver_gastos(request.user),
     })
 
 
@@ -554,38 +564,32 @@ def crear_gasto_diario(request, servicio_id):
         messages.error(request, "No puedes agregar gastos a un servicio finalizado.")
         return redirect("campo:detalle_servicio", servicio_id=servicio.id)
 
+    hoy = timezone.localdate()
     if request.method == "POST":
-        form = FieldServiceDailyExpenseForm(request.POST)
-        detalle_personas = _leer_detalle_personas_post(request)
-
-        if not detalle_personas:
-            form.add_error(None, "Debes registrar al menos una persona en el detalle individual.")
-
-        if form.is_valid() and detalle_personas:
+        post = request.POST.copy()
+        post["fecha"] = hoy.isoformat()
+        post["dia_numero"] = str(_siguiente_dia(servicio))
+        form = FieldServiceDailyExpenseForm(post)
+        if form.is_valid():
             gasto = form.save(commit=False)
             gasto.servicio = servicio
             gasto.registrado_por = request.user
-
-            # Mantiene consecutivo seguro aunque manipulen el HTML.
-            if not gasto.dia_numero:
-                gasto.dia_numero = _siguiente_dia(servicio)
-
-            gasto.personas = len(detalle_personas)
+            gasto.fecha = hoy
+            gasto.dia_numero = _siguiente_dia(servicio)
+            gasto.personas = servicio.cantidad_tecnicos_asignados or gasto.personas or 1
             gasto.save()
-
-            _guardar_detalle_personas(gasto, detalle_personas)
-            _sincronizar_campos_legados_bonos(gasto, detalle_personas)
-
-            messages.success(request, "Registro diario guardado correctamente.")
+            messages.success(request, "Reporte de actividades del día guardado correctamente.")
             return redirect("campo:detalle_servicio", servicio_id=servicio.id)
     else:
         cantidad_inicial = servicio.cantidad_tecnicos_asignados or 1
         form = FieldServiceDailyExpenseForm(initial={
             "dia_numero": _siguiente_dia(servicio),
-            "fecha": timezone.localdate(),
+            "fecha": hoy,
             "personas": cantidad_inicial,
         })
-        detalle_personas = _detalle_personas_inicial(servicio, cantidad_inicial)
+    form.fields["fecha"].disabled = True
+    form.fields["dia_numero"].disabled = True
+    detalle_personas = []
 
     return render(request, "campo/gasto_form.html", {
         "form": form,
@@ -614,25 +618,22 @@ def editar_gasto_diario(request, gasto_id):
         return redirect("campo:detalle_servicio", servicio_id=servicio.id)
 
     if request.method == "POST":
-        form = FieldServiceDailyExpenseForm(request.POST, instance=gasto)
-        detalle_personas = _leer_detalle_personas_post(request)
-
-        if not detalle_personas:
-            form.add_error(None, "Debes registrar al menos una persona en el detalle individual.")
-
-        if form.is_valid() and detalle_personas:
+        post = request.POST.copy()
+        post["fecha"] = gasto.fecha.isoformat()
+        post["dia_numero"] = str(gasto.dia_numero)
+        form = FieldServiceDailyExpenseForm(post, instance=gasto)
+        if form.is_valid():
             gasto = form.save(commit=False)
-            gasto.personas = len(detalle_personas)
+            gasto.fecha = gasto.fecha
+            gasto.dia_numero = gasto.dia_numero
             gasto.save()
-
-            _guardar_detalle_personas(gasto, detalle_personas)
-            _sincronizar_campos_legados_bonos(gasto, detalle_personas)
-
-            messages.success(request, "Registro diario actualizado correctamente.")
+            messages.success(request, "Reporte diario actualizado correctamente.")
             return redirect("campo:detalle_servicio", servicio_id=servicio.id)
     else:
         form = FieldServiceDailyExpenseForm(instance=gasto)
-        detalle_personas = _detalle_personas_existente(gasto)
+    form.fields["fecha"].disabled = True
+    form.fields["dia_numero"].disabled = True
+    detalle_personas = []
 
     return render(request, "campo/gasto_form.html", {
         "form": form,
@@ -905,3 +906,83 @@ def reporte_bonos(request):
         "bono_apoyo": BONO_APOYO,
         "bono_movilizacion": BONO_MOVILIZACION_PERSONA,
     })
+
+def _nombre_usuario(user):
+    return (user.get_full_name() or user.username or "").strip()
+
+
+def _rol_usuario_en_servicio(user, servicio):
+    nombre = _nombre_usuario(user).casefold()
+    if nombre and nombre == (servicio.especialista_lider or "").strip().casefold():
+        return FieldServiceBonusClaim.Rol.LIDER
+    if nombre and nombre == (servicio.especialista_apoyo or "").strip().casefold():
+        return FieldServiceBonusClaim.Rol.APOYO
+    return None
+
+
+@login_required
+def mis_bonos(request):
+    nombre = _nombre_usuario(request.user)
+    servicios = FieldService.objects.select_related("paw").filter(estado=FieldService.Estado.EN_CURSO).filter(
+        models.Q(especialista_lider__iexact=nombre) | models.Q(especialista_apoyo__iexact=nombre)
+    ).order_by("-actualizado_en")
+    registros = FieldServiceBonusClaim.objects.select_related("servicio__paw").filter(tecnico=request.user)[:100]
+    return render(request, "campo/mis_bonos.html", {"servicios": servicios, "registros": registros, "nombre_tecnico": nombre})
+
+
+@login_required
+def registrar_mi_bono(request, servicio_id):
+    servicio = get_object_or_404(FieldService.objects.select_related("paw"), id=servicio_id, estado=FieldService.Estado.EN_CURSO)
+    rol = _rol_usuario_en_servicio(request.user, servicio)
+    if not rol:
+        messages.error(request, "Este PAW no está asignado a tu usuario como líder ni como apoyo.")
+        return redirect("campo:mis_bonos")
+
+    if request.method == "POST":
+        form = FieldServiceBonusClaimForm(request.POST)
+        if form.is_valid():
+            fecha = timezone.localdate()
+            if FieldServiceBonusClaim.objects.filter(servicio=servicio, tecnico=request.user, fecha=fecha).exists():
+                form.add_error(None, "Ya registraste tu día de hoy para este PAW.")
+            else:
+                registro = form.save(commit=False)
+                registro.servicio = servicio
+                registro.tecnico = request.user
+                registro.tecnico_nombre = _nombre_usuario(request.user)
+                registro.rol = rol
+                registro.fecha = fecha
+                registro.save()
+                messages.success(request, "Tu registro de hoy quedó guardado y pendiente de validación.")
+                return redirect("campo:mis_bonos")
+    else:
+        form = FieldServiceBonusClaimForm(initial={"dia_trabajado_campo": True})
+    return render(request, "campo/mi_bono_form.html", {"servicio": servicio, "rol": rol, "form": form, "fecha_hoy": timezone.localdate()})
+
+
+@login_required
+def validar_bonos_tecnicos(request):
+    if not _puede_ver_gastos(request.user):
+        messages.error(request, "No tienes acceso a la validación de bonos.")
+        return redirect("campo:dashboard")
+    registros = FieldServiceBonusClaim.objects.select_related("servicio__paw", "tecnico", "validado_por").all()[:300]
+    return render(request, "campo/validar_bonos.html", {"registros": registros})
+
+
+@require_POST
+@login_required
+def validar_bono_tecnico(request, registro_id):
+    if not _puede_ver_gastos(request.user):
+        messages.error(request, "No tienes acceso a la validación de bonos.")
+        return redirect("campo:dashboard")
+    registro = get_object_or_404(FieldServiceBonusClaim, id=registro_id)
+    accion = request.POST.get("accion")
+    if accion not in [FieldServiceBonusClaim.Estado.APROBADO, FieldServiceBonusClaim.Estado.RECHAZADO]:
+        messages.error(request, "Acción de validación no válida.")
+        return redirect("campo:validar_bonos_tecnicos")
+    registro.estado = accion
+    registro.validado_por = request.user
+    registro.validado_en = timezone.now()
+    registro.observacion_validacion = (request.POST.get("observacion_validacion") or "").strip()[:250]
+    registro.save(update_fields=["estado", "validado_por", "validado_en", "observacion_validacion", "actualizado_en"])
+    messages.success(request, "Registro de bono actualizado.")
+    return redirect("campo:validar_bonos_tecnicos")

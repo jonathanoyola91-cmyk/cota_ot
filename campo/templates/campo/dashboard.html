@@ -127,6 +127,16 @@
     </div>
 </div>
 
+<div class="panel" style="margin-bottom:22px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <div style="flex:1; min-width:260px;">
+        <strong style="display:block; font-size:16px;">Bonos de campo</strong>
+        <span style="color:#64748b; font-size:13px;">Cada técnico registra sus propios días; el rol líder/apoyo se toma automáticamente del PAW.</span>
+    </div>
+    <a class="btn" href="{% url 'campo:mis_bonos' %}">Mis bonos de campo{% if mis_servicios_bono %} ({{ mis_servicios_bono }}){% endif %}</a>
+    {% if puede_validar_bonos %}
+        <a class="btn" href="{% url 'campo:validar_bonos_tecnicos' %}">Validar bonos</a>
+    {% endif %}
+</div>
 
 <div class="panel campo-panel abiertos-panel">
     <div class="campo-panel-header">

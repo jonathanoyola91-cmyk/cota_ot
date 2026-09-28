@@ -101,3 +101,34 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
             raise forms.ValidationError("La cantidad de personas no puede superar 20 por día.")
 
         return personas
+
+from .models import FieldServiceBonusClaim
+
+class FieldServiceBonusClaimForm(forms.ModelForm):
+    class Meta:
+        model = FieldServiceBonusClaim
+        fields = [
+            "dia_trabajado_campo", "salida_despues_mediodia", "regreso_despues_6pm",
+            "solo_viaje_traslado", "alojamiento", "alimentacion", "lavanderia",
+            "transporte_personal", "vuelo_ida_aplica", "vuelo_ida_valor",
+            "vuelo_regreso_aplica", "vuelo_regreso_valor", "observaciones",
+        ]
+        widgets = {
+            "alojamiento": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "alimentacion": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "lavanderia": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "transporte_personal": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "vuelo_ida_valor": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "vuelo_regreso_valor": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "observaciones": forms.TextInput(attrs={"class":"form-control", "placeholder":"Observación opcional"}),
+        }
+
+    def clean(self):
+        data = super().clean()
+        if not any(data.get(x) for x in ["dia_trabajado_campo", "salida_despues_mediodia", "regreso_despues_6pm", "solo_viaje_traslado"]):
+            raise forms.ValidationError("Selecciona al menos una condición del día.")
+        if data.get("solo_viaje_traslado"):
+            data["dia_trabajado_campo"] = False
+            data["salida_despues_mediodia"] = False
+            data["regreso_despues_6pm"] = False
+        return data

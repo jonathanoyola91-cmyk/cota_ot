@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import FieldService, FieldServiceDailyExpense
+from .models import FieldService, FieldServiceDailyExpense, FieldServiceBonusClaim
 
 
 class FieldServiceDailyExpenseInline(admin.TabularInline):
@@ -22,3 +22,10 @@ class FieldServiceDailyExpenseAdmin(admin.ModelAdmin):
     list_filter = ["fecha"]
     search_fields = ["servicio__paw__numero_paw", "observaciones"]
     readonly_fields = ["alimentacion_total", "hidratacion_total", "total_vuelos", "total_dia"]
+
+
+@admin.register(FieldServiceBonusClaim)
+class FieldServiceBonusClaimAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "servicio", "tecnico_nombre", "rol", "estado"]
+    list_filter = ["estado", "rol", "fecha"]
+    search_fields = ["tecnico_nombre", "servicio__paw__numero_paw"]

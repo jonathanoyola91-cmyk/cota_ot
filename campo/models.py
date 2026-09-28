@@ -599,3 +599,90 @@ class FieldServicePersonExpense(models.Model):
     def __str__(self):
         return f"{self.persona} - Día {self.gasto_diario.dia_numero}"
 
+
+class FieldServiceBonusClaim(models.Model):
+    class Rol(models.TextChoices):
+        LIDER = "LIDER", "Especialista líder"
+        APOYO = "APOYO", "Especialista apoyo"
+
+    class Estado(models.TextChoices):
+        PENDIENTE = "PENDIENTE", "Pendiente de validación"
+        APROBADO = "APROBADO", "Aprobado"
+        RECHAZADO = "RECHAZADO", "Rechazado"
+
+    servicio = models.ForeignKey(FieldService, on_delete=models.PROTECT, related_name="bonos_reportados")
+    tecnico = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="bonos_campo_reportados")
+    tecnico_nombre = models.CharField(max_length=150)
+    rol = models.CharField(max_length=10, choices=Rol.choices)
+    fecha = models.DateField(default=timezone.localdate)
+    dia_trabajado_campo = models.BooleanField(default=True)
+    salida_despues_mediodia = models.BooleanField(default=False)
+    regreso_despues_6pm = models.BooleanField(default=False)
+    solo_viaje_traslado = models.BooleanField(default=False)
+    alojamiento = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    alimentacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    lavanderia = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    transporte_personal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    vuelo_ida_aplica = models.BooleanField(default=False)
+    vuelo_ida_valor = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    vuelo_regreso_aplica = models.BooleanField(default=False)
+    vuelo_regreso_valor = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    observaciones = models.CharField(max_length=250, blank=True, default="")
+    estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.PENDIENTE)
+    validado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="bonos_campo_validados")
+    validado_en = models.DateTimeField(null=True, blank=True)
+    observacion_validacion = models.CharField(max_length=250, blank=True, default="")
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        constraints = [models.UniqueConstraint(fields=["servicio", "tecnico", "fecha"], name="uniq_bono_tecnico_servicio_fecha")]
+
+    def save(self, *args, **kwargs):
+        if self.solo_viaje_traslado:
+            self.dia_trabajado_campo = False
+            self.salida_despues_mediodia = False
+            self.regreso_despues_6pm = False
+        super().save(*args, **kwargs)
+
+    @property
+    def bono_campo(self):
+        if not self.dia_trabajado_campo:
+            return Decimal("0.00")
+        return BONO_LIDER if self.rol == self.Rol.LIDER else BONO_APOYO
+
+    @property
+    def bono_movilizacion(self):
+        if self.salida_despues_mediodia or self.regreso_despues_6pm or self.solo_viaje_traslado:
+            return BONO_MOVILIZACION_PERSONA
+        return Decimal("0.00")
+
+    @property
+    def total_bono(self):
+        return self.bono_campo + self.bono_movilizacion
+
+    @property
+    def total_vuelos(self):
+        total = Decimal("0.00")
+        if self.vuelo_ida_aplica:
+            total += Decimal(self.vuelo_ida_valor or 0)
+        if self.vuelo_regreso_aplica:
+            total += Decimal(self.vuelo_regreso_valor or 0)
+        return total
+
+    @property
+    def total_gastos_personales(self):
+        return (
+            Decimal(self.alojamiento or 0) + Decimal(self.alimentacion or 0)
+            + Decimal(self.lavanderia or 0) + Decimal(self.transporte_personal or 0)
+            + self.total_vuelos
+        )
+
+    @property
+    def total_reportado(self):
+        return self.total_bono + self.total_gastos_personales
+
+    @property
+    def tiene_reporte_lider(self):
+        return self.servicio.gastos.filter(fecha=self.fecha).exists()

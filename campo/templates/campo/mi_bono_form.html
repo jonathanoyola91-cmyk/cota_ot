@@ -1,0 +1,17 @@
+{% extends "dashboard/home.html" %}
+{% block page_title %}Mi registro diario de campo{% endblock %}
+{% block content %}
+<style>
+.bono-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;max-width:1200px}.info{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px}.checks{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.checks label{border:1px solid #dbeafe;border-radius:10px;padding:10px}.gastos{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}.field label{display:block;font-weight:700;margin-bottom:5px}.form-control{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:9px}.nota{background:#fff7ed;border:1px solid #fed7aa;padding:10px;border-radius:10px;margin:12px 0}@media(max-width:900px){.info,.checks,.gastos{grid-template-columns:1fr 1fr}}@media(max-width:600px){.info,.checks,.gastos{grid-template-columns:1fr}}
+</style>
+<div class="bono-card">
+<h2>PAW {{ servicio.paw.numero_paw }} · {{ servicio.paw.nombre_paw }}</h2>
+<div class="info"><div class="box"><strong>Técnico</strong><br>{{ request.user.get_full_name|default:request.user.username }}</div><div class="box"><strong>Rol</strong><br>{% if rol == 'LIDER' %}Líder{% else %}Apoyo{% endif %}</div><div class="box"><strong>Fecha</strong><br>{{ fecha_hoy|date:"d/m/Y" }}</div><div class="box"><strong>Estado</strong><br>Pendiente de validación</div></div>
+<div class="nota"><strong>La fecha es automática.</strong> Solo puedes registrar el día actual; no se permiten registros retroactivos.</div>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}
+<h3>Clasificación operativa</h3><div class="checks"><label>{{ form.dia_trabajado_campo }} Día trabajado</label><label>{{ form.salida_despues_mediodia }} Salida mediodía</label><label>{{ form.regreso_despues_6pm }} Regreso después de 6 pm</label><label>{{ form.solo_viaje_traslado }} Solo viaje</label></div>
+<h3 style="margin-top:20px">Mis gastos del día</h3><div class="gastos">
+<div class="field"><label>Alojamiento</label>{{ form.alojamiento }}</div><div class="field"><label>Alimentación</label>{{ form.alimentacion }}</div><div class="field"><label>Lavandería</label>{{ form.lavanderia }}</div><div class="field"><label>Transporte personal</label>{{ form.transporte_personal }}</div>
+<div class="field"><label>{{ form.vuelo_ida_aplica }} Vuelo ida</label>{{ form.vuelo_ida_valor }}</div><div class="field"><label>{{ form.vuelo_regreso_aplica }} Vuelo regreso</label>{{ form.vuelo_regreso_valor }}</div><div class="field" style="grid-column:span 2"><label>Observación</label>{{ form.observaciones }}</div>
+</div><div style="margin-top:18px"><button class="btn" type="submit">Guardar mi registro de hoy</button> <a class="btn" href="{% url 'campo:mis_bonos' %}">Volver</a></div></form></div>
+{% endblock %}

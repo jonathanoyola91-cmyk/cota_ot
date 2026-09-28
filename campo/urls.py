@@ -4,6 +4,10 @@ from . import views
 app_name = "campo"
 
 urlpatterns = [
+    path("mis-bonos/", views.mis_bonos, name="mis_bonos"),
+    path("mis-bonos/servicio/<int:servicio_id>/nuevo/", views.registrar_mi_bono, name="registrar_mi_bono"),
+    path("validacion-bonos/", views.validar_bonos_tecnicos, name="validar_bonos_tecnicos"),
+    path("validacion-bonos/<int:registro_id>/", views.validar_bono_tecnico, name="validar_bono_tecnico"),
     path("", views.dashboard_campo, name="dashboard"),
 
     path(
