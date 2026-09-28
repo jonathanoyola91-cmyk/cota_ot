@@ -150,6 +150,7 @@
                     <th>Estado</th>
                     <th>Observación</th>
                     <th>Bodega</th>
+                    <th>Acción</th>
                 </tr>
             </thead>
             <tbody>
@@ -217,10 +218,20 @@
                         </div>
                         {% endif %}
                     </td>
+                    <td>
+                        {% if linea.estado == "PENDIENTE" and linea.cantidad_recibida == 0 %}
+                        <button type="submit" class="btn btn-secondary"
+                                formaction="{% url 'inventario:recepcion_retirar_linea' recepcion.id linea.id %}"
+                                formmethod="post"
+                                onclick="return confirm('¿Retirar esta línea pendiente de la recepción? Se conservará el historial y solo se permite si nunca fue recibida.');">
+                            Retirar
+                        </button>
+                        {% else %}—{% endif %}
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8">No hay líneas de recepción.</td>
+                    <td colspan="9">No hay líneas de recepción.</td>
                 </tr>
                 {% endfor %}
             </tbody>

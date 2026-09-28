@@ -19,6 +19,7 @@ urlpatterns = [
     path("revision-bom/<int:pk>/", views.revision_bom_detail, name="revision_bom_detail"),
     path("revision-bom/<int:pk>/generar-entrega/", views.generar_entrega, name="generar_entrega"),
     path("recepcion/<int:pk>/", views.recepcion_detail, name="recepcion_detail"),
+    path("recepcion/<int:pk>/linea/<int:linea_pk>/retirar/", views.recepcion_retirar_linea, name="recepcion_retirar_linea"),
     path(
         "recepcion/<int:pk>/linea/<int:linea_pk>/transferir-bodega/",
         views.recepcion_transferir_bodega,

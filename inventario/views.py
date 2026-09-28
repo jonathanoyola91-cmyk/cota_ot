@@ -1070,6 +1070,32 @@ def recepcion_detail(request, pk):
 @login_required
 @inventario_required
 @require_POST
+def recepcion_retirar_linea(request, pk, linea_pk):
+    """Retira de recepción una línea pendiente sin borrar su trazabilidad histórica."""
+    with transaction.atomic():
+        recepcion = get_object_or_404(InventoryReception.objects.select_for_update(), pk=pk)
+        linea = get_object_or_404(
+            InventoryReceptionLine.objects.select_for_update().select_related("purchase_line"),
+            pk=linea_pk, recepcion=recepcion,
+        )
+        recibida = Decimal(linea.cantidad_recibida or 0)
+        if recibida > 0 or linea.estado != InventoryReceptionLine.Estado.PENDIENTE:
+            messages.error(request, "No se puede retirar esta línea porque ya tiene recepción contabilizada.")
+            return redirect("inventario:recepcion_detail", pk=pk)
+
+        codigo = linea.codigo or getattr(linea.purchase_line, "codigo", "") or "-"
+        linea.cantidad_esperada = Decimal("0")
+        nota = "Retirada de recepción por Inventario (línea histórica/no aplicable)."
+        linea.observacion_inventario = (f"{linea.observacion_inventario} | {nota}" if linea.observacion_inventario else nota)
+        linea.save(update_fields=["cantidad_esperada", "observacion_inventario"])
+
+    messages.success(request, f"Línea {codigo} retirada de la recepción. Se conservó en el historial.")
+    return redirect("inventario:recepcion_detail", pk=pk)
+
+
+@login_required
+@inventario_required
+@require_POST
 def recepcion_transferir_bodega(request, pk, linea_pk):
     """Libera del PAW material recibido no utilizado y lo deja en la bodega elegida."""
     from .models import (
