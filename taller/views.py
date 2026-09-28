@@ -1,134 +1,128 @@
-            messages.success(request, "Mediciones guardadas.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+from collections import defaultdict
+from datetime import date, datetime, timedelta, time
+from decimal import Decimal, InvalidOperation
+from io import BytesIO
+from pathlib import Path
 
-    orden_mecanizado = OrdenMecanizadoEje.objects.filter(inspeccion_origen=inspeccion).first()
-    return render(request, "taller/metrologia_eje_detalle.html", {
-        "inspeccion": inspeccion,
-        "mediciones": mediciones,
-        "instrumentos": instrumentos,
-        "orden_mecanizado": orden_mecanizado,
-        "reinspecciones": inspeccion.reinspecciones.order_by("numero_inspeccion"),
-    })
+from PIL import Image, ImageOps
+
+from django.contrib import messages
+from django.core.files.base import ContentFile
+from django.db.models import Q
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from core.roles import tiene_rol
+from workorders.models import WorkOrder
+from compras_oil.models import PurchaseRequest
+from inventario.models import WorkshopDelivery
+from paw_app.models import Paw
+from .forms_horas import AsignarTecnicosTallerForm, IniciarEnsambleForm, JornadaTallerForm
+from .models import CamaraTaller, EnsambleTaller, JornadaTaller, OrdenMecanizadoEje
+
+
+def optimizar_foto_metrologia(archivo, max_lado=1920, calidad=82):
+    """Reduce fotografías de evidencia antes de almacenarlas.
+
+    Corrige la orientación EXIF, limita el lado mayor y convierte a JPEG
+    optimizado. Si Pillow no puede procesar el archivo, lanza ValueError para
+    que la vista informe al usuario sin perder las mediciones ya diligenciadas.
+    """
+    try:
+        archivo.seek(0)
+        with Image.open(archivo) as img:
+            img = ImageOps.exif_transpose(img)
+
+            if img.mode not in ("RGB", "L"):
+                # Las evidencias son fotografías; un fondo blanco evita fondos
+                # negros si excepcionalmente llega una imagen con transparencia.
+                if "A" in img.getbands():
+                    fondo = Image.new("RGB", img.size, "white")
+                    alpha = img.getchannel("A")
+                    fondo.paste(img.convert("RGB"), mask=alpha)
+                    img = fondo
+                else:
+                    img = img.convert("RGB")
+            elif img.mode == "L":
+                img = img.convert("RGB")
+
+            img.thumbnail((max_lado, max_lado), Image.Resampling.LANCZOS)
+
+            salida = BytesIO()
+            img.save(
+                salida,
+                format="JPEG",
+                quality=calidad,
+                optimize=True,
+                progressive=True,
+            )
+    except Exception as exc:
+        raise ValueError("No fue posible procesar la fotografía seleccionada.") from exc
+
+    nombre_base = Path(getattr(archivo, "name", "evidencia")).stem
+    nombre = f"{nombre_base[:80] or 'evidencia'}.jpg"
+    return ContentFile(salida.getvalue(), name=nombre)
+
+
+def obtener_bom_seguro(ot):
+    try:
+        return ot.bom
+    except Exception:
+        return None
+
+
+def puede_editar_taller(user):
+    return tiene_rol(user, ["TALLER", "ADMIN"])
+
+
+def calcular_progreso_entrega(entrega):
+    """Calcula el avance con la cantidad neta que todavía exige el PAW.
+
+    La cantidad original deja de ser la referencia cuando Inventario libera a
+    bodega o cancela justificadamente un saldo. Usar la cantidad neta evita que
+    Taller vea entregas completas como si todavía estuvieran parciales.
+    """
+    total_requerido = Decimal("0")
+    total_entregado = Decimal("0")
+    total_lineas = 0
+    lineas_entregadas = 0
+
+    for linea in entrega.lineas.all():
+        requerido = Decimal(linea.cantidad_requerida_neta or 0)
+        entregado = Decimal(linea.cantidad_entregada or 0)
+
+        if requerido <= 0:
+            continue
+
+        total_requerido += requerido
+        total_entregado += min(entregado, requerido)
+        total_lineas += 1
+
+        if entregado >= requerido:
+            lineas_entregadas += 1
+
+    porcentaje = 0
+    if total_requerido > 0:
+        porcentaje = min(round((total_entregado / total_requerido) * 100), 100)
+
+    return {
+        "total_requerido": total_requerido,
+        "total_entregado": total_entregado,
+        "total_lineas": total_lineas,
+        "lineas_entregadas": lineas_entregadas,
+        "porcentaje": porcentaje,
+        "completa": total_requerido > 0 and total_entregado >= total_requerido,
+    }
 
 
 @login_required
-@transaction.atomic
-def metrologia_eje_dictamen(request, inspeccion_id):
-    inspeccion = get_object_or_404(InspeccionEje, pk=inspeccion_id)
-    if inspeccion.estado == InspeccionEje.Estado.BORRADOR:
-        messages.error(request, "Primero debe revisar las mediciones.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
+def dashboard(request):
+    estados_paw_fuera_operacion = [
+        "EN_FACTURACION",
+        "FACTURADO",
+        "RADICADO",
+    ]
 
-    # Un dictamen cerrado puede corregirse mientras no haya iniciado el flujo
-    # de mecanizado/reinspección. Después se conserva bloqueado como evidencia.
-    if inspeccion.estado == InspeccionEje.Estado.CERRADA:
-        tiene_orden = OrdenMecanizadoEje.objects.filter(inspeccion_origen=inspeccion).exists()
-        tiene_reinspeccion = inspeccion.reinspecciones.exists()
-        if tiene_orden or tiene_reinspeccion:
-            messages.error(request, "El dictamen ya no puede cambiarse porque existe una orden de mecanizado o una reinspección asociada.")
-            return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
-
-    if request.method == "POST":
-        form = DictamenInspeccionEjeForm(request.POST, instance=inspeccion)
-        if form.is_valid() and form.cleaned_data["dictamen"] != InspeccionEje.Dictamen.PENDIENTE:
-            obj = form.save(commit=False)
-            obj.estado = InspeccionEje.Estado.CERRADA
-            obj.revisado_por = request.user
-            obj.fecha_revision = timezone.now()
-            obj.save()
-            messages.success(request, "Dictamen de Calidad actualizado.")
-            if obj.dictamen == InspeccionEje.Dictamen.MECANIZADO:
-                messages.info(request, "La pieza requiere mecanizado. Ya puede crear la orden de mecanizado.")
-                return redirect("taller:metrologia_eje_detalle", inspeccion_id=obj.id)
-            return redirect("taller:metrologia_eje_reporte", inspeccion_id=obj.id)
-    else:
-        form = DictamenInspeccionEjeForm(instance=inspeccion)
-    return render(request, "taller/metrologia_eje_dictamen.html", {"form": form, "inspeccion": inspeccion})
-
-
-@login_required
-def metrologia_eje_reporte(request, inspeccion_id):
-    inspeccion = get_object_or_404(
-        InspeccionEje.objects.select_related("paw", "plantilla", "realizado_por", "revisado_por"),
-        pk=inspeccion_id,
-    )
-    mediciones = list(inspeccion.mediciones.select_related("punto", "instrumento").all())
-    hay_evidencias = any(bool(m.evidencia) for m in mediciones)
-    # Resumen único de los equipos físicos utilizados para trazabilidad metrológica.
-    instrumentos_usados = []
-    vistos = set()
-    for m in mediciones:
-        if m.instrumento_id and m.instrumento_id not in vistos:
-            vistos.add(m.instrumento_id)
-            instrumentos_usados.append(m.instrumento)
-    return render(request, "taller/metrologia_eje_reporte.html", {
-        "inspeccion": inspeccion,
-        "mediciones": mediciones,
-        "hay_evidencias": hay_evidencias,
-        "instrumentos_usados": instrumentos_usados,
-    })
-
-@login_required
-@require_POST
-@transaction.atomic
-def metrologia_mecanizado_crear(request, inspeccion_id):
-    inspeccion = get_object_or_404(InspeccionEje, pk=inspeccion_id)
-    if inspeccion.estado != InspeccionEje.Estado.CERRADA or inspeccion.dictamen != InspeccionEje.Dictamen.MECANIZADO:
-        messages.error(request, "La orden de mecanizado solo puede crearse desde una inspección cerrada con dictamen Requiere mecanizado.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
-    if hasattr(inspeccion, "orden_mecanizado"):
-        messages.info(request, "Esta inspección ya tiene una orden de mecanizado.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
-    trabajo = request.POST.get("trabajo_requerido", "").strip()
-    if not trabajo:
-        messages.error(request, "Describa el trabajo de mecanizado requerido.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
-    OrdenMecanizadoEje.objects.create(
-        inspeccion_origen=inspeccion,
-        trabajo_requerido=trabajo,
-        medida_objetivo=request.POST.get("medida_objetivo", "").strip(),
-        responsable=request.user,
-        creado_por=request.user,
-    )
-    messages.success(request, "Orden de mecanizado creada. La inspección original permanece bloqueada como evidencia.")
-    return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
-
-
-@login_required
-@require_POST
-@transaction.atomic
-def metrologia_mecanizado_terminar(request, inspeccion_id):
-    inspeccion = get_object_or_404(InspeccionEje, pk=inspeccion_id)
-    orden = get_object_or_404(OrdenMecanizadoEje, inspeccion_origen=inspeccion)
-    orden.observaciones_taller = request.POST.get("observaciones_taller", "").strip()
-    orden.estado = OrdenMecanizadoEje.Estado.TERMINADO
-    orden.terminado_en = timezone.now()
-    orden.save(update_fields=["observaciones_taller", "estado", "terminado_en"])
-    messages.success(request, "Mecanizado marcado como terminado. Ya puede crear la reinspección.")
-    return redirect("taller:metrologia_eje_detalle", inspeccion_id=inspeccion.id)
-
-
-@login_required
-@require_POST
-@transaction.atomic
-def metrologia_reinspeccion_crear(request, inspeccion_id):
-    origen = get_object_or_404(InspeccionEje, pk=inspeccion_id)
-    orden = get_object_or_404(OrdenMecanizadoEje, inspeccion_origen=origen)
-    if orden.estado != OrdenMecanizadoEje.Estado.TERMINADO:
-        messages.error(request, "Primero marque el mecanizado como terminado.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=origen.id)
-    existente = origen.reinspecciones.order_by("-numero_inspeccion").first()
-    if existente:
-        messages.info(request, "Ya existe una reinspección creada para esta inspección.")
-        return redirect("taller:metrologia_eje_detalle", inspeccion_id=existente.id)
-    nueva = InspeccionEje.objects.create(
-        paw=origen.paw, plantilla=origen.plantilla, camara=origen.camara,
-        serial_equipo=origen.serial_equipo, serial_eje=origen.serial_eje, realizado_por=request.user,
-        inspeccion_origen=origen, numero_inspeccion=origen.numero_inspeccion + 1,
-    )
-    for punto in origen.plantilla.puntos.all():
-        MedicionEje.objects.create(inspeccion=nueva, punto=punto)
-    orden.estado = OrdenMecanizadoEje.Estado.REINSPECCIONADO
-    orden.save(update_fields=["estado"])
-    messages.success(request, "Reinspección creada. Las mediciones originales se conservaron sin cambios.")
-    return redirect("taller:metrologia_eje_detalle", inspeccion_id=nueva.id)
+    # Una OT cuyo PAW ya salió de operación no debe seguir apareciendo
