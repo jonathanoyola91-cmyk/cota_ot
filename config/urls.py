@@ -5,6 +5,9 @@ from django.shortcuts import redirect
 urlpatterns = [
     path("admin/", admin.site.urls),
 
+    # DEMO público de inspección metrológica (sin login)
+    path("demo/", include("taller.demo_urls")),
+
     # raíz
     path("", lambda request: redirect("/dashboard/")),
     path("dashboard/", include("dashboard.urls")),

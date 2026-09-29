@@ -1668,3 +1668,15 @@ def metrologia_reinspeccion_crear(request, inspeccion_id):
     orden.save(update_fields=["estado"])
     messages.success(request, "Reinspección creada. Las mediciones originales se conservaron sin cambios.")
     return redirect("taller:metrologia_eje_detalle", inspeccion_id=nueva.id)
+
+def metrologia_demo(request):
+    """Simulador comercial de Metrología. No consulta ni persiste inspecciones reales."""
+    planos_demo = [
+        {"id": "plano_demo_1", "nombre": "Plano neutro 01", "imagen": "taller/demo_planos/plano_demo_1.svg"},
+        {"id": "plano_demo_2", "nombre": "Plano neutro 02", "imagen": "taller/demo_planos/plano_demo_2.svg"},
+        {"id": "plano_demo_3", "nombre": "Plano neutro 03", "imagen": "taller/demo_planos/plano_demo_3.svg"},
+    ]
+    response = render(request, "taller/metrologia_demo.html", {"planos_demo": planos_demo})
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
+    response["Cache-Control"] = "no-store, private"
+    return response
