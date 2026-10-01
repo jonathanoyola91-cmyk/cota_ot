@@ -1,6 +1,7 @@
 """Cancela exclusivamente el saldo no entregado de una línea sin reserva activa."""
 from decimal import Decimal
 from django.db import transaction
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from compras_oil.models import PurchaseRequest
 from .models import WorkshopDelivery, WorkshopDeliveryLine, InventoryReservation, DeliveryPendingCancellation
@@ -24,7 +25,15 @@ def cancelar_pendiente(compra_id, entrega_id, linea_id, motivo, usuario):
     )
     if any(Decimal(r.cantidad or 0) > Decimal(r.cantidad_consumida or 0) for r in reservas):
         raise ValueError("La línea aún tiene reserva activa. Debe gestionar su liberación antes de cancelar el pendiente.")
-    pendiente = max(Decimal(linea.cantidad_requerida_neta) - Decimal(linea.cantidad_entregada or 0), Decimal("0"))
+    cancelada = DeliveryPendingCancellation.objects.filter(
+        delivery_line=linea
+    ).aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
+    pendiente = max(
+        Decimal(linea.cantidad_requerida_neta)
+        - Decimal(linea.cantidad_entregada or 0)
+        - Decimal(cancelada),
+        Decimal("0"),
+    )
     if pendiente <= 0:
         raise ValueError("Esta línea ya no tiene cantidad pendiente para cancelar.")
     return DeliveryPendingCancellation.objects.create(

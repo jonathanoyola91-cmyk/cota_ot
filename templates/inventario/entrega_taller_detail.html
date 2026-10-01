@@ -122,7 +122,7 @@
                         </span>
                     </td>
                     <td>{% if linea.transferible > 0 %}<a href="#bodega-{{ linea.pk }}" class="btn">Liberar / transferir</a>{% else %}Sin saldo transferible{% endif %}
-                        {% if linea.pendiente_cancelable > 0 %}<br><a class="btn" href="#cancelar-{{ linea.pk }}">Cancelar pendiente</a>{% endif %}
+                        {% if user.is_superuser and linea.pendiente_cancelable > 0 %}<br><a class="btn" href="#cancelar-{{ linea.pk }}">Cerrar pendiente (Admin)</a>{% endif %}
                     </td>
                 </tr>
                 {% empty %}
@@ -154,22 +154,22 @@
     </form>
 
     {% for linea in entrega.lineas.all %}
-    {% if linea.pendiente_cancelable > 0 %}
+    {% if user.is_superuser and linea.pendiente_cancelable > 0 %}
     <details id="cancelar-{{ linea.pk }}" style="padding:16px;margin:12px 0;border:1px solid #cbd5e1;border-radius:8px;">
-        <summary>Cancelar pendiente · {{ linea.codigo }} · {{ linea.descripcion }}</summary>
+        <summary>Cerrar pendiente administrativo · {{ linea.codigo }} · {{ linea.descripcion }}</summary>
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="accion" value="cancelar_pendiente">
             <input type="hidden" name="linea_id" value="{{ linea.pk }}">
-            <p>Se cancelará el saldo pendiente de {{ linea.pendiente_cancelable|floatformat:3 }}. Use esta opción si el PAW ya no necesita el material. No registra una entrega ni una devolución y no modifica existencias o compras.</p>
-            <label>Motivo <textarea class="form-control" name="motivo" required placeholder="El PAW ya no requiere este material."></textarea></label>
-            <button class="btn" type="submit">Confirmar cancelación del pendiente</button>
+            <p>Se cerrará administrativamente el saldo pendiente de {{ linea.pendiente_cancelable|floatformat:3 }}. Esta acción es exclusiva del administrador, conserva la trazabilidad del PAW y no registra entrega, devolución ni movimiento de existencias.</p>
+            <label>Motivo <textarea class="form-control" name="motivo" required placeholder="Ej.: Saneamiento de registro histórico sin saldo transferible."></textarea></label>
+            <button class="btn" type="submit">Confirmar cierre administrativo</button>
         </form>
     </details>
     {% endif %}
     {% endfor %}
     {% if historial_cancelaciones %}
-    <h3>Historial de pendientes cancelados</h3>
+    <h3>Historial de pendientes cerrados administrativamente</h3>
     <table><thead><tr><th>Fecha</th><th>Código</th><th>Cantidad</th><th>Motivo</th><th>Usuario</th></tr></thead><tbody>
     {% for c in historial_cancelaciones %}<tr><td>{{ c.creado_en|date:"d/m/Y H:i" }}</td><td>{{ c.delivery_line.codigo }}</td><td>{{ c.cantidad|floatformat:3 }}</td><td>{{ c.motivo }}</td><td>{{ c.creado_por.get_username }}</td></tr>{% endfor %}
     </tbody></table>

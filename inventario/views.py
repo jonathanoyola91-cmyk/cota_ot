@@ -1334,6 +1334,11 @@ def entrega_taller_detail(request, pk):
     )
 
     if request.method == "POST" and request.POST.get("accion") == "cancelar_pendiente":
+        # El cierre administrativo de pendientes históricos es exclusivo del administrador.
+        # Los usuarios del grupo INVENTARIO pueden operar entregas, pero no sanear/cerrar pendientes.
+        if not request.user.is_superuser:
+            messages.error(request, "Solo el administrador puede cerrar pendientes de entrega sin movimiento de inventario.")
+            return redirect("inventario:entrega_taller_detail", pk=entrega.pk)
         from .cancelacion_entrega import cancelar_pendiente
         try:
             linea_id = int(request.POST.get("linea_id", "0"))
@@ -1567,10 +1572,22 @@ def entrega_taller_detail(request, pk):
                 messages.error(request, str(exc))
 
     # Valores informativos para el template.
+    # Las cancelaciones/cierres administrativos anteriores se descuentan para no
+    # volver a mostrar como pendiente una cantidad que ya fue saneada.
+    from .models import DeliveryPendingCancellation
     for linea in entrega.lineas.all():
         linea.reserva_pendiente_paw = _reserva_pendiente(linea.purchase_line_id)
+        linea.cantidad_cancelada = DeliveryPendingCancellation.objects.filter(
+            delivery_line=linea
+        ).aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
+        linea.pendiente_real = max(
+            Decimal(linea.cantidad_requerida_neta)
+            - Decimal(linea.cantidad_entregada or 0)
+            - Decimal(linea.cantidad_cancelada or 0),
+            Decimal("0"),
+        )
         linea.pendiente_cancelable = (
-            max(Decimal(linea.cantidad_requerida_neta) - Decimal(linea.cantidad_entregada or 0), Decimal("0"))
+            linea.pendiente_real
             if linea.reserva_pendiente_paw == 0 else Decimal("0")
         )
         linea.recepcion_origen = InventoryReceptionLine.objects.filter(
@@ -1588,7 +1605,6 @@ def entrega_taller_detail(request, pk):
     historial_bodega = ReceptionWarehouseTransfer.objects.filter(
         reception_line__recepcion__purchase_request=entrega.purchase_request,
     ).select_related("reception_line", "creado_por")
-    from .models import DeliveryPendingCancellation
     historial_cancelaciones = DeliveryPendingCancellation.objects.filter(
         delivery_line__delivery=entrega,
     ).select_related("delivery_line", "creado_por").order_by("-creado_en")

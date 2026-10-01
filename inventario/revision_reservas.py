@@ -148,7 +148,13 @@ def revisar_reservas(request, compra):
                     for linea, nueva in cambios:
                         cantidades_auditoria.append({"linea": linea.pk,
                             "antes": str(linea.cantidad_a_comprar), "despues": str(nueva)})
-                        linea.cantidad_disponible = Decimal(linea.cantidad_requerida or 0) - nueva
+                        # IMPORTANTE: persistir el faltante recalculado en la misma línea de Compras.
+                        # Antes se incluía cantidad_a_comprar en update_fields, pero nunca se
+                        # asignaba `nueva`; por eso Compras seguía mostrando la cantidad anterior.
+                        linea.cantidad_a_comprar = nueva
+                        linea.cantidad_disponible = max(
+                            Decimal(linea.cantidad_requerida or 0) - nueva, Decimal("0")
+                        )
                         linea.cantidad_revisada_inventario = linea.cantidad_requerida
                         linea.save(update_fields=["cantidad_disponible", "cantidad_a_comprar",
                                                   "cantidad_revisada_inventario"])
