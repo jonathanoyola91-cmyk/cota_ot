@@ -46,7 +46,7 @@
     </p>
 
     <div class="tech-help">
-        Asigna una sola vez el equipo técnico para este PAW. Estos nombres aparecerán automáticamente en el detalle del servicio y en los reportes de actividades y gastos.
+        El administrador selecciona un líder y puede asignar ninguno, uno o varios apoyos. El rol aplica únicamente a este PAW. Al guardar, todos los técnicos asignados verán inmediatamente el servicio en “Mis bonos”.
     </div>
 
     <form method="post">
@@ -61,17 +61,18 @@
         <div class="tech-grid">
             <div>
                 <label style="font-size:13px;font-weight:800;color:#334155;">Especialista líder</label>
-                {{ form.especialista_lider }}
-                {% if form.especialista_lider.errors %}
-                    <small style="color:#dc2626;">{{ form.especialista_lider.errors|striptags }}</small>
+                {{ form.especialista_lider_usuario }}
+                {% if form.especialista_lider_usuario.errors %}
+                    <small style="color:#dc2626;">{{ form.especialista_lider_usuario.errors|striptags }}</small>
                 {% endif %}
             </div>
 
             <div>
-                <label style="font-size:13px;font-weight:800;color:#334155;">Especialista apoyo</label>
-                {{ form.especialista_apoyo }}
-                {% if form.especialista_apoyo.errors %}
-                    <small style="color:#dc2626;">{{ form.especialista_apoyo.errors|striptags }}</small>
+                <label style="font-size:13px;font-weight:800;color:#334155;">Especialistas de apoyo</label>
+                {{ form.especialistas_apoyo_usuarios }}
+                <small style="display:block;color:#64748b;margin-top:5px;">Ctrl + clic para seleccionar varios apoyos. Puede dejarlo vacío si va solo el líder.</small>
+                {% if form.especialistas_apoyo_usuarios.errors %}
+                    <small style="color:#dc2626;">{{ form.especialistas_apoyo_usuarios.errors|striptags }}</small>
                 {% endif %}
             </div>
         </div>

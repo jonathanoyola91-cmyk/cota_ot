@@ -40,7 +40,7 @@
             <p><strong>Campo:</strong> {{ servicio.paw.campo|default:"-" }}</p>
             <p><strong>Responsable sistema:</strong> {{ servicio.responsable|default:"-" }}</p>
             <p><strong>Especialista líder:</strong> {{ servicio.especialista_lider|default:"Pendiente" }}</p>
-            <p><strong>Especialista apoyo:</strong> {{ servicio.especialista_apoyo|default:"Pendiente" }}</p>
+            <p><strong>Especialista(s) apoyo:</strong> {% for tecnico in servicio.especialistas_apoyo_usuarios.all %}{{ tecnico.get_full_name|default:tecnico.username }}{% if not forloop.last %}, {% endif %}{% empty %}Pendiente{% endfor %}</p>
             <p><strong>Fecha inicio:</strong> {{ servicio.fecha_inicio|date:"d/m/Y" }}</p>
             <p><strong>Fecha fin:</strong> {{ servicio.fecha_fin|date:"d/m/Y"|default:"Pendiente" }}</p>
 
@@ -101,55 +101,16 @@
 
     <div class="campo-table-wrap">
         <table>
-            <thead>
-                <tr>
-                    <th>Día</th>
-                    <th>Fecha</th>
-                    <th>Actividades</th>
-                    {% if puede_ver_gastos %}
-                        <th>Transporte</th>
-                        <th>Apoyo local / comunidad</th>
-                        <th>Alojamiento unit.</th>
-                        <th>Alojamiento total</th>
-                        <th>Personas</th>
-                        <th>Alimentación</th>
-                        <th>Hidratación</th>
-                        <th>Vuelos</th>
-                        <th>Adicionales</th>
-                        <th>Total día</th>
-                    {% endif %}
-                    <th>Acción</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Día</th><th>Fecha</th><th style="min-width:420px;">Actividades</th><th>Transporte</th><th>Apoyo local / comunidad</th><th>Personas</th><th>Acción</th></tr></thead>
             <tbody>
-                {% for gasto in gastos %}
+            {% for gasto in gastos %}
                 <tr>
-                    <td><strong>{{ gasto.dia_numero }}</strong></td>
-                    <td>{{ gasto.fecha|date:"d/m/Y" }}</td>
-                    <td style="min-width:300px;">{{ gasto.actividades|default:"-"|linebreaksbr }}</td>
-                    {% if puede_ver_gastos %}
-                        <td>$ {{ gasto.transporte|floatformat:0 }}</td>
-                        <td>$ {{ gasto.apoyo_local|floatformat:0 }}</td>
-                        <td>$ {{ gasto.alojamiento|floatformat:0 }}</td>
-                        <td><strong>$ {{ gasto.alojamiento_total|floatformat:0 }}</strong></td>
-                        <td>{{ gasto.personas }}</td>
-                        <td>$ {{ gasto.alimentacion_total|floatformat:0 }}</td>
-                        <td>$ {{ gasto.hidratacion_total|floatformat:0 }}</td>
-                        <td>$ {{ gasto.total_vuelos|floatformat:0 }}</td>
-                        <td>$ {{ gasto.gastos_adicionales|floatformat:0 }}</td>
-                        <td><strong>$ {{ gasto.total_dia|floatformat:0 }}</strong></td>
-                    {% endif %}
-                    <td>
-                        {% if servicio.estado != "FINALIZADO" %}
-                            <a class="btn btn-secondary" href="{% url 'campo:editar_gasto_diario' gasto.id %}">Editar</a>
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
+                    <td><strong>{{ gasto.dia_numero }}</strong></td><td>{{ gasto.fecha|date:"d/m/Y" }}</td>
+                    <td style="min-width:420px;">{{ gasto.actividades|default:"-"|linebreaksbr }}</td>
+                    <td>$ {{ gasto.transporte|floatformat:0 }}</td><td>$ {{ gasto.apoyo_local|floatformat:0 }}</td><td>{{ gasto.personas }}</td>
+                    <td>{% if servicio.estado != "FINALIZADO" %}<a class="btn btn-secondary" href="{% url 'campo:editar_gasto_diario' gasto.id %}">Editar</a>{% else %}-{% endif %}</td>
                 </tr>
-                {% empty %}
-                <tr><td colspan="14">No hay registros diarios.</td></tr>
-                {% endfor %}
+            {% empty %}<tr><td colspan="7">No hay registros diarios.</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>

@@ -484,11 +484,10 @@ def dashboard_campo(request):
         .order_by("-fecha_fin", "-actualizado_en")
     )
 
-    nombre_usuario = (request.user.get_full_name() or request.user.username or "").strip()
     mis_servicios_bono = servicios_abiertos.filter(
-        models.Q(especialista_lider__iexact=nombre_usuario)
-        | models.Q(especialista_apoyo__iexact=nombre_usuario)
-    ).count() if nombre_usuario else 0
+        models.Q(especialista_lider_usuario=request.user)
+        | models.Q(especialista_apoyo_usuario=request.user)
+    ).count()
 
     return render(request, "campo/dashboard.html", {
         "servicios": servicios_base,
@@ -524,8 +523,8 @@ def detalle_servicio(request, servicio_id):
 
 @login_required
 def asignar_tecnicos(request, servicio_id):
-    if not _puede_campo(request.user):
-        messages.error(request, "No tienes permiso para asignar técnicos de campo.")
+    if not tiene_rol(request.user, ["ADMIN"]):
+        messages.error(request, "Solo el administrador puede asignar técnicos de campo.")
         return redirect("/")
 
     servicio = get_object_or_404(
@@ -912,36 +911,43 @@ def _nombre_usuario(user):
 
 
 def _rol_usuario_en_servicio(user, servicio):
-    nombre = _nombre_usuario(user).casefold()
-    if nombre and nombre == (servicio.especialista_lider or "").strip().casefold():
+    if servicio.especialista_lider_usuario_id == user.id:
         return FieldServiceBonusClaim.Rol.LIDER
-    if nombre and nombre == (servicio.especialista_apoyo or "").strip().casefold():
+    if servicio.especialistas_apoyo_usuarios.filter(id=user.id).exists():
         return FieldServiceBonusClaim.Rol.APOYO
     return None
 
 
 @login_required
 def mis_bonos(request):
-    nombre = _nombre_usuario(request.user)
-    servicios = FieldService.objects.select_related("paw").filter(estado=FieldService.Estado.EN_CURSO).filter(
-        models.Q(especialista_lider__iexact=nombre) | models.Q(especialista_apoyo__iexact=nombre)
-    ).order_by("-actualizado_en")
+    servicios = FieldService.objects.select_related(
+        "paw", "especialista_lider_usuario"
+    ).prefetch_related("especialistas_apoyo_usuarios").filter(estado=FieldService.Estado.EN_CURSO).filter(
+        models.Q(especialista_lider_usuario=request.user)
+        | models.Q(especialistas_apoyo_usuarios=request.user)
+    ).distinct().order_by("-actualizado_en")
+    for servicio in servicios:
+        servicio.rol_usuario = _rol_usuario_en_servicio(request.user, servicio)
     registros = FieldServiceBonusClaim.objects.select_related("servicio__paw").filter(tecnico=request.user)[:100]
-    return render(request, "campo/mis_bonos.html", {"servicios": servicios, "registros": registros, "nombre_tecnico": nombre})
+    return render(request, "campo/mis_bonos.html", {"servicios": servicios, "registros": registros, "bono_lider": BONO_LIDER, "bono_apoyo": BONO_APOYO})
 
 
 @login_required
 def registrar_mi_bono(request, servicio_id):
-    servicio = get_object_or_404(FieldService.objects.select_related("paw"), id=servicio_id, estado=FieldService.Estado.EN_CURSO)
+    servicio = get_object_or_404(FieldService.objects.select_related("paw", "especialista_lider_usuario").prefetch_related("especialistas_apoyo_usuarios"), id=servicio_id, estado=FieldService.Estado.EN_CURSO)
     rol = _rol_usuario_en_servicio(request.user, servicio)
     if not rol:
         messages.error(request, "Este PAW no está asignado a tu usuario como líder ni como apoyo.")
         return redirect("campo:mis_bonos")
 
+    fecha = timezone.localdate()
+    dia_habilitado = FieldServiceDailyExpense.objects.filter(servicio=servicio, fecha=fecha).exists()
+
     if request.method == "POST":
         form = FieldServiceBonusClaimForm(request.POST)
-        if form.is_valid():
-            fecha = timezone.localdate()
+        if not dia_habilitado:
+            form.add_error(None, "El especialista líder todavía no ha registrado el día de hoy. Cuando registre la actividad del día se habilitará tu bono y tus gastos personales.")
+        elif form.is_valid():
             if FieldServiceBonusClaim.objects.filter(servicio=servicio, tecnico=request.user, fecha=fecha).exists():
                 form.add_error(None, "Ya registraste tu día de hoy para este PAW.")
             else:
@@ -956,7 +962,7 @@ def registrar_mi_bono(request, servicio_id):
                 return redirect("campo:mis_bonos")
     else:
         form = FieldServiceBonusClaimForm(initial={"dia_trabajado_campo": True})
-    return render(request, "campo/mi_bono_form.html", {"servicio": servicio, "rol": rol, "form": form, "fecha_hoy": timezone.localdate()})
+    return render(request, "campo/mi_bono_form.html", {"servicio": servicio, "rol": rol, "form": form, "fecha_hoy": fecha, "dia_habilitado": dia_habilitado, "valor_bono": BONO_LIDER if rol == FieldServiceBonusClaim.Rol.LIDER else BONO_APOYO})
 
 
 @login_required

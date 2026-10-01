@@ -2,8 +2,8 @@
 {% block page_title %}Campo · Mis bonos{% endblock %}
 {% block content %}
 <div class="panel"><h2>Mis PAW activos</h2><p>El rol y el valor del bono se toman automáticamente de la asignación del PAW.</p>
-<div style="overflow-x:auto"><table><thead><tr><th>PAW</th><th>Nombre</th><th>Rol</th><th>Acción</th></tr></thead><tbody>
-{% for s in servicios %}<tr><td><strong>{{ s.paw.numero_paw }}</strong></td><td>{{ s.paw.nombre_paw }}</td><td>{% if s.especialista_lider|lower == nombre_tecnico|lower %}Líder{% else %}Apoyo{% endif %}</td><td><a class="btn" href="{% url 'campo:registrar_mi_bono' s.id %}">Registrar día</a></td></tr>{% empty %}<tr><td colspan="4">No tienes PAW activos asignados.</td></tr>{% endfor %}
+<div style="overflow-x:auto"><table><thead><tr><th>PAW</th><th>Nombre</th><th>Rol</th><th>Bono campo</th><th>Acción</th></tr></thead><tbody>
+{% for s in servicios %}<tr><td><strong>{{ s.paw.numero_paw }}</strong></td><td>{{ s.paw.nombre_paw }}</td><td>{% if s.rol_usuario == "LIDER" %}Líder{% else %}Apoyo{% endif %}</td><td><strong>{% if s.rol_usuario == "LIDER" %}${{ bono_lider|floatformat:0 }}{% else %}${{ bono_apoyo|floatformat:0 }}{% endif %}</strong></td><td><a class="btn" href="{% url 'campo:registrar_mi_bono' s.id %}">Registrar día</a></td></tr>{% empty %}<tr><td colspan="5">No tienes PAW activos asignados.</td></tr>{% endfor %}
 </tbody></table></div></div>
 <div class="panel" style="margin-top:18px"><h2>Mis registros</h2><div style="overflow-x:auto"><table><thead><tr><th>Fecha</th><th>PAW</th><th>Rol</th><th>Campo</th><th>Movilización</th><th>Total bono</th><th>Estado</th></tr></thead><tbody>
 {% for r in registros %}<tr><td>{{ r.fecha|date:"d/m/Y" }}</td><td>{{ r.servicio.paw.numero_paw }}</td><td>{{ r.get_rol_display }}</td><td>${{ r.bono_campo|floatformat:0 }}</td><td>${{ r.bono_movilizacion|floatformat:0 }}</td><td><strong>${{ r.total_bono|floatformat:0 }}</strong></td><td>{{ r.get_estado_display }}</td></tr>{% empty %}<tr><td colspan="7">Aún no has registrado bonos.</td></tr>{% endfor %}

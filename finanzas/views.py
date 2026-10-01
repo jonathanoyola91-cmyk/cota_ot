@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import (
     Case,
     DecimalField,
@@ -447,6 +448,50 @@ def aprobacion_pagos(request):
         "total_paws": len(grupos),
         "total_lineas": len(lineas),
     })
+
+@require_POST
+@login_required
+def aprobar_paw_pago(request, approval_id):
+    """Guarda en un solo envío todas las decisiones editadas de un PAW."""
+    if not tiene_rol(request.user, ["GERENTE", "ADMIN"]):
+        messages.error(request, "Solo gerencia puede aprobar pagos.")
+        return redirect("/")
+
+    approval = get_object_or_404(
+        FinanceApproval.objects.select_related("purchase_request"),
+        pk=approval_id,
+    )
+    lineas = list(approval.lineas.filter(pagado=False))
+    decisiones_validas = {"PENDIENTE", "APROBADO", "PROGRAMADO", "EN_ESPERA", "RECHAZADO"}
+    actualizadas = 0
+
+    with transaction.atomic():
+        for linea in lineas:
+            decision = request.POST.get(f"decision_{linea.id}")
+            if decision is None:
+                continue
+            if decision not in decisiones_validas:
+                messages.error(request, f"Decisión no válida en la línea {linea.id}.")
+                return redirect(f'{reverse("finanzas:aprobacion_pagos")}#paw-{approval.id}')
+
+            scheduled_date = request.POST.get(f"scheduled_date_{linea.id}") or None
+            nota_admin = request.POST.get(f"nota_admin_{linea.id}", "")
+
+            linea.decision = decision
+            linea.scheduled_date = scheduled_date
+            linea.nota_admin = nota_admin
+            linea.decidido_por = request.user
+            linea.decidido_en = timezone.now()
+            linea.save(update_fields=[
+                "decision", "scheduled_date", "nota_admin",
+                "decidido_por", "decidido_en", "actualizado_en",
+            ])
+            actualizadas += 1
+
+    paw = approval.purchase_request.paw_numero or approval.purchase_request.pk
+    messages.success(request, f"PAW {paw}: {actualizadas} ítem(s) guardados correctamente.")
+    return redirect(f'{reverse("finanzas:aprobacion_pagos")}#paw-{approval.id}')
+
 
 @require_POST
 @login_required

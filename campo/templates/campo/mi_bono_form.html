@@ -6,12 +6,14 @@
 </style>
 <div class="bono-card">
 <h2>PAW {{ servicio.paw.numero_paw }} · {{ servicio.paw.nombre_paw }}</h2>
-<div class="info"><div class="box"><strong>Técnico</strong><br>{{ request.user.get_full_name|default:request.user.username }}</div><div class="box"><strong>Rol</strong><br>{% if rol == 'LIDER' %}Líder{% else %}Apoyo{% endif %}</div><div class="box"><strong>Fecha</strong><br>{{ fecha_hoy|date:"d/m/Y" }}</div><div class="box"><strong>Estado</strong><br>Pendiente de validación</div></div>
+<div class="info"><div class="box"><strong>Técnico</strong><br>{{ request.user.get_full_name|default:request.user.username }}</div><div class="box"><strong>Rol</strong><br>{% if rol == 'LIDER' %}Líder{% else %}Apoyo{% endif %}</div><div class="box"><strong>Bono campo</strong><br><strong>${{ valor_bono|floatformat:0 }}</strong></div><div class="box"><strong>Fecha</strong><br>{{ fecha_hoy|date:"d/m/Y" }}</div></div>
 <div class="nota"><strong>La fecha es automática.</strong> Solo puedes registrar el día actual; no se permiten registros retroactivos.</div>
+{% if not dia_habilitado %}<div class="nota"><strong>Día pendiente:</strong> el especialista líder aún no ha registrado la actividad de hoy. Tu bono y tus gastos personales se habilitarán cuando lo haga.</div>{% endif %}
 <form method="post">{% csrf_token %}{{ form.non_field_errors }}
 <h3>Clasificación operativa</h3><div class="checks"><label>{{ form.dia_trabajado_campo }} Día trabajado</label><label>{{ form.salida_despues_mediodia }} Salida mediodía</label><label>{{ form.regreso_despues_6pm }} Regreso después de 6 pm</label><label>{{ form.solo_viaje_traslado }} Solo viaje</label></div>
 <h3 style="margin-top:20px">Mis gastos del día</h3><div class="gastos">
-<div class="field"><label>Alojamiento</label>{{ form.alojamiento }}</div><div class="field"><label>Alimentación</label>{{ form.alimentacion }}</div><div class="field"><label>Lavandería</label>{{ form.lavanderia }}</div><div class="field"><label>Transporte personal</label>{{ form.transporte_personal }}</div>
+<div class="field"><label>Alojamiento</label>{{ form.alojamiento }}</div><div class="field"><label>Alimentación</label>{{ form.alimentacion }}</div><div class="field"><label>Hidratación</label>{{ form.hidratacion }}</div><div class="field"><label>Lavandería</label>{{ form.lavanderia }}</div>
+<div class="field"><label>Transporte personal</label>{{ form.transporte_personal }}</div>
 <div class="field"><label>{{ form.vuelo_ida_aplica }} Vuelo ida</label>{{ form.vuelo_ida_valor }}</div><div class="field"><label>{{ form.vuelo_regreso_aplica }} Vuelo regreso</label>{{ form.vuelo_regreso_valor }}</div><div class="field" style="grid-column:span 2"><label>Observación</label>{{ form.observaciones }}</div>
-</div><div style="margin-top:18px"><button class="btn" type="submit">Guardar mi registro de hoy</button> <a class="btn" href="{% url 'campo:mis_bonos' %}">Volver</a></div></form></div>
+</div><div style="margin-top:18px"><button class="btn" type="submit" {% if not dia_habilitado %}disabled style="opacity:.55;cursor:not-allowed"{% endif %}>Guardar mi registro de hoy</button> <a class="btn" href="{% url 'campo:mis_bonos' %}">Volver</a></div></form></div>
 {% endblock %}

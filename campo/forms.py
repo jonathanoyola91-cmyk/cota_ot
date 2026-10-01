@@ -5,33 +5,45 @@ from .models import FieldService, FieldServiceDailyExpense
 class AsignarTecnicosForm(forms.ModelForm):
     class Meta:
         model = FieldService
-        fields = [
-            "especialista_lider",
-            "especialista_apoyo",
-        ]
-
+        fields = ["especialista_lider_usuario", "especialistas_apoyo_usuarios"]
         labels = {
-            "especialista_lider": "Especialista líder",
-            "especialista_apoyo": "Especialista apoyo",
+            "especialista_lider_usuario": "Especialista líder",
+            "especialistas_apoyo_usuarios": "Especialistas de apoyo",
+        }
+        widgets = {
+            "especialista_lider_usuario": forms.Select(attrs={"class": "form-control"}),
+            "especialistas_apoyo_usuarios": forms.SelectMultiple(attrs={"class": "form-control", "size": "7"}),
         }
 
-        widgets = {
-            "especialista_lider": forms.Select(attrs={"class": "form-control"}),
-            "especialista_apoyo": forms.Select(attrs={"class": "form-control"}),
-        }
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        UserModel = self._meta.model._meta.get_field("especialista_lider_usuario").remote_field.model
+        qs = UserModel.objects.filter(is_active=True).order_by("first_name", "last_name", "username")
+        self.fields["especialista_lider_usuario"].queryset = qs
+        self.fields["especialistas_apoyo_usuarios"].queryset = qs
+        self.fields["especialistas_apoyo_usuarios"].required = False
+        self.fields["especialistas_apoyo_usuarios"].help_text = "Puede seleccionar ninguno, uno o varios apoyos."
 
     def clean(self):
-        cleaned_data = super().clean()
+        cleaned = super().clean()
+        lider = cleaned.get("especialista_lider_usuario")
+        apoyos = cleaned.get("especialistas_apoyo_usuarios")
+        if lider and apoyos and apoyos.filter(pk=lider.pk).exists():
+            raise forms.ValidationError("El líder no puede estar también seleccionado como apoyo.")
+        return cleaned
 
-        lider = cleaned_data.get("especialista_lider")
-        apoyo = cleaned_data.get("especialista_apoyo")
-
-        if lider and apoyo and lider == apoyo:
-            raise forms.ValidationError(
-                "El especialista líder y el especialista apoyo no pueden ser la misma persona."
-            )
-
-        return cleaned_data
+    def save(self, commit=True):
+        servicio = super().save(commit=False)
+        lider = self.cleaned_data.get("especialista_lider_usuario")
+        apoyos = self.cleaned_data.get("especialistas_apoyo_usuarios")
+        servicio.especialista_lider = (lider.get_full_name() or lider.username).strip() if lider else ""
+        primer_apoyo = apoyos.first() if apoyos is not None else None
+        servicio.especialista_apoyo_usuario = primer_apoyo
+        servicio.especialista_apoyo = (primer_apoyo.get_full_name() or primer_apoyo.username).strip() if primer_apoyo else ""
+        if commit:
+            servicio.save()
+            self.save_m2m()
+        return servicio
 
 
 class FieldServiceDailyExpenseForm(forms.ModelForm):
@@ -43,7 +55,7 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
             "actividades",
             "personas",
             "transporte",
-            "gastos_adicionales",
+            "apoyo_local",
             "comprado_por",
             "aprobado_por",
             "observaciones",
@@ -53,8 +65,8 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
             "dia_numero": "Día",
             "actividades": "Actividades realizadas del día",
             "personas": "Cantidad de personas",
-            "transporte": "Transporte comunidad / operación",
-            "gastos_adicionales": "Gastos adicionales",
+            "transporte": "Transporte",
+            "apoyo_local": "Apoyo local / comunidad",
             "comprado_por": "Quién compró",
             "aprobado_por": "Quién aprobó",
             "observaciones": "Observaciones internas",
@@ -74,7 +86,7 @@ class FieldServiceDailyExpenseForm(forms.ModelForm):
                 "id": "id_personas",
             }),
             "transporte": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "gastos_adicionales": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "apoyo_local": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "comprado_por": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Ej: Carlos Hende, Reison Vanegas, Jose Oyola",
@@ -109,13 +121,14 @@ class FieldServiceBonusClaimForm(forms.ModelForm):
         model = FieldServiceBonusClaim
         fields = [
             "dia_trabajado_campo", "salida_despues_mediodia", "regreso_despues_6pm",
-            "solo_viaje_traslado", "alojamiento", "alimentacion", "lavanderia",
+            "solo_viaje_traslado", "alojamiento", "alimentacion", "hidratacion", "lavanderia",
             "transporte_personal", "vuelo_ida_aplica", "vuelo_ida_valor",
             "vuelo_regreso_aplica", "vuelo_regreso_valor", "observaciones",
         ]
         widgets = {
             "alojamiento": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
             "alimentacion": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
+            "hidratacion": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
             "lavanderia": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
             "transporte_personal": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),
             "vuelo_ida_valor": forms.NumberInput(attrs={"class":"form-control", "step":"0.01", "min":"0"}),

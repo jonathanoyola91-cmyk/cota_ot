@@ -24,6 +24,9 @@
     .paw-table td{vertical-align:top}
     .top-stats{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 20px}
     .top-stat{background:#f1f5f9;border-radius:10px;padding:8px 12px;color:#475569;font-size:13px;font-weight:700}
+    .paw-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 0 2px;position:sticky;right:0}
+    .paw-save{background:#2563eb;color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:800;cursor:pointer}
+    .paw-save:hover{background:#1d4ed8}
     @media(max-width:700px){.paw-summary{align-items:flex-start}.paw-badges{justify-content:flex-end}.paw-name{width:100%}}
 </style>
 
@@ -39,7 +42,7 @@
     </div>
 
     {% for grupo in grupos %}
-        <details class="paw-card" {% if forloop.first %}open{% endif %}>
+        <details id="paw-{{ grupo.approval.id }}" class="paw-card" {% if forloop.first %}open{% endif %}>
             <summary class="paw-summary">
                 <div class="paw-title">
                     <span class="paw-number">PAW {{ grupo.paw_numero }}</span>
@@ -57,6 +60,8 @@
             </summary>
 
             <div class="paw-table-wrap">
+                <form method="post" action="{% url 'finanzas:aprobar_paw_pago' grupo.approval.id %}">
+                    {% csrf_token %}
                 <table class="paw-table">
                     <thead>
                         <tr>
@@ -87,10 +92,7 @@
                             <td style="white-space:nowrap;">$ {{ linea.purchase_line.precio_unitario|default:"0" }}</td>
                             <td style="min-width:200px;">{{ linea.purchase_line.observaciones_compras|default:"-" }}</td>
                             <td>
-                                <form id="pago-linea-{{ linea.id }}" method="post" action="{% url 'finanzas:aprobar_linea_pago' linea.id %}">
-                                    {% csrf_token %}
-                                </form>
-                                <select name="decision" form="pago-linea-{{ linea.id }}" style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;min-width:165px;">
+                                <select name="decision_{{ linea.id }}" style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;min-width:165px;">
                                     <option value="PENDIENTE" {% if linea.decision == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
                                     <option value="APROBADO" {% if linea.decision == "APROBADO" %}selected{% endif %}>Aprobado para pagar</option>
                                     <option value="PROGRAMADO" {% if linea.decision == "PROGRAMADO" %}selected{% endif %}>Programado</option>
@@ -99,19 +101,24 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="date" name="scheduled_date" form="pago-linea-{{ linea.id }}"
+                                <input type="date" name="scheduled_date_{{ linea.id }}"
                                        value="{{ linea.scheduled_date|date:'Y-m-d' }}"
                                        style="padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
                             </td>
                             <td>
-                                <textarea name="nota_admin" form="pago-linea-{{ linea.id }}" rows="2"
+                                <textarea name="nota_admin_{{ linea.id }}" rows="2"
                                           style="min-width:200px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">{{ linea.nota_admin }}</textarea>
                             </td>
-                            <td><button class="btn" type="submit" form="pago-linea-{{ linea.id }}">Guardar</button></td>
+                            <td><span style="color:#64748b;font-size:12px;font-weight:700;">Se guarda con el PAW</span></td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+                <div class="paw-actions">
+                    <span style="color:#64748b;font-size:13px;">Puede modificar varias líneas antes de guardar.</span>
+                    <button class="paw-save" type="submit">Guardar PAW {{ grupo.paw_numero }}</button>
+                </div>
+                </form>
             </div>
         </details>
     {% empty %}

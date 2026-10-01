@@ -62,6 +62,34 @@ class FieldService(models.Model):
         default="",
     )
 
+    # Usuarios reales asignados al servicio. El rol (líder/apoyo) pertenece al PAW,
+    # no al usuario, por lo que un mismo técnico puede rotar entre ambos.
+    especialista_lider_usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="servicios_campo_como_lider",
+        null=True,
+        blank=True,
+        verbose_name="Especialista líder",
+    )
+
+    especialista_apoyo_usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="servicios_campo_como_apoyo_legacy",
+        null=True,
+        blank=True,
+        verbose_name="Especialista apoyo (legado)",
+    )
+
+    # Uno o varios apoyos por PAW. El líder sigue siendo único.
+    especialistas_apoyo_usuarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="servicios_campo_como_apoyo",
+        blank=True,
+        verbose_name="Especialistas de apoyo",
+    )
+
     observaciones = models.TextField(blank=True)
 
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -95,7 +123,9 @@ class FieldService(models.Model):
         cantidad = 0
         if self.especialista_lider:
             cantidad += 1
-        if self.especialista_apoyo:
+        if self.pk:
+            cantidad += self.especialistas_apoyo_usuarios.count()
+        elif self.especialista_apoyo_usuario_id:
             cantidad += 1
         return cantidad
 
@@ -463,6 +493,7 @@ class FieldServicePersonExpense(models.Model):
 
     alojamiento = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     alimentacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    hidratacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     lavanderia = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     transporte_personal = models.DecimalField(
         "Transporte personal",
@@ -621,6 +652,7 @@ class FieldServiceBonusClaim(models.Model):
     solo_viaje_traslado = models.BooleanField(default=False)
     alojamiento = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     alimentacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    hidratacion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     lavanderia = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     transporte_personal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     vuelo_ida_aplica = models.BooleanField(default=False)
@@ -675,7 +707,7 @@ class FieldServiceBonusClaim(models.Model):
     def total_gastos_personales(self):
         return (
             Decimal(self.alojamiento or 0) + Decimal(self.alimentacion or 0)
-            + Decimal(self.lavanderia or 0) + Decimal(self.transporte_personal or 0)
+            + Decimal(self.hidratacion or 0) + Decimal(self.lavanderia or 0) + Decimal(self.transporte_personal or 0)
             + self.total_vuelos
         )
 
