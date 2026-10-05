@@ -174,19 +174,27 @@ def inventario_dashboard(request):
     # ======================================================
     from compras_oil.models import PurchaseRequest
 
+    # Mostrar únicamente solicitudes que REALMENTE tengan algo por revisar.
+    # No basta con inventario_revisado_en=NULL: registros históricos pueden quedar
+    # con esa marca por un reenvío antiguo aunque todas sus líneas ya estén revisadas.
+    # El delta real es cantidad_requerida > cantidad_revisada_inventario.
     revisiones_pendientes = (
         PurchaseRequest.objects
-        .filter(Q(inventario_revisado_en__isnull=True) | Q(revision_reservas_pendiente=True))
+        .filter(
+            Q(revision_reservas_pendiente=True)
+            | Q(lineas__cantidad_requerida__gt=F("lineas__cantidad_revisada_inventario"))
+        )
         .exclude(estado="CERRADA")
         .exclude(bom__workorder__paw__estado_operativo__in=["FACTURADO", "RADICADO"])
         .select_related("bom", "bom__workorder", "creado_por")
         .annotate(
             total_lineas_bom=Count(
                 "lineas",
-                filter=Q(lineas__cantidad_requerida__gt=0),
+                filter=Q(lineas__cantidad_requerida__gt=F("lineas__cantidad_revisada_inventario")),
                 distinct=True,
             )
         )
+        .distinct()
         .order_by("creado_en")
     )
 
@@ -1577,13 +1585,12 @@ def entrega_taller_detail(request, pk):
     from .models import DeliveryPendingCancellation
     for linea in entrega.lineas.all():
         linea.reserva_pendiente_paw = _reserva_pendiente(linea.purchase_line_id)
-        linea.cantidad_cancelada = DeliveryPendingCancellation.objects.filter(
-            delivery_line=linea
-        ).aggregate(total=Sum("cantidad"))["total"] or Decimal("0")
+        # cantidad_cancelada es @property del modelo (solo lectura). No intentar
+        # asignarla aquí: eso provocaba AttributeError al abrir la entrega.
+        # cantidad_requerida_neta ya descuenta liberaciones y cancelaciones.
         linea.pendiente_real = max(
             Decimal(linea.cantidad_requerida_neta)
-            - Decimal(linea.cantidad_entregada or 0)
-            - Decimal(linea.cantidad_cancelada or 0),
+            - Decimal(linea.cantidad_entregada or 0),
             Decimal("0"),
         )
         linea.pendiente_cancelable = (

@@ -5,7 +5,7 @@ from .models import Bom, BomItem, BomTemplate
 from compras_oil.models import PurchaseRequest, PurchaseLine
 
 from django.http import JsonResponse
-from django.db.models import Q
+from django.db.models import Q, F
 from django.utils import timezone
 
 from item_oil_gas.models import ItemImpetus
@@ -418,8 +418,14 @@ def enviar_bom_compras(request, bom_id):
 
             linea.save()
 
-        # Cada reenvío debe volver a habilitar la PAW en el tablero de Inventario.
-        if ya_estaba_revisada:
+        # Reabrir Inventario SOLO si existe un delta real pendiente.
+        # Antes cualquier reenvío del BOM reactivaba la PAW, incluso después de
+        # recibir/entregar materiales y aunque no hubiera cambios en cantidades.
+        hay_delta_inventario = compra.lineas.filter(
+            cantidad_requerida__gt=F("cantidad_revisada_inventario")
+        ).exists()
+
+        if ya_estaba_revisada and hay_delta_inventario:
             compra.inventario_revisado_en = None
             compra.inventario_revisado_por = None
             campos_compra.extend([
@@ -433,7 +439,7 @@ def enviar_bom_compras(request, bom_id):
             campos_compra.append("actualizado_en")
             compra.save(update_fields=campos_compra)
 
-        if paw:
+        if paw and (creada or hay_delta_inventario):
             paw.estado_operativo = "EN_REVISION_INVENTARIO"
             paw.save(update_fields=["estado_operativo"])
 
