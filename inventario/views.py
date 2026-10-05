@@ -181,7 +181,16 @@ def inventario_dashboard(request):
     revisiones_pendientes = (
         PurchaseRequest.objects
         .filter(
-            Q(revision_reservas_pendiente=True)
+            # Un reenvío manual sin delta solo permanece pendiente mientras el PAW
+            # siga antes de la entrega. Una entrega ya completada no debe quedar
+            # anclada por una bandera histórica. Si después aumentan/agregan material,
+            # el delta real sí vuelve a mostrar el BOM aunque el PAW ya hubiera sido entregado.
+            (
+                Q(revision_reservas_pendiente=True)
+                & ~Q(bom__workorder__paw__estado_operativo__in=[
+                    "ENTREGADO_TALLER", "PRODUCTO_OK", "MATERIAL_RECIBIDO"
+                ])
+            )
             | Q(lineas__cantidad_requerida__gt=F("lineas__cantidad_revisada_inventario"))
         )
         .exclude(estado="CERRADA")
@@ -1559,6 +1568,20 @@ def entrega_taller_detail(request, pk):
                             else:
                                 paw.estado_operativo = "MATERIAL_RECIBIDO"
                             paw.save(update_fields=["estado_operativo"])
+
+                            # Cerrar una solicitud histórica de revisión de reservas cuando
+                            # la entrega terminó y no existe ningún incremento real del BOM.
+                            # Si hay una línea nueva o una cantidad aumentada, se conserva la
+                            # revisión para que Inventario procese únicamente ese delta.
+                            compra = entrega.purchase_request
+                            tiene_delta_bom = compra.lineas.filter(
+                                cantidad_requerida__gt=F("cantidad_revisada_inventario")
+                            ).exists()
+                            if compra.revision_reservas_pendiente and not tiene_delta_bom:
+                                compra.revision_reservas_pendiente = False
+                                compra.save(update_fields=[
+                                    "revision_reservas_pendiente", "actualizado_en"
+                                ])
                         except Exception:
                             pass
 
