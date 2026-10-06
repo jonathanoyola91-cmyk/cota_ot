@@ -1,1 +1,47 @@
-{% extends "dashboard/home.html" %}{% block title %}{{ solicitud.codigo }}{% endblock %}{% block page_title %}{{ solicitud.codigo }}{% endblock %}{% block content %}<div class="card"><div class="card-body"><h4>{{ solicitud.nombre_formato }}</h4><p><b>Colaborador:</b> {{ solicitud.empleado.get_full_name|default:solicitud.empleado.username }} &nbsp; <b>Estado:</b> {{ solicitud.get_estado_display }}</p><table class="table"><thead><tr><th>P/N</th><th>Descripción</th><th>Cantidad</th><th>Entregada</th></tr></thead><tbody>{% for x in solicitud.lineas.all %}<tr><td>{{ x.codigo }}</td><td>{{ x.descripcion }}</td><td>{{ x.cantidad_solicitada }} {{ x.unidad }}</td><td>{{ x.cantidad_entregada }}</td></tr>{% endfor %}</tbody></table><a class="btn btn-outline-secondary mb-3" href="{% url 'hse:editar' solicitud.pk %}">Editar solicitud</a>{% if solicitud.observacion %}<p><b>Observación:</b> {{ solicitud.observacion }}</p>{% endif %}{% if es_gestor and solicitud.estado == 'PENDIENTE' %}<form method="post" action="{% url 'hse:procesar' solicitud.pk %}">{% csrf_token %}<button class="btn btn-primary">Verificar disponibilidad / enviar faltantes a Compras</button></form>{% endif %}{% if es_gestor and solicitud.estado == 'LISTA' %}<form method="post" action="{% url 'hse:entregar' solicitud.pk %}">{% csrf_token %}<button class="btn btn-success">Confirmar entrega y generar PDF</button></form>{% endif %}{% if solicitud.estado == 'ENTREGADA' %}<a class="btn btn-outline-dark" href="{% url 'hse:pdf' solicitud.pk %}">Ver formato PDF</a>{% endif %}</div></div>{% endblock %}
+{% extends "dashboard/home.html" %}
+{% block title %}{{ solicitud.codigo }}{% endblock %}
+{% block page_title %}{{ solicitud.codigo }}{% endblock %}
+{% block content %}
+<div class="card"><div class="card-body">
+<h4>{{ solicitud.nombre_formato }}</h4>
+<p><b>Colaborador:</b> {{ solicitud.empleado.get_full_name|default:solicitud.empleado.username }} &nbsp; <b>Estado:</b> {{ solicitud.get_estado_display }}</p>
+<table class="table"><thead><tr><th>P/N</th><th>Descripción</th><th>Cantidad</th><th>Entregada</th></tr></thead><tbody>
+{% for x in solicitud.lineas.all %}<tr><td>{{ x.codigo }}</td><td>{{ x.descripcion }}</td><td>{{ x.cantidad_solicitada }} {{ x.unidad }}</td><td>{{ x.cantidad_entregada }}</td></tr>{% endfor %}
+</tbody></table>
+<a class="btn btn-outline-secondary mb-3" href="{% url 'hse:editar' solicitud.pk %}">Editar solicitud</a>
+{% if solicitud.observacion %}<p><b>Observación:</b> {{ solicitud.observacion }}</p>{% endif %}
+
+{% if es_gestor and solicitud.estado == 'PENDIENTE' %}
+<form method="post" action="{% url 'hse:procesar' solicitud.pk %}" class="mb-3">{% csrf_token %}
+<input type="hidden" name="accion" value="verificar">
+<button class="btn btn-primary">Verificar disponibilidad</button>
+<small class="text-muted d-block mt-1">Esta acción solo consulta la Bodega HSE. No envía nada a Compras.</small>
+</form>
+{% endif %}
+
+{% if es_gestor and mostrar_revision and solicitud.estado == 'PENDIENTE' %}
+<div class="card border-primary mb-3"><div class="card-body">
+<h5>Resultado de disponibilidad</h5>
+<div class="table-responsive"><table class="table table-sm"><thead><tr><th>P/N</th><th>Solicitado</th><th>Disponible</th><th>Faltante</th></tr></thead><tbody>
+{% for x in disponibilidad %}<tr><td>{{ x.linea.codigo }}</td><td>{{ x.linea.cantidad_solicitada }}</td><td>{{ x.disponible }}</td><td><b>{{ x.faltante }}</b></td></tr>{% endfor %}
+</tbody></table></div>
+{% if tiene_faltantes %}
+<p class="text-warning"><b>Hay faltantes.</b> Solo se enviarán a Compras las cantidades indicadas en la columna Faltante.</p>
+<form method="post" action="{% url 'hse:procesar' solicitud.pk %}">{% csrf_token %}<input type="hidden" name="accion" value="enviar_compras"><button class="btn btn-warning" onclick="return confirm('¿Confirmas enviar únicamente los faltantes a Compras?')">Confirmar y enviar faltantes a Compras</button></form>
+{% else %}
+<p class="text-success"><b>Hay disponibilidad suficiente.</b> No es necesario generar compra.</p>
+<form method="post" action="{% url 'hse:procesar' solicitud.pk %}">{% csrf_token %}<input type="hidden" name="accion" value="confirmar_disponible"><button class="btn btn-success">Confirmar disponibilidad y preparar entrega</button></form>
+{% endif %}
+</div></div>
+{% endif %}
+
+{% if es_gestor and solicitud.estado == 'EN_COMPRAS' %}
+<div class="alert alert-warning"><b>Esta solicitud está en Compras.</b> Si fue enviada por error, puedes devolverla a revisión de Inventario sin crear otra solicitud de compra.</div>
+<form method="post" action="{% url 'hse:procesar' solicitud.pk %}" class="mb-3">{% csrf_token %}<input type="hidden" name="accion" value="reprocesar"><button class="btn btn-outline-warning" onclick="return confirm('¿Devolver esta solicitud a revisión de Inventario?')">Reprocesar en Inventario</button></form>
+<form method="post" action="{% url 'hse:eliminar_compra' solicitud.pk %}" class="mb-3">{% csrf_token %}<button class="btn btn-outline-danger" onclick="return confirm('¿Eliminar definitivamente la solicitud de compra HSE y devolver este pedido a Inventario? Esta acción solo debe usarse si la compra fue enviada por error.')">Eliminar compra HSE enviada por error</button><small class="text-muted d-block mt-1">Elimina la compra asociada y devuelve el pedido a Pendiente de Inventario. Si la compra ya tiene movimientos protegidos, el sistema no permitirá eliminarla.</small></form>
+{% endif %}
+
+{% if es_gestor and solicitud.estado == 'LISTA' %}<form method="post" action="{% url 'hse:entregar' solicitud.pk %}">{% csrf_token %}<button class="btn btn-success">Confirmar entrega y generar PDF</button></form>{% endif %}
+{% if solicitud.estado == 'ENTREGADA' %}<a class="btn btn-outline-dark" href="{% url 'hse:pdf' solicitud.pk %}">Ver formato PDF</a>{% endif %}
+</div></div>
+{% endblock %}

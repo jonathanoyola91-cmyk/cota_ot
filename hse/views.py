@@ -6,6 +6,7 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from django.contrib.staticfiles import finders
 from django.http import HttpResponse, JsonResponse
@@ -379,52 +380,158 @@ def detalle(request, pk):
     if sol.empleado_id != request.user.id and not _hse_manager(request.user):
         messages.error(request, "No tienes permiso para ver esta solicitud.")
         return redirect("hse:dashboard")
-    return render(request, "hse/detalle.html", {"solicitud": sol, "es_gestor": _hse_manager(request.user)})
+
+    disponibilidad = []
+    if _hse_manager(request.user):
+        for linea in sol.lineas.all():
+            stock = HSEStock.objects.filter(catalogo=linea.catalogo, catalogo_item_id=linea.catalogo_item_id).first()
+            disponible = Decimal(stock.cantidad_fisica or 0) if stock else Decimal("0")
+            solicitado = Decimal(linea.cantidad_solicitada)
+            faltante = max(Decimal("0"), solicitado - disponible)
+            disponibilidad.append({
+                "linea": linea,
+                "disponible": disponible,
+                "faltante": faltante,
+            })
+
+    return render(request, "hse/detalle.html", {
+        "solicitud": sol,
+        "es_gestor": _hse_manager(request.user),
+        "disponibilidad": disponibilidad,
+        "tiene_faltantes": any(x["faltante"] > 0 for x in disponibilidad),
+        "mostrar_revision": request.GET.get("revision") == "1",
+    })
 
 
 @login_required
 def procesar_inventario(request, pk):
+    """Revisa stock sin enviar automáticamente a Compras.
+
+    La consulta de disponibilidad es una acción separada. Inventario debe
+    confirmar expresamente si desea dejar lista la solicitud o enviar sólo
+    los faltantes a Compras. También puede devolver una solicitud EN_COMPRAS
+    a revisión para corregir una gestión accidental.
+    """
     if not _puede_stock(request.user) or request.method != "POST":
         return redirect("hse:dashboard")
+
     sol = get_object_or_404(HSERequest.objects.prefetch_related("lineas"), pk=pk)
+    accion = (request.POST.get("accion") or "verificar").strip()
+
+    if accion == "reprocesar":
+        if sol.estado != HSERequest.Estado.EN_COMPRAS:
+            messages.error(request, "Solo se pueden reprocesar solicitudes que estén en Compras.")
+            return redirect("hse:detalle", pk=pk)
+        sol.estado = HSERequest.Estado.PENDIENTE
+        sol.save(update_fields=["estado", "actualizado_en"])
+        messages.warning(request, "La solicitud volvió a revisión de Inventario. La solicitud de Compras asociada se conserva para trazabilidad y no se ha duplicado.")
+        return redirect(f"/hse/{sol.pk}/?revision=1")
+
     if sol.estado not in [HSERequest.Estado.PENDIENTE, HSERequest.Estado.EN_COMPRAS]:
         messages.error(request, "La solicitud ya fue cerrada.")
         return redirect("hse:detalle", pk=pk)
+
     faltantes = []
     for linea in sol.lineas.all():
         stock = HSEStock.objects.filter(catalogo=linea.catalogo, catalogo_item_id=linea.catalogo_item_id).first()
         disponible = Decimal(stock.cantidad_fisica or 0) if stock else Decimal("0")
-        if disponible < Decimal(linea.cantidad_solicitada):
-            faltantes.append((linea, Decimal(linea.cantidad_solicitada) - disponible))
-    if not faltantes:
+        solicitado = Decimal(linea.cantidad_solicitada)
+        if disponible < solicitado:
+            faltantes.append((linea, solicitado - disponible))
+
+    # Verificar es SOLO consultar: no cambia estado y no crea compras.
+    if accion == "verificar":
+        if faltantes:
+            messages.info(request, "Disponibilidad consultada. Revisa los faltantes y confirma si deseas enviarlos a Compras.")
+        else:
+            messages.success(request, "Disponibilidad consultada. Hay existencia suficiente; confirma para dejar la solicitud lista para entrega.")
+        return redirect(f"/hse/{sol.pk}/?revision=1")
+
+    if accion == "confirmar_disponible":
+        if faltantes:
+            messages.error(request, "La disponibilidad cambió y ahora existen faltantes. Revisa nuevamente antes de continuar.")
+            return redirect(f"/hse/{sol.pk}/?revision=1")
         sol.estado = HSERequest.Estado.LISTA
         sol.save(update_fields=["estado", "actualizado_en"])
-        messages.success(request, "Hay disponibilidad en Bodega HSE. La solicitud quedó lista para entregar.")
-    else:
-        from compras_oil.models import PurchaseLine, PurchaseRequest
+        messages.success(request, "Disponibilidad confirmada. La solicitud quedó lista para entregar.")
+        return redirect("hse:detalle", pk=pk)
+
+    if accion != "enviar_compras":
+        messages.error(request, "Acción de Inventario no válida.")
+        return redirect("hse:detalle", pk=pk)
+
+    if not faltantes:
+        messages.info(request, "Ya hay disponibilidad suficiente. No se envió nada a Compras.")
+        return redirect(f"/hse/{sol.pk}/?revision=1")
+
+    from compras_oil.models import PurchaseLine, PurchaseRequest
+    with transaction.atomic():
+        if sol.compra_id:
+            compra = sol.compra
+            # Al reprocesar usamos la misma solicitud y reemplazamos sus líneas
+            # por los faltantes actuales, evitando duplicados.
+            PurchaseLine.objects.filter(request=compra).delete()
+        else:
+            compra = PurchaseRequest.objects.create(
+                origen=PurchaseRequest.Origen.HSE,
+                empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS,
+                motivo_stock=f"{sol.codigo} · {sol.nombre_formato} para {sol.empleado.get_full_name() or sol.empleado.username}",
+                inventario_revisado_en=timezone.now(),
+                inventario_revisado_por=request.user,
+                creado_por=request.user,
+                paw_nombre=sol.codigo,
+            )
+        PurchaseLine.objects.bulk_create([
+            PurchaseLine(
+                request=compra,
+                codigo=linea.codigo,
+                descripcion=linea.descripcion,
+                unidad=linea.unidad,
+                cantidad_requerida=faltante,
+            )
+            for linea, faltante in faltantes
+        ])
+        sol.compra = compra
+        sol.estado = HSERequest.Estado.EN_COMPRAS
+        sol.save(update_fields=["compra", "estado", "actualizado_en"])
+
+    messages.success(request, f"Faltantes de {sol.codigo} enviados a Compras por confirmación de Inventario.")
+    return redirect("compras_oil:paw_detail", pk=sol.compra_id)
+
+
+@login_required
+def eliminar_compra_hse(request, pk):
+    """Elimina una compra HSE enviada por error y devuelve la solicitud a Inventario."""
+    if not _puede_stock(request.user) or request.method != "POST":
+        return redirect("hse:dashboard")
+
+    sol = get_object_or_404(HSERequest, pk=pk)
+    if sol.estado != HSERequest.Estado.EN_COMPRAS or not sol.compra_id:
+        messages.error(request, "Esta solicitud no tiene una compra HSE activa para eliminar.")
+        return redirect("hse:detalle", pk=pk)
+
+    compra = sol.compra
+    from compras_oil.models import PurchaseLine
+
+    try:
         with transaction.atomic():
-            # La relación con HSE vive en HSERequest.compra.
-            # ``solicitud_hse`` es el related_name inverso y NO un campo
-            # de PurchaseRequest, por lo que no puede usarse en create/get_or_create.
-            if sol.compra_id:
-                compra = sol.compra
-            else:
-                compra = PurchaseRequest.objects.create(
-                    origen=PurchaseRequest.Origen.HSE,
-                    empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS,
-                    motivo_stock=f"{sol.codigo} · {sol.nombre_formato} para {sol.empleado.get_full_name() or sol.empleado.username}",
-                    inventario_revisado_en=timezone.now(),
-                    inventario_revisado_por=request.user,
-                    creado_por=request.user,
-                    paw_nombre=sol.codigo,
-                )
-            for linea, faltante in faltantes:
-                PurchaseLine.objects.get_or_create(request=compra, codigo=linea.codigo, defaults={"descripcion": linea.descripcion, "unidad": linea.unidad, "cantidad_requerida": faltante})
-            sol.compra = compra
-            sol.estado = HSERequest.Estado.EN_COMPRAS
+            # Primero se desasocia HSE para evitar el PROTECT de HSERequest.compra.
+            sol.compra = None
+            sol.estado = HSERequest.Estado.PENDIENTE
             sol.save(update_fields=["compra", "estado", "actualizado_en"])
-        messages.info(request, f"Faltantes de {sol.codigo} enviados a Compras. Al recibirlos entrarán a Bodega HSE.")
-        return redirect("compras_oil:paw_detail", pk=sol.compra_id)
+
+            # Las líneas pertenecen a esta compra y deben salir con ella.
+            PurchaseLine.objects.filter(request=compra).delete()
+            compra.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            "No se puede eliminar la compra porque ya tiene movimientos o documentos relacionados. "
+            "No se realizó ningún cambio; usa Reprocesar en Inventario o revisa la compra antes de continuar.",
+        )
+        return redirect("hse:detalle", pk=pk)
+
+    messages.success(request, "Compra HSE eliminada. La solicitud volvió a Pendiente de Inventario para reprocesarla.")
     return redirect("hse:detalle", pk=pk)
 
 
