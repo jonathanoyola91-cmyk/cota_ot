@@ -219,8 +219,17 @@ def solicitar(request, tipo):
         return redirect("hse:dashboard")
     empleados = _empleados_impetus()
     if request.method == "POST":
-        empleado_id = request.POST.get("empleado") if tipo == HSERequest.Tipo.DOTACION else request.user.pk
-        empleado = empleados.filter(pk=empleado_id).first()
+        # Para EPP el destinatario SIEMPRE es el usuario autenticado.
+        # No lo validamos contra _empleados_impetus(), porque ese queryset se usa
+        # para el selector administrativo de dotacion y puede excluir usuarios por
+        # reglas de otros modulos. Esa validacion hacia que el POST pareciera
+        # exitoso pero no creara HSERequest para algunos colaboradores.
+        if tipo == HSERequest.Tipo.EPP:
+            empleado = request.user
+        else:
+            empleado_id = request.POST.get("empleado")
+            empleado = empleados.filter(pk=empleado_id).first()
+
         ids, cantidades = request.POST.getlist("item_id"), request.POST.getlist("cantidad")
         filas = []
         for i, item_id in enumerate(ids):
