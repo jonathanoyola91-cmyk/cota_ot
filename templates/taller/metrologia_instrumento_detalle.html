@@ -10,7 +10,7 @@
       <h2 class="inst-title">🧰 {{ instrumento.codigo }} — {{ instrumento.nombre }}</h2>
       <div class="inst-sub">Hoja de vida y control metrológico del instrumento</div>
     </div>
-    <div>{% if instrumento.estado_calibracion == 'VIGENTE' %}<span class="badge vig">VIGENTE</span>{% elif instrumento.estado_calibracion == 'PROXIMO' %}<span class="badge prox">PRÓXIMO A VENCER</span>{% elif instrumento.estado_calibracion == 'VENCIDO' %}<span class="badge ven">VENCIDO</span>{% else %}<span class="badge sin">{{ instrumento.estado_calibracion }}</span>{% endif %}</div>
+    <div>{% if instrumento.estado_calibracion == 'VIGENTE' %}<span class="badge vig">VIGENTE</span>{% elif instrumento.estado_calibracion == 'PROXIMO' %}<span class="badge prox">PRÓXIMO A VENCER</span>{% elif instrumento.estado_calibracion == 'VENCIDO' %}<span class="badge ven">VENCIDO</span>{% else %}<span class="badge sin">{{ instrumento.get_condicion_calibracion_display }}</span>{% endif %}</div>
   </div>
   <div class="info-grid">
     <div class="info-item"><span class="info-label">Marca / modelo</span><span class="info-value">{{ instrumento.marca|default:"—" }}{% if instrumento.modelo %} {{ instrumento.modelo }}{% endif %}</span></div>
@@ -22,7 +22,7 @@
     <div class="info-item"><span class="info-label">Tipo</span><span class="info-value">{{ instrumento.tipo|default:"—" }}</span></div>
     <div class="info-item"><span class="info-label">Unidad</span><span class="info-value">{{ instrumento.unidad|default:"—" }}</span></div>
   </div>
-  <div class="cal-box">
+  <p><strong>Condición declarada:</strong> {{ instrumento.get_condicion_calibracion_display }}</p><div class="cal-box">
     <div class="cal-dates">
       <div class="cal-date"><strong>Última calibración</strong>{{ instrumento.fecha_calibracion|date:"d/m/Y"|default:"—" }}</div>
       <div class="cal-date"><strong>Vencimiento</strong><span{% if instrumento.estado_calibracion == 'VENCIDO' %} class="date-expired"{% endif %}>{{ instrumento.fecha_vencimiento|date:"d/m/Y"|default:"—" }}</span></div>

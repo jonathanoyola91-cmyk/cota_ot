@@ -473,6 +473,13 @@ class InstrumentoMetrologico(models.Model):
         FUERA_SERVICIO = "FUERA_SERVICIO", "Fuera de servicio"
         BAJA = "BAJA", "Dado de baja"
 
+    class CondicionCalibracion(models.TextChoices):
+        CALIBRADO = "CALIBRADO", "Calibrado"
+        DESCALIBRADO = "DESCALIBRADO", "Descalibrado / sin calibración vigente"
+        NO_REQUIERE = "NO_REQUIERE", "No requiere calibración"
+        POR_VERIFICAR = "POR_VERIFICAR", "Pendiente de verificar"
+
+    condicion_calibracion = models.CharField(max_length=20, choices=CondicionCalibracion.choices, default=CondicionCalibracion.POR_VERIFICAR)
     nombre = models.CharField(max_length=120, help_text="Tipo de instrumento: Micrómetro, Comparador, Calibrador, etc.")
     codigo = models.CharField(max_length=60, unique=True)
     marca = models.CharField(max_length=100, blank=True)
@@ -497,13 +504,19 @@ class InstrumentoMetrologico(models.Model):
 
     @property
     def calibracion_vigente(self):
-        return bool(self.fecha_vencimiento and self.fecha_vencimiento >= timezone.localdate())
+        return bool(self.condicion_calibracion == self.CondicionCalibracion.CALIBRADO and self.fecha_calibracion and self.fecha_vencimiento and self.fecha_vencimiento >= timezone.localdate())
 
     @property
     def estado_calibracion(self):
         if self.estado != self.Estado.ACTIVO or not self.activo:
             return "FUERA_SERVICIO"
-        if not self.fecha_vencimiento:
+        if self.condicion_calibracion == self.CondicionCalibracion.NO_REQUIERE:
+            return "NO_REQUIERE"
+        if self.condicion_calibracion == self.CondicionCalibracion.DESCALIBRADO:
+            return "DESCALIBRADO"
+        if self.condicion_calibracion == self.CondicionCalibracion.POR_VERIFICAR:
+            return "POR_VERIFICAR"
+        if not self.fecha_calibracion or not self.fecha_vencimiento:
             return "SIN_CALIBRACION"
         dias = (self.fecha_vencimiento - timezone.localdate()).days
         if dias < 0:

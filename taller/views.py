@@ -1214,12 +1214,15 @@ def _fecha_post(valor):
 @login_required
 def metrologia_instrumentos(request):
     instrumentos = list(InstrumentoMetrologico.objects.all().order_by("nombre", "codigo"))
-    resumen = {"total": len(instrumentos), "vigentes": 0, "proximos": 0, "vencidos": 0, "sin_calibracion": 0, "fuera_servicio": 0}
+    resumen = {"total": len(instrumentos), "vigentes": 0, "proximos": 0, "vencidos": 0, "sin_calibracion": 0, "fuera_servicio": 0, "no_requiere": 0, "descalibrados": 0, "por_verificar": 0}
     for i in instrumentos:
         estado = i.estado_calibracion
         if estado == "VIGENTE": resumen["vigentes"] += 1
         elif estado == "PROXIMO": resumen["proximos"] += 1
         elif estado == "VENCIDO": resumen["vencidos"] += 1
+        elif estado == "NO_REQUIERE": resumen["no_requiere"] += 1
+        elif estado == "DESCALIBRADO": resumen["descalibrados"] += 1
+        elif estado == "POR_VERIFICAR": resumen["por_verificar"] += 1
         elif estado == "SIN_CALIBRACION": resumen["sin_calibracion"] += 1
         else: resumen["fuera_servicio"] += 1
     return render(request, "taller/metrologia_instrumentos.html", {
@@ -1253,11 +1256,19 @@ def metrologia_instrumento_form(request, instrumento_id=None):
             for campo in ["marca", "modelo", "serial", "rango", "resolucion", "unidad", "ubicacion", "responsable", "observaciones"]:
                 setattr(instrumento, campo, request.POST.get(campo, "").strip())
             instrumento.estado = request.POST.get("estado") or InstrumentoMetrologico.Estado.ACTIVO
+            condicion = request.POST.get("condicion_calibracion", "")
+            if condicion not in InstrumentoMetrologico.CondicionCalibracion.values:
+                messages.error(request, "Seleccione una condición de calibración válida.")
+                return render(request, "taller/metrologia_instrumento_form.html", {"instrumento": instrumento, "estados": InstrumentoMetrologico.Estado.choices, "condiciones": InstrumentoMetrologico.CondicionCalibracion.choices})
+            instrumento.condicion_calibracion = condicion
             instrumento.activo = instrumento.estado == InstrumentoMetrologico.Estado.ACTIVO
+            if condicion == InstrumentoMetrologico.CondicionCalibracion.CALIBRADO and not instrumento.calibracion_vigente:
+                messages.error(request, "Para seleccionar Calibrado, primero registre una calibración vigente en la ficha del equipo. Guárdelo como Pendiente o Descalibrado y luego registre las fechas.")
+                return render(request, "taller/metrologia_instrumento_form.html", {"instrumento": instrumento, "estados": InstrumentoMetrologico.Estado.choices, "condiciones": InstrumentoMetrologico.CondicionCalibracion.choices})
             instrumento.save()
-            messages.success(request, "Instrumento guardado. Ahora registre su calibración vigente.")
+            messages.success(request, "Equipo guardado correctamente.")
             return redirect("taller:metrologia_instrumento_detalle", instrumento_id=instrumento.id)
-    return render(request, "taller/metrologia_instrumento_form.html", {"instrumento": instrumento, "estados": InstrumentoMetrologico.Estado.choices})
+    return render(request, "taller/metrologia_instrumento_form.html", {"instrumento": instrumento, "estados": InstrumentoMetrologico.Estado.choices, "condiciones": InstrumentoMetrologico.CondicionCalibracion.choices})
 
 
 @login_required
@@ -1287,13 +1298,14 @@ def metrologia_instrumento_detalle(request, instrumento_id):
                 certificado=certificado,
                 observaciones=request.POST.get("observaciones", "").strip(), registrado_por=request.user,
             )
+            instrumento.condicion_calibracion = InstrumentoMetrologico.CondicionCalibracion.CALIBRADO
             instrumento.fecha_calibracion = cal.fecha_calibracion
             instrumento.fecha_vencimiento = cal.fecha_vencimiento
             instrumento.laboratorio = cal.laboratorio
             instrumento.numero_certificado = cal.numero_certificado
             if cal.certificado:
                 instrumento.certificado = cal.certificado
-            instrumento.save(update_fields=["fecha_calibracion", "fecha_vencimiento", "laboratorio", "numero_certificado", "certificado"])
+            instrumento.save(update_fields=["fecha_calibracion", "fecha_vencimiento", "laboratorio", "numero_certificado", "certificado", "condicion_calibracion"])
             messages.success(request, "Calibración registrada y vigencia del instrumento actualizada.")
             return redirect("taller:metrologia_instrumento_detalle", instrumento_id=instrumento.id)
     return render(request, "taller/metrologia_instrumento_detalle.html", {
