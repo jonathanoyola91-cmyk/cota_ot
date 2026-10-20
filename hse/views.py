@@ -200,13 +200,15 @@ def buscar_items(request):
     tipo = request.GET.get("tipo")
     # Para Stock/EPP se permite consulta vacía: el selector carga de inmediato
     # los P/N EPP activos del catálogo IMPETUS.
-    if len(q) < 2 and tipo != HSERequest.Tipo.EPP:
+    if len(q) < 2 and tipo not in (HSERequest.Tipo.EPP, "STOCK"):
         return JsonResponse({"results": []})
     from item_oil_gas.models import ItemImpetus
     # HSE usa exclusivamente el catálogo de artículos IMPETUS HPS.
     qs = ItemImpetus.objects.filter(activo=True).filter(Q(codigo__icontains=q) | Q(descripcion__icontains=q))
     if tipo == HSERequest.Tipo.EPP:
         qs = qs.filter(codigo__istartswith="EPP")
+    elif tipo == "STOCK":
+        qs = qs.filter(Q(codigo__istartswith="EPP") | Q(codigo__istartswith="INS"))
     return JsonResponse({"results": [{"id": x.pk, "codigo": x.codigo, "descripcion": x.descripcion, "unidad": x.unidad_medida or "UND", "label": f"{x.codigo} - {x.descripcion}"} for x in qs.order_by("codigo")[:20]]})
 
 
@@ -319,7 +321,7 @@ def editar_solicitud(request, pk):
 
 @login_required
 def reponer_bodega(request):
-    """Compra preventiva de EPP: no requiere asignarlo aún a un colaborador."""
+    """Compra preventiva de EPP o INS para stock, sin asignación a empleado."""
     if not _puede_stock(request.user):
         messages.error(request, "No tiene permiso para solicitar stock HSE.")
         return redirect("hse:dashboard")
@@ -327,13 +329,13 @@ def reponer_bodega(request):
         item = _catalog_item(request.POST.get("item_id"))
         try: cantidad = Decimal((request.POST.get("cantidad") or "0").replace(",", "."))
         except Exception: cantidad = Decimal("0")
-        if not item or cantidad <= 0 or not (item.codigo or "").upper().startswith("EPP"):
-            messages.error(request, "Selecciona un P/N EPP y una cantidad válida.")
+        if not item or cantidad <= 0 or not (item.codigo or "").upper().startswith(("EPP", "INS")):
+            messages.error(request, "Selecciona un P/N EPP o INS y una cantidad válida.")
         else:
             from compras_oil.models import PurchaseLine, PurchaseRequest
             compra = PurchaseRequest.objects.create(origen=PurchaseRequest.Origen.HSE, empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS, motivo_stock=f"Reposición preventiva Bodega HSE · {item.codigo}", inventario_revisado_en=timezone.now(), inventario_revisado_por=request.user, creado_por=request.user, paw_nombre="Bodega HSE")
             PurchaseLine.objects.create(request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad, cantidad_a_comprar=cantidad)
-            messages.success(request, "Reposición HSE enviada a Compras.")
+            messages.success(request, "Solicitud de stock EPP/INS enviada a Compras.")
             return redirect("compras_oil:paw_detail", pk=compra.pk)
     return render(request, "hse/reposicion_form.html")
 
@@ -690,7 +692,7 @@ def editar_solicitud_stock(request, pk):
                 cantidad_nueva = Decimal((request.POST.get("cantidad_nueva") or "0").replace(",", "."))
             except Exception:
                 cantidad_nueva = Decimal("0")
-            if item and cantidad_nueva > 0:
+            if item and cantidad_nueva > 0 and (item.codigo or "").upper().startswith(("EPP", "INS")):
                 existente = PurchaseLine.objects.filter(request=compra, codigo=item.codigo or "").first()
                 if existente:
                     nueva_cantidad = Decimal(existente.cantidad_requerida or 0) + cantidad_nueva
