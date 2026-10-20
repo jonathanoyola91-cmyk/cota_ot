@@ -266,7 +266,12 @@ def revision_bom_detail(request, pk):
         .prefetch_related("lineas__bom_item"), pk=pk,
     )
 
-    if compra.revision_reservas_pendiente:
+    # Una ampliación del BOM debe revisarse como delta, aunque el PAW tenga
+    # órdenes anteriores aprobadas/recibidas. No recalcular compras históricas.
+    tiene_delta = compra.lineas.filter(
+        cantidad_requerida__gt=F("cantidad_revisada_inventario")
+    ).exists()
+    if compra.revision_reservas_pendiente and not tiene_delta:
         from .revision_reservas import revisar_reservas
         return revisar_reservas(request, compra)
 
@@ -285,10 +290,6 @@ def revision_bom_detail(request, pk):
     empresa_stock = InventoryStock.Empresa.IMPETUS
 
     if request.method == "POST":
-        if compra.inventario_revisado_en:
-            messages.info(request, "Este BOM ya fue revisado por Inventario.")
-            return redirect("inventario:revision_bom_detail", pk=compra.pk)
-
         if not lineas:
             messages.info(request, "No hay requerimientos nuevos o incrementales pendientes de revisión.")
             return redirect("inventario:revision_bom_detail", pk=compra.pk)
@@ -333,10 +334,14 @@ def revision_bom_detail(request, pk):
                     linea.cantidad_revisada_inventario = (
                         Decimal(linea.cantidad_revisada_inventario or 0) + pendiente
                     )
+                    # Solo el delta no cubierto pasa a Compras. Nunca modificar
+                    # la cantidad comercial histórica de una línea aprobada.
+                    faltante_nuevo = max(pendiente - cantidad, Decimal("0"))
+                    # La creación de una compra complementaria aprobable por separado
+                    # debe validarse en Compras; aquí solo se registra el faltante.
+                    linea.cantidad_a_comprar = Decimal(linea.cantidad_a_comprar or 0) + faltante_nuevo
                     linea.save(update_fields=[
-                        "cantidad_disponible",
-                        "cantidad_revisada_inventario",
-                        "cantidad_a_comprar",
+                        "cantidad_disponible", "cantidad_revisada_inventario", "cantidad_a_comprar",
                     ])
 
                     if cantidad > 0 and stock:
@@ -353,7 +358,8 @@ def revision_bom_detail(request, pk):
 
                 compra.inventario_revisado_en = timezone.now()
                 compra.inventario_revisado_por = request.user
-                compra.save(update_fields=["inventario_revisado_en", "inventario_revisado_por", "actualizado_en"])
+                compra.revision_reservas_pendiente = False
+                compra.save(update_fields=["inventario_revisado_en", "inventario_revisado_por", "revision_reservas_pendiente", "actualizado_en"])
 
                 from .entrega_sync import sincronizar_entrega_existente
                 sincronizar_entrega_existente(compra.pk)
@@ -367,8 +373,10 @@ def revision_bom_detail(request, pk):
                 faltantes = compra.lineas.filter(cantidad_a_comprar__gt=0).exists()
                 try:
                     paw = compra.bom.workorder.paw
-                    paw.estado_operativo = "EN_COMPRAS" if faltantes else "MATERIAL_RECIBIDO"
-                    paw.save(update_fields=["estado_operativo"])
+                    # No retroceder un PAW avanzado por una solicitud adicional.
+                    if paw.estado_operativo in ("EN_COMPRAS", "EN_INVENTARIO"):
+                        paw.estado_operativo = "EN_COMPRAS" if faltantes else "MATERIAL_RECIBIDO"
+                        paw.save(update_fields=["estado_operativo"])
                 except Exception:
                     pass
 
