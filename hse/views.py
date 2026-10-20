@@ -326,16 +326,47 @@ def reponer_bodega(request):
         messages.error(request, "No tiene permiso para solicitar stock HSE.")
         return redirect("hse:dashboard")
     if request.method == "POST":
-        item = _catalog_item(request.POST.get("item_id"))
-        try: cantidad = Decimal((request.POST.get("cantidad") or "0").replace(",", "."))
-        except Exception: cantidad = Decimal("0")
-        if not item or cantidad <= 0 or not (item.codigo or "").upper().startswith(("EPP", "INS")):
-            messages.error(request, "Selecciona un P/N EPP o INS y una cantidad válida.")
+        ids = request.POST.getlist("item_id")
+        cantidades = request.POST.getlist("cantidad")
+        observaciones = request.POST.getlist("observaciones_compra")
+        filas = {}
+        errores = []
+        for i, item_id in enumerate(ids):
+            item = _catalog_item(item_id)
+            try:
+                cantidad = Decimal((cantidades[i] if i < len(cantidades) else "0").replace(",", "."))
+            except Exception:
+                cantidad = Decimal("0")
+            if not item or not (item.codigo or "").upper().startswith(("EPP", "INS")) or not cantidad.is_finite() or cantidad <= 0:
+                errores.append(i + 1)
+                continue
+            observacion = (observaciones[i] if i < len(observaciones) else "").strip()[:2000]
+            clave = (item.pk, observacion)
+            if clave in filas:
+                filas[clave][1] += cantidad
+            else:
+                filas[clave] = [item, cantidad, observacion]
+        if not ids or errores:
+            messages.error(request, "Revisa los P/N y cantidades de las líneas: " + ", ".join(map(str, errores or [1])))
         else:
             from compras_oil.models import PurchaseLine, PurchaseRequest
-            compra = PurchaseRequest.objects.create(origen=PurchaseRequest.Origen.HSE, empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS, motivo_stock=f"Reposición preventiva Bodega HSE · {item.codigo}", inventario_revisado_en=timezone.now(), inventario_revisado_por=request.user, creado_por=request.user, paw_nombre="Bodega HSE")
-            PurchaseLine.objects.create(request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad, cantidad_a_comprar=cantidad, observaciones_bom=(request.POST.get("observaciones_compra") or "").strip()[:2000])
-            messages.success(request, "Solicitud de stock EPP/INS enviada a Compras.")
+            with transaction.atomic():
+                compra = PurchaseRequest.objects.create(
+                    origen=PurchaseRequest.Origen.HSE,
+                    empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS,
+                    motivo_stock="Reposición preventiva Bodega HSE · varios ítems",
+                    inventario_revisado_en=timezone.now(),
+                    inventario_revisado_por=request.user,
+                    creado_por=request.user, paw_nombre="Bodega HSE"
+                )
+                PurchaseLine.objects.bulk_create([
+                    PurchaseLine(request=compra, codigo=item.codigo or "",
+                        descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND",
+                        cantidad_requerida=cantidad, cantidad_a_comprar=cantidad,
+                        observaciones_bom=observacion)
+                    for item, cantidad, observacion in filas.values()
+                ])
+            messages.success(request, f"Solicitud con {len(filas)} líneas enviada a Compras.")
             return redirect("compras_oil:paw_detail", pk=compra.pk)
     return render(request, "hse/reposicion_form.html")
 

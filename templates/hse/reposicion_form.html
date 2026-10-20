@@ -5,25 +5,34 @@
 <div class="card" style="max-width:900px"><div class="card-body">
 <h4>Stock EPP / INS / Bodega HSE</h4>
 <p class="text-muted">Compra preventiva sin asignar aún a un empleado. Selecciona un P/N de la misma base de datos IMPETUS.</p>
-<form method="post">{% csrf_token %}
-  <div class="row g-2 item-row mb-2">
-    <div class="col-md-8 position-relative">
-      <label class="form-label fw-bold">P/N EPP o INS</label>
-      <input class="form-control search" autocomplete="off" placeholder="Buscar P/N o descripción">
-      <input type="hidden" name="item_id">
-      <div class="list-group results position-absolute w-100" style="z-index:5"></div>
-    </div>
-    <div class="col-md-4"><label class="form-label fw-bold">Cantidad</label><input class="form-control" type="number" name="cantidad" min="0.001" step="0.001" value="1"></div>
-  </div>
-  <div class="mb-2"><label class="form-label fw-bold" for="observaciones_compra">Observaciones de compra</label><textarea class="form-control" id="observaciones_compra" name="observaciones_compra" rows="3" maxlength="2000" placeholder="Ej.: Guantes de nitrilo talla S, caja x 100 unidades, sin polvo"></textarea><small class="text-muted">Esta información aparecerá en Observaciones BOM de Compras.</small></div>
-  <button class="btn btn-primary mt-2">Enviar a Compras</button>
+<form method="post" id="stock-form">{% csrf_token %}
+  <div id="items-container"></div>
+  <button class="btn btn-outline-primary mb-3" type="button" id="agregar-item">+ Agregar otro ítem</button>
+  <div><button class="btn btn-primary" type="submit">Enviar solicitud completa a Compras</button></div>
 </form>
 </div></div>
+<template id="item-template">
+<div class="item-row border rounded p-3 mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-2"><strong class="item-title">Ítem</strong><button class="btn btn-sm btn-outline-danger quitar" type="button">Eliminar</button></div>
+  <div class="row g-2">
+    <div class="col-md-8 position-relative"><label class="form-label">P/N EPP o INS</label><input class="form-control search" autocomplete="off" placeholder="Buscar P/N o descripción" required><input type="hidden" name="item_id" class="item-id" required><div class="list-group results position-absolute w-100 shadow" style="z-index:20;max-height:220px;overflow:auto"></div></div>
+    <div class="col-md-4"><label class="form-label">Cantidad</label><input class="form-control" type="number" name="cantidad" min="0.001" step="0.001" value="1" required></div>
+    <div class="col-12"><label class="form-label">Observaciones de compra</label><textarea class="form-control" name="observaciones_compra" rows="2" maxlength="2000" placeholder="Talla S, caja x 100, sin polvo..."></textarea></div>
+  </div>
+</div>
+</template>
 <script>
-// Esta es exactamente la misma lógica de solicitud_form.html, que ya carga los P/N.
-(()=>{const api="{% url 'hse:buscar_items' %}", tipo="STOCK", row=document.querySelector('.item-row');let t;
-row.querySelector('.search').addEventListener('input',e=>{clearTimeout(t);let q=e.target.value;if(q.length<2)return;t=setTimeout(async()=>{let d=await (await fetch(`${api}?tipo=${tipo}&q=${encodeURIComponent(q)}`)).json();row.querySelector('.results').innerHTML=d.results.map(x=>`<button class="list-group-item list-group-item-action" type="button" data-id="${x.id}" data-label="${x.label}">${x.label}</button>`).join('')},250)});
-row.querySelector('.results').addEventListener('click',e=>{let b=e.target.closest('[data-id]');if(!b)return;row.querySelector('[name=item_id]').value=b.dataset.id;row.querySelector('.search').value=b.dataset.label;row.querySelector('.results').innerHTML='' });
+(()=>{
+ const api="{% url 'hse:buscar_items' %}", container=document.getElementById('items-container'), template=document.getElementById('item-template');
+ function renumerar(){container.querySelectorAll('.item-row').forEach((r,i)=>r.querySelector('.item-title').textContent=`Ítem ${i+1}`);container.querySelectorAll('.quitar').forEach(b=>b.disabled=container.children.length===1)}
+ function agregar(){
+   const row=template.content.firstElementChild.cloneNode(true), search=row.querySelector('.search'), hidden=row.querySelector('.item-id'), results=row.querySelector('.results');let timer;
+   search.addEventListener('input',()=>{clearTimeout(timer);hidden.value='';results.replaceChildren();const q=search.value.trim();if(q.length<2)return;timer=setTimeout(async()=>{try{const response=await fetch(`${api}?tipo=STOCK&q=${encodeURIComponent(q)}`);if(!response.ok)throw Error();const data=await response.json();if(search.value.trim()!==q)return;results.replaceChildren();(data.results||[]).forEach(x=>{const btn=document.createElement('button');btn.type='button';btn.className='list-group-item list-group-item-action';btn.textContent=x.label;btn.addEventListener('click',()=>{hidden.value=x.id;search.value=x.label;results.replaceChildren()});results.appendChild(btn)})}catch(e){results.replaceChildren()}},250)});
+   row.querySelector('.quitar').addEventListener('click',()=>{row.remove();renumerar()});container.appendChild(row);renumerar();
+ }
+ document.getElementById('agregar-item').addEventListener('click',agregar);
+ document.getElementById('stock-form').addEventListener('submit',e=>{if([...container.querySelectorAll('.item-id')].some(x=>!x.value)){e.preventDefault();alert('Selecciona un P/N válido de la lista para cada ítem.')}});
+ agregar();
 })();
 </script>
 {% endblock %}
