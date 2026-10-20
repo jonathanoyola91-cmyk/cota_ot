@@ -334,7 +334,7 @@ def reponer_bodega(request):
         else:
             from compras_oil.models import PurchaseLine, PurchaseRequest
             compra = PurchaseRequest.objects.create(origen=PurchaseRequest.Origen.HSE, empresa_destino=PurchaseRequest.EmpresaDestino.IMPETUS, motivo_stock=f"Reposición preventiva Bodega HSE · {item.codigo}", inventario_revisado_en=timezone.now(), inventario_revisado_por=request.user, creado_por=request.user, paw_nombre="Bodega HSE")
-            PurchaseLine.objects.create(request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad, cantidad_a_comprar=cantidad)
+            PurchaseLine.objects.create(request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "", unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad, cantidad_a_comprar=cantidad, observaciones_bom=(request.POST.get("observaciones_compra") or "").strip()[:2000])
             messages.success(request, "Solicitud de stock EPP/INS enviada a Compras.")
             return redirect("compras_oil:paw_detail", pk=compra.pk)
     return render(request, "hse/reposicion_form.html")
@@ -667,6 +667,7 @@ def editar_solicitud_stock(request, pk):
     if request.method == "POST":
         codigos = request.POST.getlist("codigo_existente")
         cantidades = request.POST.getlist("cantidad_existente")
+        observaciones = request.POST.getlist("observacion_existente")
         with transaction.atomic():
             actuales = {str(x.codigo): x for x in PurchaseLine.objects.filter(request=compra)}
             for i, codigo in enumerate(codigos):
@@ -685,7 +686,8 @@ def editar_solicitud_stock(request, pk):
                     # real a comprar para evitar que Compras conserve el valor anterior.
                     linea.cantidad_requerida = cantidad
                     linea.cantidad_a_comprar = cantidad
-                    linea.save(update_fields=["cantidad_requerida", "cantidad_a_comprar"])
+                    linea.observaciones_bom = (observaciones[i] if i < len(observaciones) else linea.observaciones_bom).strip()[:2000]
+                    linea.save(update_fields=["cantidad_requerida", "cantidad_a_comprar", "observaciones_bom"])
 
             item = _catalog_item(request.POST.get("item_id"))
             try:
@@ -698,12 +700,16 @@ def editar_solicitud_stock(request, pk):
                     nueva_cantidad = Decimal(existente.cantidad_requerida or 0) + cantidad_nueva
                     existente.cantidad_requerida = nueva_cantidad
                     existente.cantidad_a_comprar = nueva_cantidad
-                    existente.save(update_fields=["cantidad_requerida", "cantidad_a_comprar"])
+                    observacion_nueva = (request.POST.get("observacion_nueva") or "").strip()
+                    if observacion_nueva:
+                        existente.observaciones_bom = observacion_nueva[:2000]
+                    existente.save(update_fields=["cantidad_requerida", "cantidad_a_comprar", "observaciones_bom"])
                 else:
                     PurchaseLine.objects.create(
                         request=compra, codigo=item.codigo or "", descripcion=item.descripcion or "",
                         unidad=item.unidad_medida or "UND", cantidad_requerida=cantidad_nueva,
-                        cantidad_a_comprar=cantidad_nueva
+                        cantidad_a_comprar=cantidad_nueva,
+                        observaciones_bom=(request.POST.get("observacion_nueva") or "").strip()[:2000]
                     )
         messages.success(request, f"Solicitud de stock #{compra.pk} actualizada. Se conserva la misma solicitud en Compras.")
         return redirect("hse:editar_stock", pk=compra.pk)
