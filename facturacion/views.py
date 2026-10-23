@@ -158,10 +158,13 @@ def crear_desde_paw(request, paw_id):
 
     paw = get_object_or_404(Paw, id=paw_id)
 
-    if paw.estado_operativo != "PRODUCTO_OK":
+    # Validar el cierre de las etapas que aplican al alcance actual del PAW.
+    # Un PAW de solo materiales puede finalizar en MATERIAL_RECIBIDO,
+    # sin pasar por PRODUCTO_OK (Taller no aplica).
+    if not paw.listo_para_facturar:
         messages.error(
             request,
-            "No puede enviar a facturación hasta que el producto esté OK."
+            "No se puede enviar a facturación: hay etapas aplicables pendientes de finalizar."
         )
         return redirect("paw_detail", paw_id=paw.id)
 
